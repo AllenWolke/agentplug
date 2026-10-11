@@ -15,7 +15,8 @@ INFRASTRUCTURE = {"postgres", "kafka", "metric-runner", "minio", "code-runtime"}
 
 
 def initialize_stack(base: list[str], root: Path, jobs: tuple[str, ...], *, build: bool = True,
-                     diagnostic_directory: Path | None = None) -> int:
+                     diagnostic_directory: Path | None = None,
+                     environment: dict[str, str] | None = None) -> int:
     """Fail closed before DDL when application writers are still running.
 
     The caller supplies its own project, files and credentials. Never inspect
@@ -23,7 +24,7 @@ def initialize_stack(base: list[str], root: Path, jobs: tuple[str, ...], *, buil
     """
     try:
         observed = subprocess.run(base + ["ps", "--all", "--format", "json"], cwd=root,
-                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace", env=environment)
         if observed.returncode:
             print("Cannot inspect deployment state; initialization was not started.", file=sys.stderr)
             return observed.returncode
@@ -38,7 +39,7 @@ def initialize_stack(base: list[str], root: Path, jobs: tuple[str, ...], *, buil
             return 1
         initialized = base + ["--profile", "init"]
         rendered = subprocess.run(initialized + ["config", "--format", "json"], cwd=root,
-                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace", env=environment)
         if rendered.returncode:
             print("Initialization configuration is invalid; credential-bearing output withheld.", file=sys.stderr)
             return rendered.returncode
@@ -54,7 +55,7 @@ def initialize_stack(base: list[str], root: Path, jobs: tuple[str, ...], *, buil
             return 1
 
         def execute(arguments: list[str]) -> int:
-            result = subprocess.run(initialized + arguments, cwd=root, capture_output=True)
+            result = subprocess.run(initialized + arguments, cwd=root, capture_output=True, env=environment)
             if result.returncode:
                 if diagnostic_directory is not None:
                     diagnostic_directory.mkdir(parents=True, exist_ok=True, mode=0o700)

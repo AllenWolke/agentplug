@@ -75,3 +75,19 @@ def test_version_mismatch_cannot_initialize_or_start_services(monkeypatch):
     assert INIT.initialize_stack(["docker", "compose"], ROOT, INIT.PUBLIC_JOBS) == 1
     assert len(commands) == 2
 
+
+def test_initialization_uses_the_same_isolated_environment_for_all_operations(monkeypatch):
+    fake_docker(monkeypatch)
+    original = INIT.subprocess.run
+    environments = []
+
+    def run(command, **kwargs):
+        environments.append(kwargs.get('env'))
+        return original(command, **kwargs)
+
+    monkeypatch.setattr(INIT.subprocess, 'run', run)
+    isolated = {'PATH': 'preserved', 'FRONTEND_HOST_PORT': '23001'}
+    assert INIT.initialize_stack(['docker', 'compose'], ROOT, INIT.PUBLIC_JOBS, environment=isolated) == 0
+    assert len(environments) == 6
+    assert all(environment is isolated for environment in environments)
+

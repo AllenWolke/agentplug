@@ -409,11 +409,11 @@ jobs:
     timeout-minutes: 30
     env:
       DB_PASSWORD: ci-platform-db-pass
-      API_KEY: ci-platform-api-key
-      FRONTEND_HOST_PORT: '13000'
-      COMPOSE_PROJECT_NAME: lexagent-ci-${{ github.run_id }}
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - name: Validate modular Compose entrypoint
         env:
           INTERNAL_SIGNING_SECRET: ci-platform-signing-secret
@@ -427,12 +427,16 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check cryptography
           bash scripts/platform.sh e2e-modular --build-images
-      - name: Collect diagnostics
-        if: failure()
-        run: docker compose -f compose.yaml --profile modular logs --no-color --tail=300
-      - name: Destroy isolated test resources
+      # The E2E harness captures its owned project's diagnostics before its
+      # finally block removes that project's containers, volumes and images.
+      # A default-project `compose down` would target a different deployment.
+      - name: Upload isolated Compose acceptance receipt
         if: always()
-        run: docker compose -f compose.yaml --profile modular down -v --remove-orphans
+        uses: actions/upload-artifact@v6
+        with:
+          name: compose-e2e-acceptance
+          path: docs/新增需求/github作品改造/T3-11-干净PostgreSQL与五账号初始化实际验收.json
+          if-no-files-found: error
 
   modular-cutover:
     needs: [quality-policy]
@@ -449,3 +453,10 @@ jobs:
         run: python -m pip install --disable-pip-version-check cryptography
       - name: Run current-source modular platform E2E
         run: bash scripts/platform.sh e2e-modular --build-images
+      - name: Upload isolated modular acceptance receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: modular-cutover-acceptance
+          path: docs/新增需求/github作品改造/T3-11-干净PostgreSQL与五账号初始化实际验收.json
+          if-no-files-found: error
