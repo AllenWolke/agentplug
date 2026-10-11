@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/model-governance/v1/provider.schema.json",
+  "title": "Model Provider",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["provider_key", "display_name", "type", "trust_zone", "endpoint_ref", "secret_ref"],
+  "properties": {
+    "provider_key": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 128},
+    "type": {"enum": ["on_prem", "private_cloud", "external_managed"]},
+    "trust_zone": {"enum": ["local", "private", "external"]},
+    "endpoint_ref": {"type": "string", "minLength": 1, "maxLength": 255},
+    "secret_ref": {"type": "string", "pattern": "^(secret|file)://.+"},
+    "capabilities": {"type": "object"}
+  }
+}

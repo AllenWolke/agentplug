@@ -1,0 +1,3 @@
+[
+  {"case_id":"replace-business-case","input":{"replace_with_published_business_input":true},"expected":{"assertions":[{"path":"replace_with_business_output_path","op":"equals","value":"REPLACE_WITH_REVIEWED_BUSINESS_GOLD"}]}}
+]

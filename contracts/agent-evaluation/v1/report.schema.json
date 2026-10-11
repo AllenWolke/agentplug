@@ -1,0 +1,577 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/agent-evaluation/v1/report.schema.json",
+  "title": "Agent Evaluation public summary report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "agent-evaluation-report/v1"
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "platform",
+        "simulation",
+        "imported_or_mixed"
+      ]
+    },
+    "trials": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "dimension": {
+            "enum": [
+              "task",
+              "tool",
+              "planning",
+              "context",
+              "state_memory",
+              "safety",
+              "reliability",
+              "cost_latency",
+              "observability"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "definition": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "measured",
+              "missing",
+              "not_applicable",
+              "blocked"
+            ]
+          },
+          "value": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "numerator": {
+            "type": "number"
+          },
+          "denominator": {
+            "type": "number"
+          },
+          "samples": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "missing": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "confidence_95": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "evidence": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "dimension",
+          "name",
+          "definition",
+          "unit",
+          "direction",
+          "status",
+          "value",
+          "numerator",
+          "denominator",
+          "samples",
+          "missing",
+          "evidence"
+        ]
+      },
+      "minItems": 0
+    },
+    "safety_gate": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "UNKNOWN"
+      ]
+    },
+    "quality_gate": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "UNKNOWN"
+      ]
+    },
+    "warnings": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "priority": {
+            "enum": [
+              "P0",
+              "P1",
+              "P2"
+            ]
+          },
+          "metric_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "cause": {
+            "type": "string"
+          },
+          "cause_confirmed": {
+            "type": "boolean"
+          },
+          "change": {
+            "type": "string"
+          },
+          "retest": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "priority",
+          "metric_id",
+          "problem",
+          "evidence",
+          "cause",
+          "cause_confirmed",
+          "change",
+          "retest"
+        ]
+      },
+      "minItems": 0
+    },
+    "run_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "cohort": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "dataset_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "mode": {
+          "enum": [
+            "offline",
+            "simulation",
+            "online"
+          ]
+        },
+        "repeat": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string"
+        },
+        "scorer_version": {
+          "type": "string"
+        },
+        "simulation_profile": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "limit_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit_micros": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "measurement_protocol": {
+          "type": "string"
+        },
+        "threshold_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "review_protocol_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "agent_id",
+        "dataset_hash",
+        "mode",
+        "repeat",
+        "concurrency",
+        "scorer_version",
+        "limit_tokens",
+        "limit_micros",
+        "timeout_seconds"
+      ]
+    },
+    "reviews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "enum": [
+              "model",
+              "human"
+            ]
+          },
+          "source_run_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "rubric_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "rubric_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "judge_run_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "judge_version_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "scoring_model": {
+            "type": "string"
+          },
+          "scoring_model_version": {
+            "type": "string"
+          },
+          "reviewer_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "review_evidence_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "measurements": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "latency_ms": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "ttft_ms": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "input_tokens": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "output_tokens": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "cost_micros": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "tool_cost_micros": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "model_calls": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "loops": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "cache_hits": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "cache_lookups": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "currency": {
+                "type": "string"
+              }
+            },
+            "required": []
+          },
+          "human_overrides": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "source",
+          "source_run_id",
+          "rubric_id",
+          "rubric_hash",
+          "measurements"
+        ]
+      },
+      "minItems": 0
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "installation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "version_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "semantic_version": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "health": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "checked_at": {
+            "type": "string"
+          },
+          "can_evaluate": {
+            "type": "boolean"
+          },
+          "active_runs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        },
+        "required": [
+          "agent_id",
+          "installation_id",
+          "version_id"
+        ]
+      },
+      "minItems": 0
+    },
+    "threshold_gate": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "BLOCKED"
+      ]
+    },
+    "thresholds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "threshold": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "metric_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "minimum": {
+                "type": "number",
+                "minimum": 0
+              },
+              "maximum": {
+                "type": "number",
+                "minimum": 0
+              },
+              "minimum_samples": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maximum_missing": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "metric_id",
+              "minimum_samples",
+              "maximum_missing"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "minimum"
+                ]
+              },
+              {
+                "required": [
+                  "maximum"
+                ]
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "BLOCKED"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threshold",
+          "status",
+          "reason"
+        ]
+      },
+      "minItems": 0
+    }
+  },
+  "required": [
+    "version",
+    "produced_at",
+    "source",
+    "trials",
+    "metrics",
+    "safety_gate",
+    "quality_gate",
+    "warnings",
+    "recommendations",
+    "run_ids"
+  ]
+}

@@ -1,0 +1,192 @@
+# 仅允许已核对的公开夹具、占位值和标识符；新值及其他路径仍由默认规则扫描。
+title = "AgentPlug reviewed public fixtures"
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^cli/agentctl/internal/adaptergen/proxy_context_test\\.go$"]
+regexes = ["^tok\\-signed\\-123$"]
+
+[[rules.allowlists]]
+description = "private-key placeholder rejected until replaced; not a base64 Ed25519 key"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^deploy/local/platform\\.env\\.example$"]
+regexes = ["^replace\\-ed25519\\-private\\-key$"]
+
+[[rules.allowlists]]
+description = "documentation placeholder or authorization-result field misclassified as credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^docs/新增需求/模块化单体单实例改造/验收证据/MM\\-P\\-MM\\-Q\\-MM\\-V逐卡核对记录\\.md$"]
+regexes = ["^permission_result=allowed$"]
+
+[[rules.allowlists]]
+description = "historical deterministic memory-encryption demonstration constant, never a production key"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^docs/智能体中台拆解文档/29、三项目六年级生产化改造实施与测试报告\\.md$"]
+regexes = ["^0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "historical deterministic memory-encryption demonstration constant, never a production key"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^docs/智能体中台拆解文档/23、LexAgent接入中台前端三文件全量代码\\.md$"]
+regexes = ["^0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "historical deterministic memory-encryption demonstration constant, never a production key"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^docs/智能体中台拆解文档/12、逐任务代码\\.md$"]
+regexes = ["^0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^platform/cmd/migrate/runtime_process_test\\.go$"]
+regexes = ["^fixture\\-signing\\-secret\\-with\\-32\\-bytes$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^platform/internal/bootstrap/config_test\\.go$"]
+regexes = ["^signing\\-secret\\-0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^platform/internal/bootstrap/config_test\\.go$"]
+regexes = ["^internal\\-safe\\-0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^platform/internal/bootstrap/config_test\\.go$"]
+regexes = ["^signing\\-safe\\-0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^platform/internal/bootstrap/config_test\\.go$"]
+regexes = ["^fixture\\-delivery0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^platform/internal/bootstrap/production_credentials_test\\.go$"]
+regexes = ["^fixture\\-signing\\-0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^platform/internal/bootstrap/production_credentials_test\\.go$"]
+regexes = ["^fixture\\-delivery0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "isolated demonstration orchestration constant; not a production credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^scripts/platform\\.ps1$"]
+regexes = ["^0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^sdk/python/agent_platform_sdk/test_fastapi_factory\\.py$"]
+regexes = ["^idempotency\\-1$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^sdk/python/tests/test_grpc_bridge\\.py$"]
+regexes = ["^idempotency\\-1$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^templates/go\\-eino/platform_entry/security_test\\.go$"]
+regexes = ["^0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^templates/go\\-generic/platform_entry/security_test\\.go$"]
+regexes = ["^0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^templates/python\\-generic/platform_entry/agent_platform_sdk/test_fastapi_factory\\.py$"]
+regexes = ["^idempotency\\-1$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^templates/python\\-generic/platform_entry/test_capability\\.py$"]
+regexes = ["^0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^templates/python\\-langgraph/platform_entry/agent_platform_sdk/test_fastapi_factory\\.py$"]
+regexes = ["^idempotency\\-1$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^templates/python\\-langgraph/platform_entry/test_capability\\.py$"]
+regexes = ["^0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^tests/e2e/modular_browser_identity_e2e\\.py$"]
+regexes = ["^Enrollment\\-Rotated\\-Pass\\-2026\\-$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^workers/metric\\-runner/cmd/metric\\-service/main_test\\.go$"]
+regexes = ["^0123456789abcdef0123456789abcdef$"]
+
+[[rules.allowlists]]
+description = "explicit test constant or request identifier; isolated/synthetic fixture, no issued account credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^workers/metric\\-runner/cmd/metric\\-service/main_test\\.go$"]
+regexes = ["^placeholder\\-0123456789abcdef0123456789abcdef$"]
+
+[[rules]]
+id = "jwt"
+
+[[rules.allowlists]]
+description = "fixed expired cross-language conformance token; public test key and synthetic identity"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^contracts/fixtures/execution\\-v2\\-capability\\.json$"]
+regexes = ["^eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9\\.eyJhY3Rpb25zIjpbImludm9rZSJdLCJhZ2VudF9pbnN0YW5jZV9pZCI6Imluc3RhbmNlLWEiLCJhcHBsaWNhdGlvbl9pZCI6InJlZ3VsYXRvcnkiLCJhdWQiOiJjb25mb3JtYW5jZS1hZ2VudCIsImF1dGhvcml6YXRpb25fZXBvY2giOjEsImJvZHlfaGFzaCI6IjlkY2VjNDY1ZjFmMDBkNjY4ZmE1OWY4OWNhZmI2YjViMWJiZTliNDJjZTFhMWZjMjczMjA5ZDg4NjY3ZDdiYzAiLCJleHAiOjE3NjcyMjU3MjAsImlhdCI6MTc2NzIyNTYwMCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uLWEiLCJpc3MiOiJwbGF0Zm9ybS1ydW50aW1lLWdhdGV3YXkiLCJwb2xpY3lfc25hcHNob3RfaGFzaCI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJzdWIiOiJ1c2VyLWEiLCJzdWJqZWN0X3R5cGUiOiJ1c2VyIiwidGVuYW50X2lkIjoidGVuYW50LWEifQ\\.oBB2j8N6XV05fL3Uk2mLYcCPQ1deLxaaubjy75ALXk5aWBXSjn57HtQ0WolSgu9Y8agx_X3TyU6qwx35ta_rDg$"]

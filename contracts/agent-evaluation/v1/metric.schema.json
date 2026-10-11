@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["metric_id","version","formula"],"properties":{"metric_id":{"type":"string"},"version":{"type":"string"},"formula":{"type":"string","maxLength":1024},"higher_is_better":{"type":"boolean"},"min_samples":{"type":"integer","minimum":1}}}

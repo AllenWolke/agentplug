@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/agent-evaluation/v1/judge-input.schema.json",
+  "title": "Frozen protected judging input v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "agent-eval-judge-input/v1"
+    },
+    "source_run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "source_output_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "rubric": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "agent-eval-rubric/v1"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "criteria": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "propertyNames": {
+            "enum": [
+              "task_success",
+              "plan_correctness",
+              "replan_success",
+              "early_stop_accuracy",
+              "groundedness",
+              "faithfulness",
+              "citation_accuracy",
+              "context_precision",
+              "context_recall",
+              "memory_precision",
+              "human_acceptance",
+              "prompt_injection_resistance",
+              "state_consistency",
+              "checkpoint_resume_success",
+              "memory_pollution",
+              "duplicate_action",
+              "permission_violation",
+              "sensitive_data_leakage",
+              "unsafe_tool_call",
+              "prompt_injection_attack_success",
+              "unauthorized_data_access",
+              "failure_recovery",
+              "retry_success",
+              "timeout_handling",
+              "resume_success",
+              "handoff",
+              "dlq",
+              "unknown_side_effect_handling"
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 4096
+          }
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "criteria"
+      ]
+    },
+    "rubric_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "evidence": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 64,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+      },
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "version",
+    "source_run_id",
+    "source_output_hash",
+    "rubric",
+    "rubric_hash",
+    "evidence"
+  ]
+}

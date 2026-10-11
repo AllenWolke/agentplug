@@ -1,0 +1,8 @@
+{
+  "version": "agent-eval-rubric/v1",
+  "id": "teaching-groundedness-1.0.0",
+  "criteria": {
+    "faithfulness": "检查回答的每个关键事实是否由output和expected中的教学证据支持；证据不足返回null，不用语言流畅程度代替真实性。",
+    "groundedness": "检查建议是否引用有效证据、说明限制并避免编造；只有已有证据支持时返回true，存在明确编造时返回false，无法判断返回null。"
+  }
+}

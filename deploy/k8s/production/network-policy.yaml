@@ -1,0 +1,116 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: platform-migration-traffic
+spec:
+  podSelector: {matchLabels: {app: platform-schema-migrate}}
+  policyTypes: [Ingress, Egress]
+  # Migration never serves inbound traffic or calls models/RAG.
+  # 迁移不接受入站请求，不调用模型或RAG，仅可访问数据库和DNS。
+  ingress: []
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: database}}}]
+      ports: [{protocol: TCP, port: 5432}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-platform-traffic
+spec:
+  podSelector: {matchLabels: {app: frontend}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
+      ports: [{protocol: TCP, port: 80}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: platform-app}}}]
+      ports: [{protocol: TCP, port: 8080}]
+    - to: [{podSelector: {matchLabels: {app: oauth2-proxy}}}]
+      ports: [{protocol: TCP, port: 4180}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: platform-app-traffic
+spec:
+  podSelector: {matchLabels: {app: platform-app}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: frontend}}}]
+      ports: [{protocol: TCP, port: 8080}]
+    - from: [{podSelector: {matchExpressions: [{key: app, operator: In, values: [example-go, example-python, example-java]}]}}]
+      ports: [{protocol: TCP, port: 8080}, {protocol: TCP, port: 8081}]
+    - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}}]
+      ports: [{protocol: TCP, port: 8081}]
+  egress:
+    - to: [{podSelector: {matchExpressions: [{key: app, operator: In, values: [example-go, example-python, example-java]}]}}]
+      ports: [{protocol: TCP, port: 8001}, {protocol: TCP, port: 8002}, {protocol: TCP, port: 8003}]
+    - to: [{podSelector: {matchLabels: {app: metric-runner}}}]
+      ports: [{protocol: TCP, port: 8085}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: database}}}]
+      ports: [{protocol: TCP, port: 5432}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    # An approved overlay must add explicit model/telemetry HTTPS gateway
+    # CIDRs. The base policy intentionally grants no general internet egress.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metric-runner-isolation
+spec:
+  podSelector: {matchLabels: {app: metric-runner}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: platform-app}}}]
+      ports: [{protocol: TCP, port: 8085}]
+  # No egress: plugins are additionally launched in an empty network namespace.
+  # 无出站：Metric 插件还会被放入空网络命名空间。
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: example-agents-traffic
+spec:
+  podSelector: {matchExpressions: [{key: app, operator: In, values: [example-go, example-python, example-java]}]}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: platform-app}}}]
+      ports: [{protocol: TCP, port: 8001}, {protocol: TCP, port: 8002}, {protocol: TCP, port: 8003}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: platform-app}}}]
+      ports: [{protocol: TCP, port: 8080}, {protocol: TCP, port: 8081}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    # Agents access models, tools and knowledge exclusively through the platform.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: oauth2-proxy-traffic
+spec:
+  podSelector: {matchLabels: {app: oauth2-proxy}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
+      ports: [{protocol: TCP, port: 4180}]
+    - from: [{podSelector: {matchLabels: {app: frontend}}}]
+      ports: [{protocol: TCP, port: 4180}]
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    # An approved overlay must add the IdP HTTPS gateway CIDR.

@@ -1,0 +1,27 @@
+groups:
+  - name: agentplug-backup
+    rules:
+      - alert: AgentBackupFailed
+        expr: agentplug_backup_attempt_success{job="agentplug-backup"} == 0 or agentplug_backup_status{job="agentplug-backup"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: PostgreSQL backup attempt or integrity check failed
+      - alert: AgentBackupMetricsMissing
+        expr: absent(agentplug_backup_attempt_success{job="agentplug-backup"}) or absent(agentplug_backup_status{job="agentplug-backup"}) or absent(agentplug_backup_check_timestamp_seconds{job="agentplug-backup"})
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: Backup monitoring has no required metrics
+      - alert: AgentBackupStale
+        expr: time() - agentplug_backup_last_success_timestamp_seconds{job="agentplug-backup"} > 86400
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: Last verified PostgreSQL backup is older than 24 hours
+      - alert: AgentBackupCheckStalled
+        expr: time() - agentplug_backup_check_timestamp_seconds{job="agentplug-backup"} > 900
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: Backup integrity and age checker has stopped updating

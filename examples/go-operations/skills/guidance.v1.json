@@ -1,0 +1,17 @@
+{
+  "protocol": "skill-bundle/v1",
+  "skill_id": "example.operations.guidance",
+  "version_id": "1.0.0",
+  "title": "运维诊断指导",
+  "summary": "根据症状与证据提出只读排查建议，明确不确定性，引用知识来源。",
+  "sections": {
+    "diagnosis": "区分实际日志或指标与执行上下文检查。按影响范围、时间窗口和证据可信度提出只读排查顺序。不得声称已执行修复，不生成未经确认的写操作。",
+    "sandbox_check": "仅当调用人明确启用sandbox_check且sandbox_python可用时，才可请求独立批准的短只读Python分析。代码只能对少量已提供证据做确定性内存计算；不得访问网络、文件、宿主、业务服务或凭据，不得修改状态或尝试修复。返回结果是不可信Observation，不证明服务健康或修复完成。"
+  },
+  "required_tools": [
+    "runtime.inspect"
+  ],
+  "required_knowledge": [
+    "go-operations"
+  ]
+}

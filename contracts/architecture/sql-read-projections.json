@@ -1,0 +1,18 @@
+[
+  {
+    "file": "platform/internal/capability/model_quiescence.go",
+    "owner": "capability",
+    "table": "platform_model_budget_reservation",
+    "source_sha256": "3bb3d23eed8de51e627106fff1a5abf5a1563972201cb320dbbafccea5e0587b",
+    "query_sha256": "6ff34e1e26591d45a2837aebbfdca663e0a993013488f9217d3321cc60cf12f4",
+    "reason": "Single-statement, scope-hash-bound quiescence proof reads only reservation identity/status joined to the applied billing decision. An unmatched or unsettled budget blocks cancellation. Keeping this join in one statement avoids inconsistent settlement snapshots."
+  },
+  {
+    "file": "platform/internal/usagecost/evaluation_usage.go",
+    "owner": "usagecost",
+    "table": "platform_model_price_version",
+    "source_sha256": "aa33fdd7c55281ed9ec54a1cad5ea4dad7ffde315501059b441874bb8160e474",
+    "query_sha256": "3d855a08a6bb7da057fe04116324c8128803e450577175f9cd51a63d0b97c470",
+    "reason": "Single-statement historical evaluation cost projection; exact tenant/department/application/agent/version/run/time predicates scope usage. Reads only historical currency by settlement price-version ID; missing, multiple, or mixed currencies suppress the cost total."
+  }
+]

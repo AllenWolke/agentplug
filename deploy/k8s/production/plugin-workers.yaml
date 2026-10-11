@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: plugin-worker}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: plugin-worker}}
+  template:
+    metadata: {labels: {app: plugin-worker}}
+    spec:
+      serviceAccountName: lexagent-runtime
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: plugin-host
+          image: registry.example.com/agentplug:plugin-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "1", memory: 512Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}

@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lexagent-runtime
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platform-app
+spec:
+  selector:
+    app: platform-app
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+    - {name: internal, port: 8081, targetPort: internal}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-app
+  labels: {app: platform-app}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: platform-app}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels: {app: platform-app}
+    spec:
+      serviceAccountName: lexagent-runtime
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: platform-app
+          image: registry.example.com/agentplug:platform@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          envFrom:
+            - {configMapRef: {name: lexagent-production-config}}
+            - {secretRef: {name: lexagent-production-secret}}
+          env:
+            - {name: PLATFORM_HTTP_ADDR, value: ":8080"}
+            - {name: PLATFORM_INTERNAL_ADDR, value: ":8081"}
+            - {name: PLATFORM_MODEL_SECRET_ROOT, value: /run/secrets/model-providers}
+            - name: PLATFORM_METRIC_RUNNER_TOKEN
+              valueFrom: {secretKeyRef: {name: lexagent-production-secret, key: METRIC_RUNNER_TOKEN}}
+          ports:
+            - {name: http, containerPort: 8080}
+            - {name: internal, containerPort: 8081}
+          readinessProbe: {httpGet: {path: /health/ready, port: http}, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 12}
+          livenessProbe: {httpGet: {path: /health/live, port: http}, initialDelaySeconds: 20, periodSeconds: 10, timeoutSeconds: 3}
+          resources: {requests: {cpu: 500m, memory: 512Mi}, limits: {cpu: "2", memory: 2Gi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: model-provider-secrets, mountPath: /run/secrets/model-providers, readOnly: true}
+      volumes:
+        - name: model-provider-secrets
+          secret: {secretName: lexagent-model-provider-secrets}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - {name: http, port: 80, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels: {app: frontend}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: frontend}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels: {app: frontend}
+    spec:
+      serviceAccountName: lexagent-runtime
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: frontend
+          image: registry.example.com/agentplug:frontend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          envFrom:
+            - {configMapRef: {name: lexagent-production-config}}
+          env:
+            - name: ACCESS_TOKEN_SIGNING_KEY
+              valueFrom: {secretKeyRef: {name: lexagent-production-secret, key: ACCESS_TOKEN_SIGNING_KEY}}
+            - {name: LISTEN_ADDR, value: ":80"}
+            - {name: PLATFORM_URL, value: http://platform-app:8080}
+            - name: PLATFORM_GATEWAY_TOKEN
+              valueFrom: {secretKeyRef: {name: lexagent-production-secret, key: BROWSER_GATEWAY_TOKEN}}
+            - name: OIDC_ISSUER_URL
+              valueFrom: {secretKeyRef: {name: lexagent-oidc-secret, key: issuer_url}}
+            - name: OIDC_STEP_UP_CLIENT_ID
+              valueFrom: {secretKeyRef: {name: lexagent-oidc-secret, key: client_id}}
+            - name: OIDC_STEP_UP_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: lexagent-oidc-secret, key: client_secret}}
+            - name: OIDC_STEP_UP_REDIRECT_URL
+              valueFrom: {secretKeyRef: {name: lexagent-oidc-secret, key: step_up_redirect_url}}
+            - {name: COOKIE_SECURE, value: "true"}
+          ports: [{name: http, containerPort: 80}]
+          readinessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 5, timeoutSeconds: 3}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 10, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "1", memory: 512Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}

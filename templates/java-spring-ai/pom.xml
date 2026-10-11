@@ -1,0 +1,65 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>generated</groupId><artifactId>agent</artifactId><version>0.1.0</version>
+  <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>3.4.1</version><relativePath/></parent>
+  <properties>
+    <java.version>17</java.version>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <spring-ai.version>1.0.0</spring-ai.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.ai</groupId>
+        <artifactId>spring-ai-bom</artifactId>
+        <version>${spring-ai.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!-- Non-web Spring context: DI for the workflow; the SDK ExecutionServer is
+         the only HTTP surface. / 非_web Spring 上下文为工作流提供 DI；SDK
+         ExecutionServer 是唯一 HTTP 接口面。 -->
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter</artifactId></dependency>
+    <!-- Real model workflow behind the verified boundary. / 已验证边界之后的
+         真实模型工作流。 -->
+    <dependency><groupId>org.springframework.ai</groupId><artifactId>spring-ai-starter-model-openai</artifactId></dependency>
+    <!-- Jackson serves the vendored SDK's wire models. / Jackson 服务 vendored
+         SDK 的传输模型。 -->
+    <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId></dependency>
+    <dependency><groupId>com.fasterxml.jackson.datatype</groupId><artifactId>jackson-datatype-jsr310</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+  </dependencies>
+  <build>
+    <!-- agentctl copies the reviewed platform entry under this directory. The
+         test subtree must be excluded from the MAIN compile because the main
+         classpath intentionally carries no test frameworks. / agentctl 把审核过的
+         平台入口复制到此目录；主编译必须排除 test 子树，因为主 classpath 刻意
+         不含任何测试框架。 -->
+    <sourceDirectory>platform_entry</sourceDirectory>
+    <testSourceDirectory>platform_entry/test</testSourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <exclude>test/**</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration><mainClass>generated.Application</mainClass></configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

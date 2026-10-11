@@ -1,0 +1,240 @@
+name: supply-chain
+
+on:
+  pull_request:
+  workflow_run:
+    workflows: [agentplug-quality]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  sast-and-secrets:
+    permissions:
+      contents: read
+      security-events: write
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.id == github.event.repository.id)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            build-mode: manual
+          - language: java-kotlin
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-go@v5
+        if: matrix.language == 'go'
+        with:
+          go-version: '1.25.1'
+          cache-dependency-path: '**/go.sum'
+      - uses: actions/setup-java@v4
+        if: matrix.language == 'java-kotlin'
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      - name: Trace every active Go module
+        if: matrix.language == 'go'
+        run: |
+          set -euo pipefail
+          for module in adapters/grpc-mapping adapters/legacy-http adapters/process adapters/sidecar agents/examples/go-eino cli/agent-eval cli/agentctl contracts/agent-evaluation/go contracts/code-runtime examples/go-operations frontend platform sdk/go templates/go-eino templates/go-generic workers/code-runtime workers/metric-runner; do
+            main_packages=$(go -C "$module" list -f '{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...)
+            if [[ -n "$main_packages" ]]; then
+              mkdir -p "$RUNNER_TEMP/codeql-go/$module"
+              go -C "$module" build -o "$RUNNER_TEMP/codeql-go/$module/" ./...
+            else
+              go -C "$module" build ./...
+            fi
+          done
+      - name: Trace Java SDK reactor and generated templates
+        if: matrix.language == 'java-kotlin'
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress -f sdk/java/pom.xml clean test
+          mvn --batch-mode --no-transfer-progress -f templates/java-generic/pom.xml clean test
+          mvn --batch-mode --no-transfer-progress -f templates/java-spring-ai/pom.xml clean test
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+
+  sbom-and-vulnerability:
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.id == github.event.repository.id)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: anchore/sbom-action@v0
+        with: {path: ., format: cyclonedx-json, output-file: lexagent-sbom.cdx.json}
+      - uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+      - uses: actions/upload-artifact@v4
+        with: {name: lexagent-sbom, path: lexagent-sbom.cdx.json, retention-days: 90}
+
+  history-secret-scan:
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.id == github.event.repository.id)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify scanner exceptions and deleted-history detection
+        run: python scripts/test_gitleaks_allowlists.py
+      - name: Scan full fetched history without event-specific Action code
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo \
+            --mount "type=bind,source=$PWD,target=/repo,readonly" \
+            zricethezav/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055 git /repo --config=/repo/.gitleaks.toml --log-opts=--all --redact --no-banner
+
+  image-provenance:
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    needs: [sast-and-secrets, sbom-and-vulnerability, history-secret-scan]
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.id == github.event.repository.id
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: platform
+            context: .
+            dockerfile: platform/Dockerfile
+          - name: frontend
+            context: .
+            dockerfile: frontend/Dockerfile
+          - name: metric-runner
+            context: .
+            dockerfile: workers/metric-runner/Dockerfile
+          - name: example-go
+            context: .
+            dockerfile: examples/go-operations/Dockerfile
+          - name: example-python
+            context: .
+            dockerfile: examples/python-documents/Dockerfile
+          - name: example-java
+            context: .
+            dockerfile: examples/java-tickets/Dockerfile
+          - name: code-runtime
+            context: .
+            dockerfile: workers/code-runtime/Dockerfile
+          - name: agent-eval
+            context: .
+            dockerfile: cli/agent-eval/Dockerfile
+          - name: local-embedding
+            context: .
+            dockerfile: providers/local-embedding/Dockerfile
+          - name: code-sandbox-python
+            context: .
+            dockerfile: workers/code-runtime/images/Dockerfile
+            target: python
+          - name: code-sandbox-javascript
+            context: .
+            dockerfile: workers/code-runtime/images/Dockerfile
+            target: javascript
+          - name: code-sandbox-shell
+            context: .
+            dockerfile: workers/code-runtime/images/Dockerfile
+            target: shell
+          # Language scaffolds ship their own reviewed platform entry, so they
+          # build and publish multi-arch exactly like the platform images.
+          # 语言脚手架自带审核过的平台入口，因此与平台镜像一样按多架构构建与发布。
+          - name: template-go-generic
+            context: templates/go-generic
+            dockerfile: templates/go-generic/Dockerfile
+          - name: template-go-eino
+            context: templates/go-eino
+            dockerfile: templates/go-eino/Dockerfile
+          - name: template-java-generic
+            context: templates/java-generic
+            dockerfile: templates/java-generic/Dockerfile
+          - name: template-java-spring-ai
+            context: templates/java-spring-ai
+            dockerfile: templates/java-spring-ai/Dockerfile
+          - name: template-python-generic
+            context: templates/python-generic
+            dockerfile: templates/python-generic/Dockerfile
+          - name: template-python-langgraph
+            context: templates/python-langgraph
+            dockerfile: templates/python-langgraph/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}'}
+      - id: registry
+        name: Normalize registry owner
+        shell: bash
+        env:
+          REGISTRY_OWNER: ${{ github.repository_owner }}
+        run: printf 'prefix=ghcr.io/%s\n' "${REGISTRY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: '${{ matrix.context }}'
+          file: '${{ matrix.dockerfile }}'
+          target: '${{ matrix.target || "" }}'
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.registry.outputs.prefix }}/agentplug:${{ matrix.name }}-${{ github.event.workflow_run.head_sha }}
+      - uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: image
+          image-ref: ${{ steps.registry.outputs.prefix }}/agentplug@${{ steps.build.outputs.digest }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+      - uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.registry.outputs.prefix }}/agentplug@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: image-sbom.spdx.json
+          upload-artifact: false
+      - uses: sigstore/cosign-installer@v3
+      - run: cosign sign --yes -a source_commit=${{ github.event.workflow_run.head_sha }} ${{ steps.registry.outputs.prefix }}/agentplug@${{ steps.build.outputs.digest }}
+      - run: cosign attest --yes --type spdxjson --predicate image-sbom.spdx.json ${{ steps.registry.outputs.prefix }}/agentplug@${{ steps.build.outputs.digest }}

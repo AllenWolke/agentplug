@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-runtime
+  namespace: agent-platform
+  labels: { app.kubernetes.io/name: model-runtime, app.kubernetes.io/component: model }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: model-runtime } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: model-runtime } }
+    spec:
+      serviceAccountName: agent-platform-runtime
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: model-runtime
+          image: registry.example.invalid/model-runtime@sha256:REPLACE_ME
+          ports: [{ name: http, containerPort: 8080 }]
+          env:
+            - { name: MODEL_DEPLOYMENT_ID, valueFrom: { fieldRef: { fieldPath: metadata.name } } }
+          readinessProbe: { httpGet: { path: /health/ready, port: http }, periodSeconds: 5, failureThreshold: 6 }
+          livenessProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: 10 }
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits: { cpu: "2", memory: "4Gi" }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: model-runtime, namespace: agent-platform }
+spec:
+  selector: { app.kubernetes.io/name: model-runtime }
+  ports: [{ name: http, port: 8080, targetPort: http }]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: model-runtime, namespace: agent-platform }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/name: model-runtime } }

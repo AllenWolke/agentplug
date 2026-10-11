@@ -1,0 +1,16 @@
+receivers:
+  otlp:
+    protocols: {grpc: {}, http: {}}
+processors:
+  memory_limiter: {limit_mib: 512, check_interval: 1s}
+  batch: {}
+  attributes/redact:
+    actions:
+      - {key: http.request.header.authorization, action: delete}
+      - {key: agent.prompt, action: delete}
+      - {key: agent.evidence, action: delete}
+exporters:
+  otlp: {endpoint: tempo:4317, tls: {insecure: true}}
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [memory_limiter, attributes/redact, batch], exporters: [otlp]}

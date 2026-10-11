@@ -1,0 +1,60 @@
+# Optional services from the independent tool image; never included by the
+# platform's default Compose. No database and no production Provider overrides.
+name: agentplug-eval-services
+x-evaluation-service: &evaluation-service
+  image: agentplug:agent-eval
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  mem_limit: 256m
+  cpus: 1
+  pids_limit: 32
+  restart: "no"
+services:
+  fixture-api:
+    <<: *evaluation-service
+    profiles: [fixture]
+    command: [fixture, serve, --listen, "0.0.0.0:8787", --scenario, selectable]
+    # The development HTTP guard accepts loopback only. This read-only fixture
+    # shares just the running platform's network namespace, no files or secrets.
+    network_mode: "container:${AGENT_EVAL_PLATFORM_CONTAINER:-agentplug-platform-app-1}"
+  fixture-agent:
+    <<: *evaluation-service
+    profiles: [fixture]
+    command: [fixture, agent, serve, --listen, "0.0.0.0:8080"]
+    expose: ["8080"]
+    networks: [platform]
+    environment:
+      PLATFORM_CAPABILITY_URL: ${AGENT_EVAL_CAPABILITY_URL:-http://platform-app:8081}
+      AGENT_CLIENT_ID: ${AGENT_EVAL_FIXTURE_CLIENT_ID:?Set a separately registered fixture workload identity}
+      AGENT_CLIENT_SECRET_FILE: /credentials/fixture-client-secret
+      INTERNAL_TOKEN_FILE: /credentials/internal-token
+      INTERNAL_SIGNING_SECRET_FILE: /credentials/internal-signing-secret
+      AGENT_PLATFORM_PUBLIC_KEY_FILE: /credentials/platform-public-key
+    volumes:
+      - "${AGENT_EVAL_SERVICE_SECRET_DIR:?Set an absolute private credentials directory}/fixture-client-secret:/credentials/fixture-client-secret:ro"
+      - "${AGENT_EVAL_SERVICE_SECRET_DIR}/internal-token:/credentials/internal-token:ro"
+      - "${AGENT_EVAL_SERVICE_SECRET_DIR}/internal-signing-secret:/credentials/internal-signing-secret:ro"
+      - "${AGENT_EVAL_SERVICE_SECRET_DIR}/platform-public-key:/credentials/platform-public-key:ro"
+  judge-agent:
+    <<: *evaluation-service
+    profiles: [judge]
+    command: [judge, serve, --listen, "0.0.0.0:8080"]
+    expose: ["8080"]
+    networks: [platform]
+    environment:
+      PLATFORM_CAPABILITY_URL: ${AGENT_EVAL_CAPABILITY_URL:-http://platform-app:8081}
+      AGENT_CLIENT_ID: ${AGENT_EVAL_JUDGE_CLIENT_ID:?Set a separately registered grading workload identity}
+      AGENT_CLIENT_SECRET_FILE: /credentials/judge-client-secret
+      INTERNAL_TOKEN_FILE: /credentials/internal-token
+      INTERNAL_SIGNING_SECRET_FILE: /credentials/internal-signing-secret
+      AGENT_PLATFORM_PUBLIC_KEY_FILE: /credentials/platform-public-key
+    volumes:
+      - "${AGENT_EVAL_SERVICE_SECRET_DIR:?Set an absolute private credentials directory}/judge-client-secret:/credentials/judge-client-secret:ro"
+      - "${AGENT_EVAL_SERVICE_SECRET_DIR}/internal-token:/credentials/internal-token:ro"
+      - "${AGENT_EVAL_SERVICE_SECRET_DIR}/internal-signing-secret:/credentials/internal-signing-secret:ro"
+      - "${AGENT_EVAL_SERVICE_SECRET_DIR}/platform-public-key:/credentials/platform-public-key:ro"
+networks:
+  platform:
+    external: true
+    name: ${AGENT_EVAL_NETWORK:-agentplug_default}

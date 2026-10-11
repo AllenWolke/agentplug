@@ -1,0 +1,28 @@
+# Independent manual CLI. This file is never included by platform Compose.
+name: agentplug-eval
+services:
+  agent-eval:
+    image: agentplug:agent-eval
+    build:
+      context: .
+      dockerfile: cli/agent-eval/Dockerfile
+    profiles: [manual]
+    stdin_open: true
+    tty: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 1
+    pids_limit: 32
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - type: bind
+        source: ${AGENT_EVAL_REPORT_DIR:-./.local-secrets/agent-eval/reports}
+        target: /reports
+      - type: bind
+        source: ${AGENT_EVAL_INPUT_DIR:-./cli/agent-eval/examples}
+        target: /inputs
+        read_only: true
+    command: ["--platform", "${AGENT_EVAL_PLATFORM_URL:-http://host.docker.internal:38080}"]

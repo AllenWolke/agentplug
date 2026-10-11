@@ -1,0 +1,9 @@
+{
+  "inventory_version": "agent-inventory/v1",
+  "source": "GoEinoSDKExample",
+  "path": "agents/examples/go-eino",
+  "status": "onboarded",
+  "expected_language": "go",
+  "expected_framework": "eino",
+  "expected_transport": "legacy-http"
+}

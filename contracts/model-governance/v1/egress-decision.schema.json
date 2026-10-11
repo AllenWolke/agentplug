@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/model-governance/v1/egress-decision.schema.json",
+  "title": "Model Egress Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision_id", "classification", "action", "reason_code"],
+  "properties": {
+    "decision_id": {"type": "string", "minLength": 1},
+    "classification": {"enum": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]},
+    "action": {"enum": ["allow", "redact", "tokenize", "block", "review_required"]},
+    "reason_code": {"type": "string", "minLength": 1},
+    "redaction_hash": {"type": "string"}
+  }
+}

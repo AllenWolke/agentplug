@@ -1,0 +1,50 @@
+{
+  "services": {
+    "platform-migrate": {
+      "image": "agentplug:platform",
+      "profiles": [
+        "init"
+      ],
+      "build": {
+        "context": ".",
+        "dockerfile": "platform/Dockerfile"
+      },
+      "entrypoint": [
+        "/app/migrate"
+      ],
+      "environment": {
+        "APP_ENV": "${APP_ENV:-development}",
+        "DB_DRIVER": "${DB_DRIVER:-pgx}",
+        "DB_DSN": "${PLATFORM_MIGRATION_DB_DSN:-postgresql://postgres:${DB_PASSWORD:?set random DB_PASSWORD}@postgres:5432/agentplug?sslmode=disable}",
+        "PLATFORM_DEV_RUNTIME_PASSWORD": "${PLATFORM_DEV_RUNTIME_PASSWORD-${PLATFORM_RUNTIME_DB_PASSWORD:?set random PLATFORM_RUNTIME_DB_PASSWORD}}"
+      },
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy"
+        }
+      },
+      "restart": "no"
+    },
+    "kafka-topic-bootstrap": {
+      "profiles": [
+        "init"
+      ],
+      "image": "apache/kafka:3.9.1",
+      "restart": "no",
+      "environment": {
+        "PLATFORM_KAFKA_NOTIFICATION_TOPIC": "${PLATFORM_KAFKA_NOTIFICATION_TOPIC:-platform.audit}",
+        "PLATFORM_KAFKA_NOTIFICATION_DLQ": "${PLATFORM_KAFKA_NOTIFICATION_DLQ:-platform.notification-dlq.v1}"
+      },
+      "depends_on": {
+        "kafka": {
+          "condition": "service_healthy"
+        }
+      },
+      "command": [
+        "sh",
+        "-ec",
+        "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic platform.audit --partitions 1 --replication-factor 1\n/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic platform.notification --partitions 1 --replication-factor 1\n/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic \"$$PLATFORM_KAFKA_NOTIFICATION_TOPIC\" --partitions 1 --replication-factor 1\n/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic agent-platform.identity.v1 --partitions 1 --replication-factor 1\n/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic \"$$PLATFORM_KAFKA_NOTIFICATION_DLQ\" --partitions 1 --replication-factor 1\n"
+      ]
+    }
+  }
+}

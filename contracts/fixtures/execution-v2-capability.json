@@ -1,0 +1,38 @@
+{
+  "_comment": "A fixed Ed25519 conformance fixture shared by every language template. The signed scope includes the required installation identity. 由各语言共享的固定 Ed25519 一致性夹具；签名作用域必须包含安装身份。",
+  "audience": "conformance-agent",
+  "body_hash": "931edbcb93ee394f2c36837fbb8af21fed26edee1964935a06d702434c2202e9",
+  "issuer": "platform-runtime-gateway",
+  "now": 1767225600,
+  "public_key_b64": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=",
+  "request": {
+    "context_token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhY3Rpb25zIjpbImludm9rZSJdLCJhZ2VudF9pbnN0YW5jZV9pZCI6Imluc3RhbmNlLWEiLCJhcHBsaWNhdGlvbl9pZCI6ImJ1c2luZXNzLWFwcCIsImF1ZCI6ImNvbmZvcm1hbmNlLWFnZW50IiwiYXV0aG9yaXphdGlvbl9lcG9jaCI6MSwiYm9keV9oYXNoIjoiOTMxZWRiY2I5M2VlMzk0ZjJjMzY4MzdmYmI4YWYyMWZlZDI2ZWRlZTE5NjQ5MzVhMDZkNzAyNDM0YzIyMDJlOSIsImV4cCI6MTc2NzIyNTcyMCwiaWF0IjoxNzY3MjI1NjAwLCJpbnN0YWxsYXRpb25faWQiOiJpbnN0YWxsYXRpb24tYSIsImlzcyI6InBsYXRmb3JtLXJ1bnRpbWUtZ2F0ZXdheSIsInBvbGljeV9zbmFwc2hvdF9oYXNoIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsInN1YiI6InVzZXItYSIsInN1YmplY3RfdHlwZSI6InVzZXIiLCJ0ZW5hbnRfaWQiOiJ0ZW5hbnQtYSJ9.eZHDlemKffZpalUKX6eyR77GtyvtfUeIkvipk1d6VT80VO49XVgJ_7jp17dE1dxu-3XYxB9dB18Q4RICFduVBw",
+    "idempotency_key": "conformance-invoke",
+    "input": {
+      "policy_snapshot": {
+        "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "input_schema": "schema://example/input/v1",
+    "operation": "invoke",
+    "protocol_version": "agent-execution/v2",
+    "scope": {
+      "agent_id": "conformance-agent",
+      "agent_instance_id": "instance-a",
+      "agent_version_id": "v2",
+      "application_id": "business-app",
+      "authorization_epoch": 1,
+      "delegation_depth": 0,
+      "department_id": "business-department",
+      "installation_id": "installation-a",
+      "parent_run_id": "",
+      "principal_id": "user-a",
+      "principal_type": "user",
+      "run_id": "conformance-run",
+      "session_id": "session-a",
+      "tenant_id": "tenant-a",
+      "trace_id": "00000000000000000000000000000000"
+    }
+  },
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhY3Rpb25zIjpbImludm9rZSJdLCJhZ2VudF9pbnN0YW5jZV9pZCI6Imluc3RhbmNlLWEiLCJhcHBsaWNhdGlvbl9pZCI6ImJ1c2luZXNzLWFwcCIsImF1ZCI6ImNvbmZvcm1hbmNlLWFnZW50IiwiYXV0aG9yaXphdGlvbl9lcG9jaCI6MSwiYm9keV9oYXNoIjoiOTMxZWRiY2I5M2VlMzk0ZjJjMzY4MzdmYmI4YWYyMWZlZDI2ZWRlZTE5NjQ5MzVhMDZkNzAyNDM0YzIyMDJlOSIsImV4cCI6MTc2NzIyNTcyMCwiaWF0IjoxNzY3MjI1NjAwLCJpbnN0YWxsYXRpb25faWQiOiJpbnN0YWxsYXRpb24tYSIsImlzcyI6InBsYXRmb3JtLXJ1bnRpbWUtZ2F0ZXdheSIsInBvbGljeV9zbmFwc2hvdF9oYXNoIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsInN1YiI6InVzZXItYSIsInN1YmplY3RfdHlwZSI6InVzZXIiLCJ0ZW5hbnRfaWQiOiJ0ZW5hbnQtYSJ9.eZHDlemKffZpalUKX6eyR77GtyvtfUeIkvipk1d6VT80VO49XVgJ_7jp17dE1dxu-3XYxB9dB18Q4RICFduVBw"
+}

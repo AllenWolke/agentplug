@@ -1,0 +1,423 @@
+name: agentplug-quality
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentplug-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/scan_secrets.py
+      - run: python scripts/test_scan_secrets.py
+
+  quality-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python quality dependencies
+        run: |
+          python -m pip install pytest==8.3.3 pytest-asyncio==0.24.0 PyYAML==6.0.2 fastapi
+          python -m pip install -e './sdk/python[grpc,telemetry,checkpoint]'  -r templates/python-langgraph/requirements.txt -r templates/python-generic/requirements.txt
+          python -m pip check
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: python scripts/check_gofmt.py
+      - run: python scripts/verify_modular_process.py
+      - run: python scripts/verify_modular_boundaries.py
+      - run: python -m pytest -q tests/release-validation
+      - run: python scripts/verify_productization_behavior.py --compact
+      - run: python scripts/check_contract_breaking.py
+      - run: python scripts/lint_execution_contract.py
+      - shell: pwsh
+        run: ./scripts/check_proto_generated.ps1
+      - run: python scripts/check_removed_architecture.py
+      - run: python scripts/check_publication.py
+      - shell: pwsh
+        run: ./tests/release-validation/production_apply_mock_test.ps1
+      - run: python -m pytest -q tests/performance/agent_platform_v2/test_gate.py
+      - run: python -m pytest -q tests/e2e/clean_cutover_test.py
+      - run: python -m pytest -q tests/e2e/test_modular_projection_wait.py tests/e2e/test_modular_failure_assertions.py tests/e2e/test_modular_negative_postgres_assertions.py
+      - run: python scripts/check_markdown_links.py
+      - name: Test Prometheus alert firing and recovery
+        run: |
+          docker run --rm --network none --entrypoint=promtool \
+            --mount "type=bind,source=$PWD/deploy/observability/prometheus,target=/rules,readonly" \
+            --workdir /rules \
+            prom/prometheus@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e \
+            test rules alerts.test.yaml
+      - run: python scripts/check_agent_productization_contracts.py
+      - run: python scripts/check_agent_code_ownership.py
+      - run: cd sdk/go && go test -race ./...
+      - run: PYTHONPATH=sdk/python python -m pytest -q sdk/python/tests sdk/python/agent_platform_sdk/test_runtime.py
+      - run: PYTHONPATH=sdk/python python -m pytest -q examples/python-documents/tests
+      - run: PYTHONPATH=sdk/python python -m pytest -q templates/python-langgraph/platform_entry
+      - run: PYTHONPATH=sdk/python python -m pytest -q templates/python-generic/platform_entry
+      - run: mvn --batch-mode --no-transfer-progress -f sdk/java/pom.xml test
+      - run: mvn --batch-mode --no-transfer-progress -f templates/java-generic/pom.xml test
+      - run: mvn --batch-mode --no-transfer-progress -f templates/java-spring-ai/pom.xml test
+      - run: python scripts/run_agent_create_timing.py
+      - run: python scripts/check_go_coverage.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: template-live-conformance
+          path: |
+            .tmp/template-conformance-report.json
+            .tmp/agent-create-timing.json
+
+  docker-plugin-sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: secret-scan
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify non-root plugin sandbox and seccomp egress denial
+        run: |
+          set -o pipefail
+          mkdir -p .tmp
+          docker run --rm --memory 512m --pids-limit 128 --user 65532:65532 \
+            -e GOCACHE=/tmp/go-build -e GOPATH=/tmp/go -e HOME=/tmp -e GOTOOLCHAIN=local \
+            --mount "type=bind,source=$PWD,target=/workspace,readonly" \
+            --workdir /workspace/workers/metric-runner golang:1.25.1-bookworm \
+            go test -count=1 -v -run '^TestSandbox' ./internal/sandbox \
+            2>&1 | tee .tmp/docker-plugin-sandbox.txt
+          for required in TestSandboxRunsRegisteredPluginUnderTheSharedResultContract TestSandboxBlocksMaliciousPlugins TestSandboxSeccompDeniesEgress TestSandboxKillsRunawayPlugin; do
+            grep -F -- "--- PASS: $required" .tmp/docker-plugin-sandbox.txt
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: docker-plugin-sandbox
+          path: .tmp/docker-plugin-sandbox.txt
+
+  native-host-deployment:
+    runs-on: ubuntu-latest
+    needs: secret-scan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: sdk/python/pyproject.toml
+      - run: python -m pip install -e './sdk/python[grpc,telemetry,checkpoint]' 
+      - run: python -m pip check
+      - run: python scripts/local.py build
+      - run: docker pull pgvector/pgvector:pg16
+      - run: python tests/e2e/native_host_smoke.py
+      - run: |
+          set -o pipefail
+          bash scripts/test_native_linux_sandbox.sh 2>&1 | tee artifacts/production-review/native-linux-sandbox-ci.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-host-deployment-result
+          path: |
+            artifacts/production-review/native-linux-host-smoke-20260930.json
+            artifacts/production-review/native-linux-sandbox-ci.txt
+
+  platform-go:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The active product is the modular platform plus its independently
+        # deployable Agents.  Retired Backend/Harness/Worker modules remain in
+        # historical fixtures and are not part of the active control-plane CI.
+        # 活动产品只验证模块化平台和独立 Agent；退役模块留在历史夹具中，
+        # 不再作为活动控制面的 CI 入口。
+        module: [platform, cli/agentctl, workers/metric-runner, frontend, adapters/legacy-http, adapters/grpc-mapping, adapters/process, adapters/sidecar, agents/examples/go-eino, examples/go-operations, templates/go-generic, templates/go-eino]
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+          cache-dependency-path: ${{ matrix.module }}/go.mod
+      # Platform conformance executes the real validation-domain adapter.
+      # 平台契约回归执行真实校验领域适配器，不能因未安装 Python 依赖假通过。
+      - uses: actions/setup-python@v5
+        if: matrix.module == 'platform'
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: sdk/python/pyproject.toml
+      - name: Install validation dependencies for cross-language conformance
+        if: matrix.module == 'platform'
+        working-directory: .
+        run: python -m pip install -e './sdk/python[grpc,telemetry,checkpoint]'
+      - run: go test -race ./...
+
+  identity-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+          cache-dependency-path: platform/go.sum
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: docker pull pgvector/pgvector:pg16
+      # The verifier owns random credentials and enforces named PASS/no SKIP,
+      # then removes only its temporary container and credential directory.
+      - name: Require PostgreSQL Identity SQL, revocation, memory and history boundaries
+        run: |
+          python scripts/verify_public_knowledge_postgres.py --suite source
+          python scripts/verify_public_knowledge_postgres.py --suite knowledge
+          python scripts/verify_public_knowledge_postgres.py --suite index
+          python scripts/verify_public_knowledge_postgres.py --suite identity-full
+          python scripts/verify_public_knowledge_postgres.py --suite identity --administrator-scopes --batch-id administrator-scopes-ci
+          python scripts/verify_public_knowledge_postgres.py --suite scale
+          python scripts/verify_public_knowledge_postgres.py --suite capability
+          python scripts/verify_public_knowledge_postgres.py --suite capability-recovery
+          python scripts/verify_public_knowledge_postgres.py --suite capability-billing
+          python scripts/verify_public_knowledge_postgres.py --suite execution
+          python scripts/verify_public_knowledge_postgres.py --suite execution-recovery
+          python scripts/verify_public_knowledge_postgres.py --suite erasure-audit
+          python scripts/verify_public_knowledge_postgres.py --suite platform-ports
+          docker pull golang:1.25-bookworm
+          (cd platform && go mod download)
+          python scripts/verify_public_knowledge_postgres.py --suite process --answer-cache-process
+          docker build -t agentplug:example-python -f examples/python-documents/Dockerfile .
+          python scripts/verify_public_knowledge_postgres.py --suite process --python-example-process
+          python scripts/verify_public_knowledge_postgres.py --suite maintenance
+          docker pull apache/kafka:3.9.1
+          python scripts/verify_public_knowledge_postgres.py --suite kafka
+          python scripts/verify_public_knowledge_postgres.py --suite usage
+          python scripts/verify_public_knowledge_postgres.py --suite evaluation --rag-evaluation
+          python scripts/verify_public_knowledge_postgres.py --suite evaluation --real-rag-metrics
+          python scripts/verify_public_knowledge_postgres.py --suite conversation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: identity-and-lifecycle-sql
+          path: |
+            docs/新增需求/github作品改造/*实际验证.*
+            docs/新增需求/github作品改造/*权限规模测量.json
+
+  first-administrator-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+          cache-dependency-path: platform/go.sum
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: docker pull pgvector/pgvector:pg16
+      - name: Require actual PostgreSQL migration and atomic first-administrator bootstrap
+        run: |
+          python scripts/verify_public_knowledge_postgres.py --suite administration
+          python scripts/verify_public_knowledge_postgres.py --suite administration --local-admin-bootstrap
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: first-administrator-sql
+          path: |
+            docs/新增需求/github作品改造/*首管理员实际验证.*
+            docs/新增需求/github作品改造/*本地密码首管理员实际PG验证.*
+
+  checkpoint-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install SDK and PostgreSQL Graph test dependencies
+        run: python -m pip install -e './sdk/python[grpc,telemetry,checkpoint]' -r templates/python-langgraph/requirements.txt pytest==8.3.3 pytest-asyncio==0.24.0 fastapi
+      - run: docker pull pgvector/pgvector:pg16
+      - name: Require real PostgreSQL role verification and full Python SDK
+        run: python scripts/verify_public_knowledge_postgres.py --suite checkpoint --sdk-full
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checkpoint-sql
+          path: docs/新增需求/github作品改造/*SDK检查点实际验证.*
+
+  postgres-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+          cache-dependency-path: platform/go.sum
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: docker pull pgvector/pgvector:pg16
+      - name: Require full native backup and isolated data restore
+        run: python scripts/verify_postgres_backup_isolated.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: postgres-backup-restore
+          path: docs/新增需求/github作品改造/*备份恢复实际验证.json
+
+  web:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [frontend]
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  macos-gate:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.3 pytest-asyncio==0.24.0 PyYAML==6.0.2 fastapi
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+      - name: Static productization gates
+        run: |
+          python scripts/verify_modular_process.py
+          python scripts/verify_modular_boundaries.py
+          python scripts/verify_productization_behavior.py --compact
+          python -m pytest -q tests/release-validation/modular_production_topology_test.py
+          python scripts/check_markdown_links.py
+      - name: CLI SDK and template tests
+        run: |
+          (cd sdk/go && go test ./...)
+          (cd templates/go-generic && go test ./...)
+          (cd templates/go-eino && go test ./...)
+          (cd cli/agentctl && go test ./...)
+      - name: Compose portability gate and Docker capability record
+        run: |
+          mkdir -p .tmp
+          # Do not silently pass when the Compose parser was never executed.
+          # Install the client/plugin on a hosted runner if it is not preloaded;
+          # a Docker Engine is not required for `compose config`.
+          # 若 Compose 解析器未实际执行，必须失败；缺少客户端时安装 CLI/插件。
+          # `compose config` 不需要 Docker Engine。
+          if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+            brew install docker docker-compose
+          fi
+          command -v docker
+          docker compose version
+          bash -n scripts/platform.sh
+          python scripts/verify_modular_process.py
+          export DB_PASSWORD="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+          export PLATFORM_RUNTIME_DB_PASSWORD="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+          export INTERNAL_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+          export BROWSER_GATEWAY_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+          export INTERNAL_SIGNING_SECRET="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+          PLATFORM_CONTEXT_PUBLIC_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= docker compose -f compose.yaml --profile modular config --quiet
+          if docker info >/dev/null 2>&1; then
+            echo '{"os":"macos","compose_config":"passed","shell_syntax":"passed","process_boundary":"passed","docker_e2e":"not_run_by_macos_ci","status":"portable_gate_passed"}' > .tmp/macos-gate.json
+          else
+            echo '{"os":"macos","compose_config":"passed","shell_syntax":"passed","process_boundary":"passed","docker_e2e":"not_executed","status":"portable_gate_passed","environment_boundary":"Docker Engine unavailable on hosted macOS runner"}' > .tmp/macos-gate.json
+            echo "macOS Docker Engine unavailable; required Compose config and shell gates passed"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-gate
+          path: .tmp/macos-gate.json
+
+  compose-e2e:
+    needs: [secret-scan, quality-policy, platform-go, identity-sql, first-administrator-sql, checkpoint-sql, postgres-backup, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DB_PASSWORD: ci-platform-db-pass
+      API_KEY: ci-platform-api-key
+      FRONTEND_HOST_PORT: '13000'
+      COMPOSE_PROJECT_NAME: lexagent-ci-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate modular Compose entrypoint
+        env:
+          INTERNAL_SIGNING_SECRET: ci-platform-signing-secret
+          PLATFORM_CONTEXT_PUBLIC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        run: |
+          export INTERNAL_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+          export BROWSER_GATEWAY_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+          export PLATFORM_RUNTIME_DB_PASSWORD="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+          docker compose -f compose.yaml --profile modular config --quiet
+      - name: Run current-source modular E2E
+        run: |
+          python -m pip install --disable-pip-version-check cryptography
+          bash scripts/platform.sh e2e-modular --build-images
+      - name: Collect diagnostics
+        if: failure()
+        run: docker compose -f compose.yaml --profile modular logs --no-color --tail=300
+      - name: Destroy isolated test resources
+        if: always()
+        run: docker compose -f compose.yaml --profile modular down -v --remove-orphans
+
+  modular-cutover:
+    needs: [quality-policy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      DB_PASSWORD: ci-modular-db-pass
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install modular E2E signing dependency
+        run: python -m pip install --disable-pip-version-check cryptography
+      - name: Run current-source modular platform E2E
+        run: bash scripts/platform.sh e2e-modular --build-images

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/agent-evaluation/v1/sample.schema.json",
+  "title": "Evaluation sample",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "input", "expected"],
+  "properties": {
+    "case_id": {"type": "string", "pattern": "^[a-zA-Z0-9._-]{1,128}$"},
+    "input": {"type": "object"},
+    "expected": {"type": "object"},
+    "split": {"enum": ["train", "dev", "test", "frozen"]},
+    "weight": {"type": "number", "exclusiveMinimum": 0}
+  }
+}

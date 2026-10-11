@@ -1,0 +1,25 @@
+{
+  "protocol_version": "agent-execution/v2",
+  "context_token": "fixture.context.token.with.more.than.thirty.two.characters",
+  "scope": {
+    "tenant_id": "tenant-a",
+    "department_id": "business-department",
+    "application_id": "business-app",
+    "agent_instance_id": "validation-installation",
+    "installation_id": "validation-installation",
+    "agent_id": "example-agent",
+    "agent_version_id": "version-2",
+    "principal_type": "user",
+    "principal_id": "user-a",
+    "session_id": "session-a",
+    "run_id": "run-a",
+    "authorization_epoch": 3,
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "parent_run_id": "",
+    "delegation_depth": 0
+  },
+  "operation": "run",
+  "idempotency_key": "fixture-idempotency-key",
+  "input_schema": "schema://example-agent/run/v1",
+  "input": {"batch_id": "batch-a", "report_type": "1104"}
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/model-governance/v1/budget.schema.json",
+  "title": "Model Budget",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["period", "limit_micros"],
+  "properties": {
+    "period": {"enum": ["request", "minute", "day", "month"]},
+    "limit_micros": {"type": "integer", "minimum": 0},
+    "limit_tokens": {"type": "integer", "minimum": 0},
+    "hard_limit": {"type": "boolean"}
+  }
+}

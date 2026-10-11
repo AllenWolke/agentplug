@@ -1,0 +1,26 @@
+{
+  "at": "2026-10-10T00:08:44.602354+08:00",
+  "language": "go",
+  "actual_source_formal_sdk": true,
+  "agent_version": "example-go-operations-v9",
+  "run_id": "g1-16-source-sdk-wait-cancel-v1-20261010-go",
+  "status": "cancelled",
+  "disposition": "verified",
+  "progress": {
+    "version": "cancellation-compensation/v1",
+    "cancellation_id": "75c6d24045faf4338bf031c5be99e1f6376a7b48dec967d8df018988733fa274",
+    "phase": "complete",
+    "stop_confirmed": true,
+    "total": 0,
+    "compensated": 0,
+    "no_effect": 0,
+    "unresolved": 0,
+    "needs_attention": 0
+  },
+  "notice_effects": 0,
+  "outsider_cancel_http": 403,
+  "policy_or_grants_changed": false,
+  "old_runs_replayed": false,
+  "scope": "waiting approval cancellation; no claim of committed business effect rollback",
+  "overall_accepted": false
+}

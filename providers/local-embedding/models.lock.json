@@ -1,0 +1,36 @@
+{
+  "version": "local-embedding-model-lock/v1",
+  "created_at": "2026-10-07T19:39:55.238825+00:00",
+  "models": [
+    {
+      "id": "bge-m3",
+      "repository": "BAAI/bge-m3",
+      "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+      "max_input_tokens": 8192,
+      "dimensions": 1024,
+      "pooling": "cls",
+      "source": "https://huggingface.co/BAAI/bge-m3",
+      "license": "mit"
+    },
+    {
+      "id": "qwen3-0.6b",
+      "repository": "Qwen/Qwen3-Embedding-0.6B",
+      "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+      "max_input_tokens": 32768,
+      "dimensions": 1024,
+      "pooling": "last",
+      "source": "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B",
+      "license": "apache-2.0"
+    },
+    {
+      "id": "e5-large",
+      "repository": "intfloat/multilingual-e5-large",
+      "revision": "3d7cfbdacd47fdda877c5cd8a79fbcc4f2a574f3",
+      "max_input_tokens": 512,
+      "dimensions": 1024,
+      "pooling": "mean",
+      "source": "https://huggingface.co/intfloat/multilingual-e5-large",
+      "license": "mit"
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+groups:
+  - name: agent-platform-v2
+    rules:
+      - alert: AgentGatewayErrorBudgetBurn
+        expr: sum(rate(agent_gateway_requests_total{status_class="5xx"}[5m])) / clamp_min(sum(rate(agent_gateway_requests_total[5m])), 0.001) > 0.01
+        for: 10m
+        labels: {severity: critical}
+      - alert: AgentPlatformMetricsUnavailable
+        expr: absent(up{job="agentplug-platform"}) or up{job="agentplug-platform"} == 0
+        for: 2m
+        labels: {severity: critical}
+      - alert: AgentPlatformReadinessFailed
+        expr: agent_platform_ready == 0
+        for: 2m
+        labels: {severity: critical}
+      - alert: AgentPlatformDatabaseUnavailable
+        expr: absent(agent_platform_database_probe_success{job="agentplug-platform"}) or agent_platform_database_probe_success == 0
+        for: 2m
+        labels: {severity: critical}
+      - alert: AgentExecutionReconciliationFailures
+        expr: sum by (stage) (rate(agent_execution_reconciliation_failures_total[5m])) > 0
+        for: 5m
+        labels: {severity: warning}
+      - alert: AgentExecutionRecoveryMetricsUnavailable
+        expr: absent(agent_execution_recovery_scrape_success{job="agentplug-platform"}) or agent_execution_recovery_scrape_success == 0
+        for: 2m
+        labels: {severity: warning}
+      - alert: AgentExecutionRecoveryStalled
+        expr: agent_execution_recovery_oldest_age_seconds > 300
+        for: 5m
+        labels: {severity: warning}
+      - alert: AgentEvaluationWorkerUnavailable
+        expr: absent(agent_evaluation_worker_ready{job="agentplug-platform"}) or agent_evaluation_worker_ready == 0
+        for: 2m
+        labels: {severity: critical}
+      - alert: AgentEvaluationWorkerStoreFailures
+        expr: sum(rate(agent_evaluation_worker_failures_total[5m])) > 0
+        for: 5m
+        labels: {severity: warning}
+      - alert: AgentEvaluationQueueMetricsUnavailable
+        expr: absent(agent_evaluation_queue_scrape_success{job="agentplug-platform"}) or agent_evaluation_queue_scrape_success == 0
+        for: 2m
+        labels: {severity: warning}
+      - alert: AgentEvaluationQueueStalled
+        expr: agent_evaluation_queue_oldest_age_seconds > 300
+        for: 5m
+        labels: {severity: warning}
+      - alert: AgentModelBudgetMetricsUnavailable
+        expr: absent(agent_model_budget_reconciliation_scrape_success{job="agentplug-platform"}) or agent_model_budget_reconciliation_scrape_success == 0
+        for: 2m
+        labels: {severity: warning}
+      - alert: AgentModelBudgetReconciliationStalled
+        expr: agent_model_budget_reconciliation_oldest_age_seconds > 900
+        for: 5m
+        labels: {severity: warning}
+      - alert: AgentTraceExporterMissing
+        expr: agent_trace_exporter_configured == 0
+        for: 2m
+        labels: {severity: critical}
+      - alert: AgentTracePipelineErrors
+        expr: rate(agent_trace_pipeline_errors_total[5m]) > 0
+        for: 5m
+        labels: {severity: warning}
+      - alert: AgentModelProviderTransportFailures
+        expr: rate(agent_model_provider_transport_total{result="failure"}[5m]) > 0
+        for: 5m
+        labels: {severity: warning}
+      - alert: AgentModelProviderInvalidResponses
+        expr: rate(agent_model_provider_response_invalid_total[5m]) > 0
+        for: 5m
+        labels: {severity: warning}

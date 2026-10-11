@@ -1,0 +1,9 @@
+{
+  "inventory_version": "agent-inventory/v1",
+  "source": "JavaSpringAISDKExample",
+  "path": "agents/examples/java-spring-ai",
+  "status": "onboarded",
+  "expected_language": "java",
+  "expected_framework": "spring-ai",
+  "expected_transport": ""
+}

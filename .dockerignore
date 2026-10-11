@@ -1,0 +1,99 @@
+.git
+.codex-cache
+.local-secrets
+.local-secrets/**
+.tmp
+.tmp-go-cache-*
+.tmp-go-cache-*/*
+.tmp-*
+.tmp-*/*
+.cache
+**/.tmp
+**/.tmp-go-cache
+**/.tmp-go-cache-*
+**/.tmp-go-cache-*/**
+**/.tmp-*
+**/.tmp-*/*
+# Docker Desktop on Windows can evaluate recursive patterns after walking a
+# large directory. Keep the known top-level build-cache roots explicit so the
+# modular root context stays source-sized.
+# Windows Docker Desktop 有时先遍历递归目录再应用通配符；显式排除已知
+# 顶层构建缓存根目录，确保模块化根上下文只发送源码。
+platform/.tmp*
+platform/.tmp*/*
+agents/.tmp*
+agents/.tmp*/*
+frontend/.tmp*
+frontend/.tmp*/*
+sdk/.tmp*
+sdk/.tmp*/*
+adapters/.tmp*
+adapters/.tmp*/*
+**/.tmp-go-cache-final*
+**/.tmp-go-cache-current*
+**/.go-build-cache
+**/.cache/go-build
+**/.cache
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/__pycache__
+**/.pytest_cache
+# Explicit roots are required by Docker Desktop's WSL sender before its
+# recursive ** matcher runs; otherwise Windows-created cache ACL/xattr entries
+# can fail Linux-context builds before exclusion is applied.
+# 显式根目录规则让 Docker Desktop 的 WSL sender 在递归 ** 匹配之前排除
+# Windows 创建的缓存 ACL/xattr，避免 Linux 构建上下文在读取缓存时失败。
+.pytest_cache
+go-harness/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.env
+**/.env.*
+**/.env_*
+**/*.exe
+docs
+artifacts
+tmp
+**/tmp
+**/tmp/**
+**/*.out
+**/*.prof
+# Maven build outputs to keep out of build contexts; kept as explicit paths so
+# the Go source package adapters/legacy-http/internal/target stays buildable.
+# 需要排除的 Maven 构建产物；写成显式路径，避免误伤 Go 源码包
+# adapters/legacy-http/internal/target。
+agents/examples/java-spring-ai/target
+sdk/java/agent-platform-sdk/target
+sdk/java/agent-platform-spring-boot-starter/target
+examples/java-tickets/target
+**/.pnpm-store
+
+# The modular Compose entrypoint builds only platform/, frontend/, agents/
+# and sdk/.  Keep historical service trees out of the root context; legacy
+# Compose files use their own historical contexts and are never part of the
+# supported modular image build.
+# 模块化 Compose 只构建 platform/frontend/agents/sdk；历史服务树不应进入
+# 根构建上下文，避免 Windows Docker Desktop 发送无关源码、缓存和 ACL。
+go-backend
+go-harness
+LexAgent
+"LexAgent（20260826版）"
+bak
+**/bak
+**/.venv
+**/venv
+**/.tox
+**/.idea
+**/.vscode
+**/models
+**/checkpoints
+**/*.sqlite
+**/*.sqlite3
+
+# Native database exports contain business data and must remain private.
+**/*.pgdump
+
+# 固定模型权重只挂载到独立Provider，不进入源码或镜像上下文。
+.local-models

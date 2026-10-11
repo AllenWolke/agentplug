@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/model-governance/v1/route-decision.schema.json",
+  "title": "Model Route Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision_id", "provider_id", "model_version_id", "reason_code"],
+  "properties": {
+    "decision_id": {"type": "string", "minLength": 1},
+    "provider_id": {"type": "string", "minLength": 1},
+    "model_version_id": {"type": "string", "minLength": 1},
+    "fallback": {"type": "boolean"},
+    "reason_code": {"type": "string", "minLength": 1}
+  }
+}

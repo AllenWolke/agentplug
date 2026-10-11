@@ -1,0 +1,13 @@
+{
+  "source_run_id": "replace-source-execution-run",
+  "source_output_hash": "replace-with-actual-64-character-output-digest",
+  "rubric": {
+    "version": "agent-eval-rubric/v1",
+    "id": "human-acceptance-1.0.0",
+    "criteria": {"human_acceptance": "由实际使用者确认业务目标、约束和证据满足要求"}
+  },
+  "rubric_hash": "replace-with-canonical-rubric-sha256",
+  "verdicts": [
+    {"metric_id": "human_acceptance", "value": null, "evidence": ["output"], "reason": "请由有权读取原Run的审核者填写实际判定和依据；未知使用null"}
+  ]
+}

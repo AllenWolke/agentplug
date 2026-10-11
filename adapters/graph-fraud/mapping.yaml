@@ -1,0 +1,7 @@
+mapping_id: graph-fraud-v1
+version: 1.0.0
+kind: legacy-http
+request:
+  payload: input.payload
+response:
+  payload: body.payload

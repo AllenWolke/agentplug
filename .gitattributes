@@ -1,0 +1,6 @@
+# Keep executable scripts portable across Windows, Linux and macOS.
+# 统一脚本换行，避免 Windows checkout 的 CRLF 让 Linux 容器出现 /bin/sh 错误。
+* text=auto
+*.sh text eol=lf
+*.bash text eol=lf
+*.ps1 text eol=lf

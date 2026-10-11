@@ -1,0 +1,74 @@
+{
+  "contract": "shared-compensation-kafka-acceptance/v1",
+  "at": "2026-10-10T03:29:21+08:00",
+  "project": "agentplug",
+  "accepted": [
+    "G1-16",
+    "G1-17"
+  ],
+  "source_formal_actual": true,
+  "source_only_evidence": true,
+  "regulatory_code_added": false,
+  "core_evidence": {
+    "at": "2026-10-10T03:17:25+08:00",
+    "project": "agentplug",
+    "source_only_evidence": true,
+    "original_scenario_results_unmodified": true,
+    "files": [
+      {
+        "file": "g1-16-source-native-cancel-v1-20261010-summary.json",
+        "sha256": "43252405672c648cb37fc9d37ea34867872f4db9fec6004a8c4276dcdfb7ba3e"
+      },
+      {
+        "file": "g1-16-source-sdk-wait-cancel-v1-20261010-go.json",
+        "sha256": "3f5a5cd20b3147ce28eb5c174bf3fcb2668676090f15632b0dc0073a69143a39"
+      },
+      {
+        "file": "g1-16-source-sdk-wait-cancel-v1-20261010-java.json",
+        "sha256": "d6395e21d2d967b8a8545d3159844bf05563e983f74702cff4f2afaf841b2f95"
+      },
+      {
+        "file": "g1-16-source-sdk-wait-cancel-v1-20261010-python.json",
+        "sha256": "547257f90f11a9558f7b20a19fd564fc35e4ba791d37be981334a0085283955e"
+      },
+      {
+        "file": "g1-16-source-delivered-notice-cancel-v2-20261010-summary.json",
+        "sha256": "a3f67ffe08afd3f57499b1d3f135816cfcc71f29d4834e0872ffe34279223270"
+      },
+      {
+        "file": "g1-16-source-worker-native-tests-v1-20261010-summary.json",
+        "sha256": "676d90f9d4ae28917452ee4ede996cb0de544f056753e068a05f24ff12e12aee"
+      },
+      {
+        "file": "g1-17-source-notification-redrive-v1-20261010-summary.json",
+        "sha256": "7d57d48e4d4e01e2f9ce2e458b83c9654193bab1e79ed5d56f1d9c90b626369a"
+      },
+      {
+        "file": "g1-17-source-dlq-cancel-race-v1-20261010-summary.json",
+        "sha256": "9cabcf4ee82651723541f81b1a1c8cc7393a692cb617b36a749ae11f32006cd2"
+      },
+      {
+        "file": "g1-17-source-broker-recreate-v1-20261010-summary.json",
+        "sha256": "849cd31656bea38bb2f1896fa1136313e4667782f689ac70967358dc7cac785a"
+      },
+      {
+        "file": "g1-17-source-dlq-iam-v1-20261010-summary.json",
+        "sha256": "429dc3ee7265940bc6d722fc20699fe01b175e37ceb0bf70b675a3c6e1bb071f"
+      }
+    ],
+    "regulatory_code_added": false
+  },
+  "tests": {
+    "real_pg_kafka_passing_events": 104,
+    "native_worker_passing_tests": 18,
+    "internal_index_stop_passing_events": 6,
+    "failed": 0,
+    "skipped": 0
+  },
+  "historical_unknown_preserved_no_replay": true,
+  "other_project_required_delivery_completed": true,
+  "owned_experiment_cleanup_completed": true,
+  "current_platform_image": "agentplug:platform-compensation-kafka-v4-20261010",
+  "proof_sha256": "4b3c4a8146ad0f84ea64faabcc66f4b4acf53902ea5eddec8b2ee95bb6ff5bde",
+  "macos_native_tested": false
+}

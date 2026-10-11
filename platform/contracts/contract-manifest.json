@@ -1,0 +1,9 @@
+{
+  "protocol": "agent-execution/v2",
+  "schema_uri": "schema://agent-platform/execution/v2",
+  "openapi_source": "../../contracts/openapi/agent-execution-v2.yaml",
+  "proto_source": "../../contracts/proto/agent_execution_v2.proto",
+  "error_catalog_source": "../../contracts/errors/catalog.yaml",
+  "generated_go_package": "internal/contract",
+  "generated_python_package": "../../sdk/python/agent_platform_sdk/generated"
+}

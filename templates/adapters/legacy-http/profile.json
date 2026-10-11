@@ -1,0 +1,10 @@
+{
+  "kind": "legacy-http",
+  "isolation": "container",
+  "transport": "http",
+  "port": 8080,
+  "declared_capabilities": ["invoke", "health"],
+  "unsupported_capabilities": ["run", "resume", "cancel", "checkpoint", "events"],
+  "input_schema": "schema://agent/input/v1",
+  "output_schema": "schema://agent/output/v1"
+}

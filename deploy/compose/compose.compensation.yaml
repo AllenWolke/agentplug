@@ -1,0 +1,59 @@
+# Explicit reference API deployment. Not part of the default platform startup.
+name: agentplug-compensation
+services:
+  reversible-api-migrate:
+    profiles: [maintenance]
+    image: agentplug:reversible-api
+    command: [migrate]
+    environment:
+      REVERSIBLE_API_DSN_FILE: /run/migration/migration.dsn
+    volumes:
+      - type: bind
+        source: ${REVERSIBLE_API_MIGRATION_PRIVATE_DIR:-./.local-secrets/reversible-api-migration}
+        target: /run/migration
+        read_only: true
+    networks: [platform]
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 32
+    restart: "no"
+  reversible-api:
+    image: agentplug:reversible-api
+    build:
+      context: .
+      dockerfile: platform/Dockerfile.reversible-api
+    environment:
+      REVERSIBLE_API_DSN_FILE: /run/private/runtime.dsn
+      REVERSIBLE_API_CONFIG_FILE: /run/private/service.json
+      REVERSIBLE_API_LISTEN: 0.0.0.0:8087
+      REVERSIBLE_API_TLS_CERT_FILE: /run/private/server.crt
+      REVERSIBLE_API_TLS_KEY_FILE: /run/private/server.key
+    volumes:
+      - type: bind
+        source: ${REVERSIBLE_API_PRIVATE_DIR:?Set the private reference API directory}
+        target: /run/private
+        read_only: true
+    ports:
+      - "127.0.0.1:${REVERSIBLE_API_HOST_PORT:-38087}:8087"
+    networks:
+      - platform
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 32
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+networks:
+  platform:
+    external: true
+    name: ${REVERSIBLE_API_PLATFORM_NETWORK:-agentplug_default}

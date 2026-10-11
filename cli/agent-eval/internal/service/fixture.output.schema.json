@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://agent-eval-simulation/output/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "schema://agent-eval-simulation/output/v1"
+    },
+    "scenario": {
+      "enum": [
+        "normal",
+        "multistep",
+        "tool_failure",
+        "permission_boundary",
+        "injection",
+        "long_context",
+        "checkpoint",
+        "unknown_side_effect",
+        "ambiguous",
+        "low_confidence_route",
+        "timeout"
+      ]
+    },
+    "synthetic": {
+      "const": true
+    },
+    "side_effect_replayed": {
+      "const": false
+    },
+    "disposition": {
+      "enum": [
+        "completed",
+        "clarification_required",
+        "handoff",
+        "permission_denied",
+        "checkpoint_roundtrip"
+      ]
+    },
+    "error_code": {
+      "type": "string"
+    },
+    "tool_error": {
+      "type": "boolean"
+    },
+    "process_recovery_proven": {
+      "const": false
+    },
+    "untrusted_instructions_executed": {
+      "type": "boolean"
+    },
+    "untrusted_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "observation_received": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema",
+    "scenario",
+    "synthetic",
+    "side_effect_replayed",
+    "disposition"
+  ]
+}

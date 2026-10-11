@@ -1,0 +1,11 @@
+{
+  "protocol_version": "agent-execution/v2",
+  "operations": ["invoke", "run", "resume", "cancel", "events"],
+  "scope_required": [
+    "tenant_id", "department_id", "application_id", "agent_instance_id", "installation_id",
+    "agent_id", "agent_version_id", "principal_type", "principal_id",
+    "session_id", "run_id", "authorization_epoch", "trace_id"
+  ],
+  "terminal_statuses": ["succeeded", "failed", "cancelled"],
+  "error_required": ["code", "message", "retryable"]
+}

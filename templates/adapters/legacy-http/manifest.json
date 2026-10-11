@@ -1,0 +1,1 @@
+{"manifest_version":"agent-adapter/v1","adapter_id":"{{ .AgentID }}","kind":"legacy-http","protocol_version":"agent-execution/v2","mapping_ref":"mapping.json","isolation":"container"}

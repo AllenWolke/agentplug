@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "db_dsn": "",
+  "tenant_id": "REPLACE_TENANT_ID",
+  "tenant_name": "REPLACE_TENANT_NAME",
+  "department_id": "REPLACE_DEPARTMENT_ID",
+  "department_name": "REPLACE_DEPARTMENT_NAME",
+  "application_id": "REPLACE_APPLICATION_ID",
+  "application_name": "REPLACE_APPLICATION_NAME",
+  "principal_id": "REPLACE_ADMIN_PRINCIPAL_ID",
+  "operator_id": "REPLACE_DEPLOYMENT_OPERATOR_ID",
+  "oidc_issuer": "https://idp.invalid/REPLACE_REALM",
+  "oidc_subject": "REPLACE_VERIFIED_IDP_SUBJECT",
+  "approval_reference": "REPLACE_APPROVAL_REFERENCE"
+}

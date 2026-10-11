@@ -1,0 +1,16 @@
+# Images for the current platform and the explicitly optional root Compose profiles.
+agentplug:platform
+agentplug:frontend
+agentplug:example-go
+agentplug:example-python
+agentplug:example-java
+agentplug:code-runtime
+quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+pgvector/pgvector:pg16
+apache/kafka:3.9.1
+quay.io/minio/minio:RELEASE.2024-10-13T13-34-11Z
+python:3.12-alpine
+node:22-bookworm-slim
+alpine:3.21
+
+agentplug:metric-runner

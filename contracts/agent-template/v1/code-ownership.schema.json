@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/agent-template/v1/code-ownership.schema.json",
+  "title": "Agent code ownership lock",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["lock_version", "template_id", "template_version", "files"],
+  "properties": {
+    "lock_version": {"const": "v1"},
+    "template_id": {"type": "string"},
+    "template_version": {"type": "string"},
+    "files": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path", "owner", "sha256"], "properties": {"path": {"type": "string"}, "owner": {"type": "string", "enum": ["business-owned", "template-managed", "generated", "external-adapter"]}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "mutable": {"type": "boolean"}}}}
+  }
+}

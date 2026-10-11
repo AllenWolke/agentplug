@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - alerts.yaml
+  - backup-alerts.yaml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager.monitoring.svc.cluster.local:9093]
+
+# The internal listener is reachable only from the approved monitoring namespace.
+# 内部端口仅向受控监控命名空间放行。
+scrape_configs:
+  - job_name: agentplug-platform
+    metrics_path: /metrics
+    static_configs:
+      - targets: [platform-app.lexagent.svc.cluster.local:8081]
+
+# Configure a protected node_exporter textfile endpoint with job_name
+# agentplug-backup. See deploy/backup/README.md. Missing backup metrics alert
+# deliberately fires until the operator configures this required data source.

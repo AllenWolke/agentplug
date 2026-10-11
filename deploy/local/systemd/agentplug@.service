@@ -1,0 +1,36 @@
+[Unit]
+Description=AgentPlug native %i service
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/agentplug/%i.env
+
+[Service]
+Type=simple
+User=agentplug-%i
+Group=agentplug-%i
+WorkingDirectory=/opt/agentplug
+ExecStart=/opt/agentplug/.venv/bin/python /opt/agentplug/scripts/local.py run %i --env-file /etc/agentplug/%i.env --python /opt/agentplug/.venv/bin/python
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+ProtectControlGroups=true
+PrivateTmp=true
+PrivateDevices=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+StateDirectory=agentplug-%i
+StateDirectoryMode=0700
+MemoryMax=1G
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

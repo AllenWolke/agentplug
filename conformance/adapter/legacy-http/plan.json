@@ -1,0 +1,23 @@
+{
+  "mapping_id": "legacy-ask",
+  "version": "1.0.0",
+  "kind": "legacy-http",
+  "revision": 3,
+  "hash": "sha256:conformance-legacy-ask-v1",
+  "request": {
+    "question": {
+      "source": "input.question",
+      "required": true,
+      "max_length": 4000
+    }
+  },
+  "response": {
+    "answer": {
+      "source": "body.answer",
+      "required": true
+    },
+    "model": {
+      "const": "legacy-ask"
+    }
+  }
+}

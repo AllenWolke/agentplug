@@ -1,0 +1,7 @@
+contract: agent-execution/v2
+gateway: {min: "2.0.0", max: "2.x"}
+agents:
+  python: {min_sdk: "2.0.0", protocols: [agent-execution/v2, grpc-agent-execution/v2], lifecycle_conformance: required}
+  go: {min_sdk: "2.0.0", protocols: [agent-execution/v2, grpc-agent-execution/v2], lifecycle_conformance: required, example: agents/examples/go-eino}
+  java: {min_sdk: "2.0.0", protocols: [agent-execution/v2, grpc-agent-execution/v2], lifecycle_conformance: required, example: agents/examples/java-spring-ai}
+plugins: {manifest_min: "1", isolation_required_for_third_party: true}

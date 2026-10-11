@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lexagent-production-config
+data:
+  APP_ENV: production
+  AUTO_MIGRATE: "false"
+  DB_DRIVER: pgx
+  PLATFORM_HTTP_ADDR: ":8080"
+  PLATFORM_INTERNAL_ADDR: ":8081"
+  OTEL_EXPORTER_OTLP_ENDPOINT: https://otel-collector.example.com
+  PLATFORM_DEMO_IDENTITY_BOOTSTRAP: "false"
+  PLATFORM_CONTEXT_ISSUER: platform
+  PLATFORM_CONTEXT_AUDIENCE: agent-runtime
+  PLATFORM_POLICY_RESOLVER: sql
+  PLATFORM_MODEL_ENDPOINTS_JSON: '{"service://approved-provider":"https://model-gateway.example.com/v1"}'
+  PLATFORM_MODEL_SECRET_ROOT: /run/secrets/model-providers
+  PLATFORM_RUN_EXECUTOR: platform
+  PLATFORM_METRIC_RUNNER_URL: http://metric-runner:8085
+  PLATFORM_METRIC_RUNNER_TIMEOUT: 20s
+  EVENT_BUS_MODE: disabled
+  PLATFORM_NOTIFICATION_ADAPTER: none
+  FRONTEND_AUTH_MODE: oidc
+  OIDC_PROXY_TRUSTED: "true"
+  OIDC_PROXY_AUTH_URL: http://oauth2-proxy:4180/oauth2/auth
+  OIDC_AUTH_URL: /oauth2/start?rd=/
+  COOKIE_SECURE: "true"

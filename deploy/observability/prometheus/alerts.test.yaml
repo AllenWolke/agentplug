@@ -1,0 +1,131 @@
+rule_files:
+  - alerts.yaml
+  - backup-alerts.yaml
+evaluation_interval: 1m
+tests:
+  - name: backup attempt failure and recovery
+    input_series:
+      - series: 'agentplug_backup_attempt_success{job="agentplug-backup",instance="backup:9100"}'
+        values: '1 0x2 1x2'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: AgentBackupFailed
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: AgentBackupFailed
+        exp_alerts:
+          - exp_labels: {job: agentplug-backup, instance: 'backup:9100', severity: critical}
+            exp_annotations: {summary: PostgreSQL backup attempt or integrity check failed}
+      - eval_time: 4m
+        alertname: AgentBackupFailed
+        exp_alerts: []
+  - name: missing backup monitoring
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AgentBackupMetricsMissing
+        exp_alerts:
+          - exp_labels: {job: agentplug-backup, severity: critical}
+            exp_annotations: {summary: Backup monitoring has no required metrics}
+  - name: backup checker stopped and recovered
+    input_series:
+      - series: 'agentplug_backup_check_timestamp_seconds{job="agentplug-backup",instance="backup:9100"}'
+        values: '0x21 1320'
+    alert_rule_test:
+      - eval_time: 21m
+        alertname: AgentBackupCheckStalled
+        exp_alerts:
+          - exp_labels: {job: agentplug-backup, instance: 'backup:9100', severity: critical}
+            exp_annotations: {summary: Backup integrity and age checker has stopped updating}
+      - eval_time: 22m
+        alertname: AgentBackupCheckStalled
+        exp_alerts: []
+  - name: backup past retention freshness target
+    input_series:
+      - series: 'agentplug_backup_last_success_timestamp_seconds{job="agentplug-backup",instance="backup:9100"}'
+        values: '-86400x6 360'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: AgentBackupStale
+        exp_alerts:
+          - exp_labels: {job: agentplug-backup, instance: 'backup:9100', severity: critical}
+            exp_annotations: {summary: Last verified PostgreSQL backup is older than 24 hours}
+      - eval_time: 7m
+        alertname: AgentBackupStale
+        exp_alerts: []
+  # A failed scrape must fire after the configured two minutes and clear on recovery.
+  - name: platform scrape failure and recovery
+    input_series:
+      - series: 'up{job="agentplug-platform",instance="platform:8081"}'
+        values: '1 0x2 1x2'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: AgentPlatformMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: AgentPlatformMetricsUnavailable
+        exp_alerts:
+          - exp_labels: {job: agentplug-platform, instance: 'platform:8081', severity: critical}
+      - eval_time: 4m
+        alertname: AgentPlatformMetricsUnavailable
+        exp_alerts: []
+
+  # A successful scrape with a failed SQL probe is a distinct incident.
+  - name: database probe failure and recovery
+    input_series:
+      - series: 'up{job="agentplug-platform",instance="platform:8081"}'
+        values: '1x4'
+      - series: 'agent_platform_database_probe_success{job="agentplug-platform",instance="platform:8081"}'
+        values: '1 0x2 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: AgentPlatformDatabaseUnavailable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: AgentPlatformDatabaseUnavailable
+        exp_alerts:
+          - exp_labels: {job: agentplug-platform, instance: 'platform:8081', severity: critical}
+      - eval_time: 4m
+        alertname: AgentPlatformDatabaseUnavailable
+        exp_alerts: []
+
+  # No target series at all must still generate the platform-down alert.
+  - name: missing platform target
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: AgentPlatformMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: AgentPlatformMetricsUnavailable
+        exp_alerts:
+          - exp_labels: {job: agentplug-platform, severity: critical}
+
+  # A healthy scrape must not conceal a missing database probe metric.
+  - name: missing database probe
+    input_series:
+      - series: 'up{job="agentplug-platform",instance="platform:8081"}'
+        values: '1x3'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: AgentPlatformDatabaseUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: AgentPlatformDatabaseUnavailable
+        exp_alerts:
+          - exp_labels: {job: agentplug-platform, severity: critical}
+
+  # Readiness is evaluated independently of scrape and database availability.
+  - name: readiness failure and recovery
+    input_series:
+      - series: 'agent_platform_ready{job="agentplug-platform",instance="platform:8081"}'
+        values: '1 0x2 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: AgentPlatformReadinessFailed
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: AgentPlatformReadinessFailed
+        exp_alerts:
+          - exp_labels: {job: agentplug-platform, instance: 'platform:8081', severity: critical}
+      - eval_time: 4m
+        alertname: AgentPlatformReadinessFailed
+        exp_alerts: []

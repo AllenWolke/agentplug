@@ -1,0 +1,16 @@
+{
+  "adapter_id": "legacy-ask",
+  "kind": "legacy-http",
+  "endpoint": "https://legacy-agent.example.internal",
+  "path": "/api/ask",
+  "events_path": "/api/ask/events",
+  "mapping_ref": "mapping://legacy-ask",
+  "mapping_hash": "sha256:conformance-legacy-ask-v1",
+  "plan_path": "plan.json",
+  "capabilities": ["invoke", "events"],
+  "limits": {
+    "timeout_seconds": 15,
+    "max_response_bytes": 1048576
+  },
+  "revision": 3
+}

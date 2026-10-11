@@ -1,0 +1,121 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+venv/
+.venv/
+
+# Go / build caches
+*.exe
+*.test
+.cache/
+.gocache*/
+.tmp*
+.tmp*/
+tmp/
+.ruff_cache/
+.mypy_cache/
+coverage.out
+*.prof
+
+# Node / frontend
+node_modules/
+dist/
+
+# Local runtime state and secrets
+.local-secrets/
+docs/新增需求/agentplug本地测试账号密码.md
+.env
+.env_*
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+*.db-*
+*.sqlite-*
+*.sqlite3-*
+# Independent credentials and browser captures must remain local even when
+# they are accidentally saved outside .local-secrets/.
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.secret
+*.har
+secrets/
+credentials/
+# Provider API keys materialized on disk for the real-model release validation.
+# 真实模型发布验证落盘的 Provider API Key，禁止提交。
+tmp/release-validation/secrets/
+
+# Generated verification workspaces. Root source directories are authoritative.
+docs/.verify-work/
+docs/.frontend-work/
+docs/_audit-v3/
+
+# Local historical copies kept outside the public project mainline.
+.workbuddy/
+.zread/
+bak/
+docs（第一版）/
+docs（第二版）/
+*.zip
+
+# IDE / OS
+.vscode/
+.idea/
+*.log
+
+# Maven outputs; do not ignore all directories called target because
+# adapters/legacy-http/internal/target contains required Go source.
+sdk/java/**/target/
+templates/java-*/target/
+agents/examples/java-*/target/
+examples/java-tickets/target/
+
+# Generated agentctl workspaces and raw profiling captures.
+cli/agentctl/out/
+artifacts/pprof/
+.local-build/
+
+# Local assistant/editor account and command permissions are not publication content.
+.claude/
+.trae/
+.codex/
+.cursor/
+.windsurf/
+.gemini/
+.tools/
+
+# Personal career/study materials are kept locally, outside the source release.
+docs/八股文背诵/
+docs/面试题/
+docs/面试冲刺/
+面试冲刺手册/
+docs/1、4小时速通Agent面试.docx
+
+# Local requirements, migration evidence and delivery progress remain available
+# at the user-requested paths, but contain retired business history.
+docs/新增需求/
+
+# Native database exports contain business data and must remain private.
+*.pgdump
+*.dump
+*.backup
+*.sql.gz
+backups/
+# Default evaluation outputs contain protected evidence and frozen state.
+agent-eval-results/
+**/*.trials.private.json
+
+# 固定模型权重只挂载到独立Provider，不进入源码或镜像上下文。
+.local-models
+
+# Desktop metadata can contain local usernames and document paths.
+.DS_Store
+Thumbs.db
+desktop.ini

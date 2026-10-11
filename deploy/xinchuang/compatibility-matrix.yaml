@@ -1,0 +1,23 @@
+apiVersion: lexagent.io/v1alpha1
+kind: CompatibilityMatrix
+metadata: {name: lexagent-private-delivery}
+spec:
+  cpuArchitectures:
+    builtAndTestedInCI: [amd64, arm64]
+  operatingSystems:
+    candidates: [openEuler-22.03-LTS-SP3, Kylin-V10-SP3, UOS-20]
+    status: requires-target-environment-certification
+  databases:
+    postgres: {protocol: native, status: native-public-platform-migration-in-progress}
+    kingbase: {protocol: postgresql-compatible, status: requires-version-certification}
+    dameng: {status: not-implemented}
+  middleware:
+    kafka: {status: supported-external-cluster}
+    redis: {status: not-required-by-current-core}
+  acceptanceRequired:
+    - database migration and rollback
+    - Chinese collation, timezone and timestamp precision
+    - failover and connection recovery
+    - arm64 image smoke and performance baseline
+    - offline install, upgrade and rollback
+

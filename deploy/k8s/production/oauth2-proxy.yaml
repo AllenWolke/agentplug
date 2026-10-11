@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+  labels: {app: oauth2-proxy}
+spec:
+  selector: {app: oauth2-proxy}
+  ports: [{name: http, port: 4180, targetPort: http}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  labels: {app: oauth2-proxy}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: oauth2-proxy}}
+  template:
+    metadata: {labels: {app: oauth2-proxy}}
+    spec:
+      serviceAccountName: lexagent-runtime
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: oauth2-proxy
+          # Approved release overlay must provide the mirrored, signed digest.
+          image: registry.example.com/lexagent/oauth2-proxy@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          args:
+            - --provider=oidc
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true
+            - --set-xauthrequest=true
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-refresh=1h
+            - --cookie-expire=8h
+            - --code-challenge-method=S256
+            - --upstream=static://202
+          env:
+            - {name: OAUTH2_PROXY_CLIENT_ID, valueFrom: {secretKeyRef: {name: lexagent-oidc-secret, key: client_id}}}
+            - {name: OAUTH2_PROXY_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: lexagent-oidc-secret, key: client_secret}}}
+            - {name: OAUTH2_PROXY_COOKIE_SECRET, valueFrom: {secretKeyRef: {name: lexagent-oidc-secret, key: cookie_secret}}}
+            - {name: OAUTH2_PROXY_OIDC_ISSUER_URL, valueFrom: {secretKeyRef: {name: lexagent-oidc-secret, key: issuer_url}}}
+            - {name: OAUTH2_PROXY_REDIRECT_URL, valueFrom: {secretKeyRef: {name: lexagent-oidc-secret, key: redirect_url}}}
+            - {name: OAUTH2_PROXY_EMAIL_DOMAINS, value: "*"}
+            - {name: OAUTH2_PROXY_SKIP_PROVIDER_BUTTON, value: "true"}
+          ports: [{name: http, containerPort: 4180}]
+          readinessProbe: {httpGet: {path: /ping, port: http}, periodSeconds: 5, timeoutSeconds: 2}
+          livenessProbe: {httpGet: {path: /ping, port: http}, initialDelaySeconds: 10, periodSeconds: 10}
+          resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 500m, memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}

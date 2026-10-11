@@ -1,0 +1,9 @@
+{
+  "inventory_version": "agent-inventory/v1",
+  "source": "PythonDocumentSDKExample",
+  "path": "examples/python-documents",
+  "status": "onboarded",
+  "expected_language": "python",
+  "expected_framework": "fastapi",
+  "expected_transport": "legacy-http"
+}

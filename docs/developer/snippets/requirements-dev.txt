@@ -1,0 +1,4 @@
+# Test-only packages for the vendored SDK suites; not production dependencies.
+pytest>=8,<10
+pytest-asyncio>=0.24,<2
+fastapi>=0.115,<1

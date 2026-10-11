@@ -1,0 +1,85 @@
+# Overlay: docker compose -f compose.yaml -f deploy/compose/compose.examples.yaml --profile full up
+# Explicit example credentials are provisioned through Identity before use.
+# Bind each client ID to its matching installation and approve only the scoped history.read seed before starting checkpoint-reading flows.
+services:
+  example-python:
+    image: agentplug:example-python
+    profiles: ["modular", "full"]
+    build:
+      context: .
+      dockerfile: examples/python-documents/Dockerfile
+    environment:
+      PORT: "8080"
+      APP_ENV: production
+      AGENT_PLATFORM_AUDIENCE: ${PLATFORM_CONTEXT_AUDIENCE:-agent-runtime}
+      AGENT_PLATFORM_ISSUER: platform
+      AGENT_PLATFORM_PUBLIC_KEY_BASE64: ${PLATFORM_CONTEXT_PUBLIC_KEY:?set PLATFORM_CONTEXT_PUBLIC_KEY}
+      PLATFORM_CAPABILITY_URL: http://platform-app:8081
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set INTERNAL_TOKEN}
+      INTERNAL_SIGNING_SECRET: ${INTERNAL_SIGNING_SECRET:?set INTERNAL_SIGNING_SECRET}
+      AGENT_CLIENT_ID: ${EXAMPLE_PYTHON_CLIENT_ID:?provision EXAMPLE_PYTHON_CLIENT_ID}
+      AGENT_CLIENT_SECRET: ${EXAMPLE_PYTHON_CLIENT_SECRET:?provision EXAMPLE_PYTHON_CLIENT_SECRET}
+    depends_on:
+      platform-app:
+        condition: service_healthy
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    expose: ["8080"]
+    restart: unless-stopped
+  example-go:
+    image: agentplug:example-go
+    profiles: ["modular", "full"]
+    build:
+      context: .
+      dockerfile: examples/go-operations/Dockerfile
+    environment:
+      PORT: "8080"
+      AGENT_PLATFORM_AGENT_ID: example-go-operations
+      AGENT_PLATFORM_AUDIENCE: ${PLATFORM_CONTEXT_AUDIENCE:-agent-runtime}
+      AGENT_PLATFORM_ISSUER: platform
+      AGENT_PLATFORM_PUBLIC_KEY_BASE64: ${PLATFORM_CONTEXT_PUBLIC_KEY:?set PLATFORM_CONTEXT_PUBLIC_KEY}
+      PLATFORM_CAPABILITY_URL: http://platform-app:8081
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set INTERNAL_TOKEN}
+      INTERNAL_SIGNING_SECRET: ${INTERNAL_SIGNING_SECRET:?set INTERNAL_SIGNING_SECRET}
+      AGENT_CLIENT_ID: ${EXAMPLE_GO_CLIENT_ID:?provision EXAMPLE_GO_CLIENT_ID}
+      AGENT_CLIENT_SECRET: ${EXAMPLE_GO_CLIENT_SECRET:?provision EXAMPLE_GO_CLIENT_SECRET}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      platform-app:
+        condition: service_healthy
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    expose: ["8080"]
+    restart: unless-stopped
+  example-java:
+    image: agentplug:example-java
+    profiles: ["modular", "full"]
+    build:
+      context: .
+      dockerfile: examples/java-tickets/Dockerfile
+    environment:
+      PORT: "8080"
+      AGENT_PLATFORM_AUDIENCE: ${PLATFORM_CONTEXT_AUDIENCE:-agent-runtime}
+      AGENT_PLATFORM_ISSUER: platform
+      AGENT_PLATFORM_PUBLIC_KEY_BASE64: ${PLATFORM_CONTEXT_PUBLIC_KEY:?set PLATFORM_CONTEXT_PUBLIC_KEY}
+      PLATFORM_CAPABILITY_URL: http://platform-app:8081
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set INTERNAL_TOKEN}
+      INTERNAL_SIGNING_SECRET: ${INTERNAL_SIGNING_SECRET:?set INTERNAL_SIGNING_SECRET}
+      AGENT_CLIENT_ID: ${EXAMPLE_JAVA_CLIENT_ID:?provision EXAMPLE_JAVA_CLIENT_ID}
+      AGENT_CLIENT_SECRET: ${EXAMPLE_JAVA_CLIENT_SECRET:?provision EXAMPLE_JAVA_CLIENT_SECRET}
+    depends_on:
+      platform-app:
+        condition: service_healthy
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    expose: ["8080"]
+    restart: unless-stopped

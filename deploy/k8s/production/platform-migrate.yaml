@@ -1,0 +1,30 @@
+# Deployment-owned migration, separate from the DML-only runtime account.
+# 部署迁移使用独立凭据；运行进程仅检查版本，绝不自动建表。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: platform-schema-migrate
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels: {app: platform-schema-migrate}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: lexagent-runtime
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: migrate
+          # Must match the exact platform-app image digest in the approved overlay.
+          # 必须与发布overlay中的platform-app镜像digest完全相同。
+          image: registry.example.com/agentplug:platform@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          command: ["/app/migrate"]
+          env:
+            - name: APP_ENV
+              valueFrom: {configMapKeyRef: {name: lexagent-production-config, key: APP_ENV}}
+            - {name: DB_DRIVER, value: pgx}
+            - name: DB_DSN
+              valueFrom: {secretKeyRef: {name: lexagent-platform-migration-secret, key: DB_DSN}}
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "1", memory: 512Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}

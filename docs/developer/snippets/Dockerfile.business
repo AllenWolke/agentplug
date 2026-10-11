@@ -1,0 +1,11 @@
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN addgroup --system agent && adduser --system --ingroup agent agent
+USER agent
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app/platform_entry PORT=8080
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=3s --retries=12 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready')"
+CMD ["python", "-m", "domain.server"]

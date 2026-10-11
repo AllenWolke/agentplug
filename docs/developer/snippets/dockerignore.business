@@ -1,0 +1,16 @@
+# Keep credentials, development state and private verification outputs out of images.
+.git
+.env
+.env.*
+.local-secrets
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+platform-public-key.txt
+*.key
+*.pem
+*.p12
+*.pfx
+*.pgdump

@@ -1,0 +1,135 @@
+{
+  "_comment": "Gateway signs every request separately because body_hash and allowed action are operation-specific. 网关必须对每个操作单独签名。",
+  "invoke": {
+    "protocol_version": "agent-execution/v2",
+    "context_token": "REPLACE_WITH_GATEWAY_SIGNED_TOKEN",
+    "scope": {
+      "tenant_id": "tenant-a",
+      "department_id": "business-department",
+      "application_id": "business-app",
+      "agent_instance_id": "example-installation",
+      "agent_id": "example-agent",
+      "agent_version_id": "v2",
+      "principal_type": "user",
+      "principal_id": "user-a",
+      "session_id": "session-a",
+      "run_id": "conformance-run",
+      "authorization_epoch": 1,
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "installation_id": "example-installation"
+    },
+    "operation": "invoke",
+    "idempotency_key": "conformance-invoke",
+    "input_schema": "schema://example/input/v1",
+    "input": {
+      "policy_snapshot": {
+        "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  },
+  "run": {
+    "protocol_version": "agent-execution/v2",
+    "context_token": "REPLACE_WITH_GATEWAY_SIGNED_TOKEN",
+    "scope": {
+      "tenant_id": "tenant-a",
+      "department_id": "business-department",
+      "application_id": "business-app",
+      "agent_instance_id": "example-installation",
+      "agent_id": "example-agent",
+      "agent_version_id": "v2",
+      "principal_type": "user",
+      "principal_id": "user-a",
+      "session_id": "session-a",
+      "run_id": "conformance-run",
+      "authorization_epoch": 1,
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "installation_id": "example-installation"
+    },
+    "operation": "run",
+    "idempotency_key": "conformance-run",
+    "input_schema": "schema://example/input/v1",
+    "input": {
+      "policy_snapshot": {
+        "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  },
+  "resume": {
+    "protocol_version": "agent-execution/v2",
+    "context_token": "REPLACE_WITH_GATEWAY_SIGNED_TOKEN",
+    "scope": {
+      "tenant_id": "tenant-a",
+      "department_id": "business-department",
+      "application_id": "business-app",
+      "agent_instance_id": "example-installation",
+      "agent_id": "example-agent",
+      "agent_version_id": "v2",
+      "principal_type": "user",
+      "principal_id": "user-a",
+      "session_id": "session-a",
+      "run_id": "conformance-run",
+      "authorization_epoch": 1,
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "installation_id": "example-installation"
+    },
+    "operation": "resume",
+    "idempotency_key": "conformance-resume",
+    "input_schema": "schema://example/input/v1",
+    "input": {
+      "policy_snapshot": {
+        "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "resume_input": {
+      "decision": "approve"
+    }
+  },
+  "cancel": {
+    "protocol_version": "agent-execution/v2",
+    "context_token": "REPLACE_WITH_GATEWAY_SIGNED_TOKEN",
+    "scope": {
+      "tenant_id": "tenant-a",
+      "department_id": "business-department",
+      "application_id": "business-app",
+      "agent_instance_id": "example-installation",
+      "agent_id": "example-agent",
+      "agent_version_id": "v2",
+      "principal_type": "user",
+      "principal_id": "user-a",
+      "session_id": "session-a",
+      "run_id": "conformance-run",
+      "authorization_epoch": 1,
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "installation_id": "example-installation"
+    },
+    "operation": "cancel",
+    "idempotency_key": "conformance-cancel",
+    "input_schema": "schema://example/input/v1",
+    "input": {
+      "policy_snapshot": {
+        "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  },
+  "events": {
+    "protocol_version": "agent-execution/v2",
+    "context_token": "REPLACE_WITH_GATEWAY_SIGNED_TOKEN",
+    "scope": {
+      "tenant_id": "tenant-a",
+      "department_id": "business-department",
+      "application_id": "business-app",
+      "agent_instance_id": "example-installation",
+      "agent_id": "example-agent",
+      "agent_version_id": "v2",
+      "principal_type": "user",
+      "principal_id": "user-a",
+      "session_id": "session-a",
+      "run_id": "conformance-run",
+      "authorization_epoch": 1,
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "installation_id": "example-installation"
+    },
+    "after_seq": 0,
+    "policy_snapshot_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

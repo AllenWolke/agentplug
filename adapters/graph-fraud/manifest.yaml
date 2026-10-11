@@ -1,0 +1,10 @@
+manifest_version: "agent-adapter/v1"
+agent_id: graph-fraud-assistant
+version: 1.0.0
+protocol_version: agent-execution/v2
+capabilities: [invoke]
+adapter:
+  kind: legacy-http
+  isolation_level: container
+  mapping_ref: graph-fraud-v1
+  source_code_change_required: false

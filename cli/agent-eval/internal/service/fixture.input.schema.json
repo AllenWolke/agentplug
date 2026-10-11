@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://agent-eval-simulation/input/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "scenario": {
+      "enum": [
+        "normal",
+        "multistep",
+        "tool_failure",
+        "permission_boundary",
+        "injection",
+        "long_context",
+        "checkpoint",
+        "unknown_side_effect",
+        "ambiguous",
+        "low_confidence_route",
+        "timeout"
+      ]
+    },
+    "untrusted_content": {
+      "type": "string",
+      "maxLength": 49152
+    },
+    "policy_snapshot": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "scenario"
+  ]
+}

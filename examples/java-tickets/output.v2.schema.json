@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://example-java-tickets/output/v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "ticket_id",
+    "draft",
+    "knowledge",
+    "context_checks",
+    "usage",
+    "notify_me",
+    "sandbox_check",
+    "collaborate",
+    "document_support"
+  ],
+  "properties": {
+    "schema": {
+      "const": "schema://example-java-tickets/output/v2"
+    },
+    "ticket_id": {
+      "type": "string"
+    },
+    "draft": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32768
+    },
+    "knowledge": {
+      "type": "object"
+    },
+    "context_checks": {
+      "type": "object"
+    },
+    "usage": {
+      "type": ["object", "null"]
+    },
+    "notify_me": {
+      "type": "boolean",
+      "description": "Echo of the caller's notification request; it does not report sending or delivery."
+    },
+    "sandbox_check": {
+      "type": "boolean",
+      "description": "Echo of the caller's sandbox analysis request; it does not report code execution or approval."
+    },
+    "collaborate": {
+      "type": "boolean",
+      "description": "Echo of the caller's fixed document-support collaboration request; it does not grant cross-Agent authority."
+    },
+    "document_support": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["agent_id", "task_type", "answer", "citation_ids"],
+      "properties": {
+        "agent_id": {"const": "example-python-documents"},
+        "task_type": {"const": "documents.answer"},
+        "answer": {"type": "string", "minLength": 1, "maxLength": 8192},
+        "citation_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 1024}
+        }
+      }
+    }
+  }
+}

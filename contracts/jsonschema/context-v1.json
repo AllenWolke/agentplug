@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://agent-platform/context/v1",
+  "title": "Trusted execution context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tenant_id", "department_id", "application_id", "agent_instance_id", "installation_id",
+    "agent_id", "agent_version_id", "principal_type", "principal_id",
+    "session_id", "run_id", "authorization_epoch", "trace_id"
+  ],
+  "properties": {
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "department_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "application_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "agent_instance_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "agent_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "installation_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "agent_version_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "principal_type": {"enum": ["user", "service_principal"]},
+    "principal_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "session_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "run_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "authorization_epoch": {"type": "integer", "minimum": 1},
+    "trace_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "parent_run_id": {"type": "string", "maxLength": 128},
+    "delegation_depth": {"type": "integer", "minimum": 0, "maximum": 8}
+  }
+}

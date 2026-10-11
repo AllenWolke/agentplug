@@ -1,0 +1,14 @@
+[
+  {
+    "id": "replace-approved-profile",
+    "purpose": "evaluation_test",
+    "scope": {"tenant_id": "replace-test-tenant", "department_id": "replace-test-department", "application_id": "replace-test-application"},
+    "agent_id": "agent-eval-simulation",
+    "agent_version_id": "replace-published-version-id",
+    "installation_id": "replace-test-installation",
+    "installation_revision": 1,
+    "policy_hash": "replace-with-exact-64-character-policy-digest",
+    "bindings_file_hash": "replace-with-sha256-of-exact-api-bindings-file-bytes",
+    "tool_names": ["api.eval_fixture"]
+  }
+]

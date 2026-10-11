@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/model-governance/v1/price.schema.json",
+  "title": "Model Price Version",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["provider_id", "model_version_id", "currency", "input_micros_per_1k", "output_micros_per_1k", "effective_at"],
+  "properties": {
+    "provider_id": {"type": "string", "minLength": 1},
+    "model_version_id": {"type": "string", "minLength": 1},
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "input_micros_per_1k": {"type": "integer", "minimum": 0},
+    "output_micros_per_1k": {"type": "integer", "minimum": 0},
+    "effective_at": {"type": "string", "format": "date-time"}
+  }
+}

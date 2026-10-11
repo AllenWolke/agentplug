@@ -1,0 +1,23 @@
+{
+  "contract": "g1-17-actual-sdk-notification-owner-redrive/v1",
+  "at": "2026-10-10T01:05:13.103603+08:00",
+  "run_id": "g1-17-source-notification-redrive-v1-20261010",
+  "actual_go_sdk": true,
+  "run_status": "succeeded",
+  "public_step_up_approval": true,
+  "outsider_approval_status": 403,
+  "original_event_topic": "platform.notification",
+  "quarantine_attempts": 5,
+  "owner_redrive_current_iam": true,
+  "outsider_redrive_status": 403,
+  "redrive_idempotent": true,
+  "redrive_actions": 1,
+  "original_message_id_preserved": true,
+  "durable_inbox_delivered": true,
+  "own_inbox_visible": true,
+  "foreign_inbox_absent": true,
+  "forward_agent_tool_replayed": false,
+  "source_formal_actual": true,
+  "target_formal_changed": false,
+  "overall_g1_17_accepted": false
+}

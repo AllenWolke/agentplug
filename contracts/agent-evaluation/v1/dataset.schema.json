@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/agent-evaluation/v1/dataset.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["dataset_id", "version", "samples"],
+  "properties": {"dataset_id": {"type": "string"}, "version": {"type": "string"}, "samples": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/sample"}}},
+  "$defs": {"sample": {"type": "object", "additionalProperties": false, "required": ["case_id", "input", "split", "source_type"], "properties": {"case_id": {"type": "string", "maxLength": 128}, "input": {}, "expected": {}, "split": {"type": "string", "enum": ["train", "dev", "test"]}, "weight": {"type": "number", "minimum": 0}, "source_type": {"type": "string", "enum": ["synthetic_generated", "manual_gold", "desensitized_real_reviewed"]}, "review_status": {"type": "string", "enum": ["pending", "approved", "rejected"]}}}}
+}

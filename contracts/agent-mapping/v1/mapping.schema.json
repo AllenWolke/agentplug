@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/agent-mapping/v1/mapping.schema.json",
+  "title": "Declarative adapter mapping",
+  "type": "object",
+  "additionalProperties": false,
+  "anyOf": [
+    {"required": ["mapping_id", "version", "kind", "request", "response"], "not": {"required": ["metadata", "spec"]}},
+    {"required": ["api_version", "metadata", "spec"]}
+  ],
+  "properties": {
+    "api_version": {"const": "agent-mapping/v1"},
+    "mapping_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "kind": {"type": "string", "enum": ["legacy-http", "grpc", "process", "sidecar"]},
+    "request": {"$ref": "#/$defs/object"},
+    "response": {"$ref": "#/$defs/object"},
+    "metadata": {"type":"object", "additionalProperties":false, "required":["mapping_id","version"], "properties":{"mapping_id":{"type":"string","pattern":"^[a-z][a-z0-9-]{1,63}$"},"version":{"type":"string","pattern":"^[0-9]+\\.[0-9]+\\.[0-9]+$"}}},
+    "spec": {"$ref":"#/$defs/spec"}
+  },
+  "$defs": {
+    "object": {"type": "object", "additionalProperties": {"$ref": "#/$defs/expression"}, "maxProperties": 128},
+    "expression": {"oneOf": [{"type": "string", "pattern": "^(input|context|body)(\\.[A-Za-z_][A-Za-z0-9_]*)*$"}, {"type": "object", "additionalProperties": false, "required": ["const"], "properties": {"const": {}}}]},
+    "canonical_expression": {"oneOf": [{"type":"object","additionalProperties":false,"required":["from_input"],"properties":{"from_input":{"type":"string","minLength":1},"required":{"type":"boolean"},"max_length":{"type":"integer","minimum":1,"maximum":1048576},"default":{}}},{"type":"object","additionalProperties":false,"required":["from_context"],"properties":{"from_context":{"type":"string","minLength":1},"required":{"type":"boolean"},"max_length":{"type":"integer","minimum":1,"maximum":1048576},"default":{}}},{"type":"object","additionalProperties":false,"required":["from_body"],"properties":{"from_body":{"type":"string","minLength":1},"required":{"type":"boolean"},"max_length":{"type":"integer","minimum":1,"maximum":1048576},"default":{}}},{"type":"object","additionalProperties":false,"required":["const"],"properties":{"const":{}}}]},
+    "spec": {"type":"object","additionalProperties":false,"required":["upstream_ref","operations"],"properties":{"upstream_ref":{"type":"string","pattern":"^endpoint://[A-Za-z0-9._-]{1,128}$"},"operations":{"type":"object","additionalProperties":{"$ref":"#/$defs/operation"},"maxProperties":16}}},
+    "operation": {"type":"object","additionalProperties":false,"required":["request","response"],"properties":{"request":{"type":"object","additionalProperties":false,"required":["method","path","body"],"properties":{"method":{"enum":["GET","POST","PUT","PATCH"]},"path":{"type":"string","pattern":"^/[A-Za-z0-9._~/ -]*$"},"headers":{"$ref":"#/$defs/canonical_object"},"query":{"$ref":"#/$defs/canonical_object"},"body":{"type":"object","additionalProperties":false,"required":["object"],"properties":{"object":{"$ref":"#/$defs/canonical_object"}}}}},"response":{"type":"object","additionalProperties":false,"required":["success_status","output"],"properties":{"success_status":{"type":"array","items":{"type":"integer","minimum":100,"maximum":599},"minItems":1,"maxItems":8},"output":{"$ref":"#/$defs/canonical_expression"}}}}},
+    "canonical_object": {"type":"object","additionalProperties":{"$ref":"#/$defs/canonical_expression"},"maxProperties":128}
+  }
+}

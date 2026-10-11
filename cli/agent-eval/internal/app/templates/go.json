@@ -1,0 +1,4 @@
+[
+  {"case_id":"go-normal-diagnosis","input":{"service":"checkout","symptom":"发布后错误率明显升高，请列出定位步骤和回滚判断依据。","notify_me":false,"sandbox_check":false,"collaborate":false},"expected":{"assertions":[{"path":"schema","op":"equals","value":"schema://example-go-operations/output/v2"},{"path":"service","op":"equals","value":"checkout"},{"path":"answer","op":"contains","value":"回滚"}],"tools":{"allowed":["runtime.inspect"],"required":["runtime.inspect"],"maximum_calls":{"runtime.inspect":2}}}},
+  {"case_id":"go-ambiguous-request","input":{"service":"checkout","symptom":"服务好像有问题，但尚无错误率、时间范围和发布信息。请说明还需要哪些证据，避免直接做写操作。","notify_me":false,"sandbox_check":false,"collaborate":false},"expected":{"assertions":[{"path":"service","op":"equals","value":"checkout"},{"path":"notify_me","op":"equals","value":false}],"tools":{"forbidden":["notify.self","code.python"],"required":["runtime.inspect"]}}}
+]

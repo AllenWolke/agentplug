@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://agent-platform/event/v1",
+  "title": "Agent execution event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "seq", "event_type", "occurred_at", "payload"],
+  "properties": {
+    "run_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "seq": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "event_type": {
+      "enum": ["accepted", "started", "progress", "waiting", "artifact", "completed", "failed", "cancelled"]
+    },
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "payload": {"type": "object"}
+  }
+}

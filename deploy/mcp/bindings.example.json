@@ -1,0 +1,18 @@
+[
+  {
+    "tool_name": "mcp.documents.search",
+    "remote_name": "search_documents",
+	"risk": "read_only",
+	"timeout_seconds": 3,
+    "endpoint": "https://mcp.example.com/mcp",
+    "secret_ref": "secret://mcp/documents.key",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      },
+      "required": ["query"],
+      "additionalProperties": false
+    }
+  }
+]

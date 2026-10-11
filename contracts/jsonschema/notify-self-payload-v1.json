@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://agent-platform/tool/notify-self/payload/v1",
+  "title": "Self notification tool payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "text"],
+  "properties": {
+    "title": {"type": "string", "minLength": 1, "maxLength": 256},
+    "text": {"type": "string", "minLength": 1, "maxLength": 4096}
+  }
+}

@@ -1,0 +1,120 @@
+syntax = "proto3";
+
+package lexagent.execution.v2;
+
+option go_package = "github.com/lexagent/contracts/gen/go/execution/v2;executionv2";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+message ScopeKey {
+  string tenant_id = 1;
+  string department_id = 2;
+  string application_id = 3;
+  string agent_instance_id = 4;
+  string agent_id = 5;
+  string agent_version_id = 6;
+  string principal_type = 7;
+  string principal_id = 8;
+  string session_id = 9;
+  string run_id = 10;
+  uint64 authorization_epoch = 11;
+  string trace_id = 12;
+  string parent_run_id = 13;
+  uint32 delegation_depth = 14;
+  string installation_id = 15;
+}
+
+// ExecuteRequest carries a signed context token; an Agent must not trust a
+// client-constructed scope. / ExecuteRequest 携带签名上下文；Agent 不得信任客户端自造作用域。
+message ExecuteRequest {
+  string protocol_version = 1;
+  string context_token = 2;
+  ScopeKey scope = 3;
+  string operation = 4;
+  string idempotency_key = 5;
+  string input_schema = 6;
+  google.protobuf.Struct input = 7;
+  // Signed resume command body / 恢复决策属于签名正文。
+  google.protobuf.Struct resume_input = 8;
+}
+
+message AppError {
+  string code = 1;
+  string message = 2;
+  bool retryable = 3;
+  google.protobuf.Struct details = 4;
+}
+
+message HandlerHandoff {
+  string version = 1;
+  string run_id = 2;
+  uint64 execution_revision = 3;
+  string body_hash = 4;
+  string lease_token_hash = 5;
+  string input_fingerprint = 6;
+  string origin_operation = 7;
+  string harness_key = 8;
+  string tool_name = 9;
+  string call_id = 10;
+  uint64 last_event_seq = 11;
+}
+
+message RecoveryCheckpointReference {
+  string state_key = 1;
+  uint64 revision = 2;
+  string schema_id = 3;
+  string content_hash = 4;
+  uint64 execution_revision = 5;
+  string expires_at = 6;
+}
+
+message AgentGroupHandoff {
+  string version = 1;
+  string run_id = 2;
+  uint64 execution_revision = 3;
+  string body_hash = 4;
+  string lease_token_hash = 5;
+  string input_fingerprint = 6;
+  string origin_operation = 7;
+  string group_key = 8;
+  string operation_key = 9;
+  uint64 last_event_seq = 10;
+  RecoveryCheckpointReference checkpoint = 11;
+  repeated string child_keys = 12;
+}
+
+message ExecuteResponse {
+  string protocol_version = 1;
+  string run_id = 2;
+  string status = 3;
+  string output_schema = 4;
+  google.protobuf.Struct output = 5;
+  AppError error = 6;
+  HandlerHandoff handoff = 7;
+  AgentGroupHandoff agent_group_handoff = 8;
+}
+
+message EventRequest {
+  string protocol_version = 1;
+  string context_token = 2;
+  ScopeKey scope = 3;
+  uint64 after_seq = 4;
+  string policy_snapshot_hash = 5;
+}
+
+message ExecutionEvent {
+  string run_id = 1;
+  uint64 seq = 2;
+  string event_type = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+  google.protobuf.Struct payload = 5;
+}
+
+service AgentExecutionService {
+  rpc Invoke(ExecuteRequest) returns (ExecuteResponse);
+  rpc Run(ExecuteRequest) returns (ExecuteResponse);
+  rpc Resume(ExecuteRequest) returns (ExecuteResponse);
+  rpc Cancel(ExecuteRequest) returns (ExecuteResponse);
+  rpc Events(EventRequest) returns (stream ExecutionEvent);
+}

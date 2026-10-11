@@ -1,0 +1,8 @@
+groups:
+  - name: agent-platform
+    rules:
+      - alert: AgentGatewayErrorBudget
+        expr: sum(rate(agent_gateway_requests_total{status_class="5xx"}[5m])) / clamp_min(sum(rate(agent_gateway_requests_total[5m])), 0.001) > 0.01
+        for: 10m
+        labels: {severity: critical}
+        annotations: {summary: "Agent Gateway error budget is burning"}

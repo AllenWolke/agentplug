@@ -1,0 +1,10 @@
+# The generated Agent vendors the platform SDK under platform_entry/agent_platform_sdk,
+# so the strict wire models (pydantic) and the Ed25519 PEP (cryptography) are
+# explicit, pinned runtime dependencies of every generated project.
+# 生成 Agent 在 platform_entry/agent_platform_sdk 内 vendored 平台 SDK，因此严格
+# 传输模型（pydantic）与 Ed25519 PEP（cryptography）是每个生成项目显式锁定的依赖。
+pydantic>=2.9,<3
+cryptography>=43,<46
+# Shared Model/Knowledge/Memory/Tool gateway and legacy gRPC bridge transport.
+# 平台能力网关与兼容 gRPC 桥使用的统一 HTTP 传输依赖。
+httpx>=0.27,<1

@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lexagent-resilience
+  # Future multi-instance frontend scheduling experiment only; not the supported
+  # single-instance product topology or a business-path acceptance fixture.
+  # 仅用于未来多实例前端调度实验；不是当前受支持的单实例产品拓扑或业务验收夹具。
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend
+  namespace: lexagent-resilience
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: frontend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: lexagent-resilience
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          # kind 的 control-plane 默认不可调度；ScheduleAnyway 仍优先跨两个
+          # worker 均匀放置，但不会把第三个副本永久卡在不可调度状态。
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: frontend
+      containers:
+        - name: frontend
+          image: lexagent-release-verify-frontend:latest
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            # This experiment checks only process health/failover. Keep identity
+            # fail-closed and never bake demo credentials into a workload.
+            # 本实验只测进程健康与故障迁移；身份认证保持 fail-closed，不烘焙演示凭证。
+            - {name: FRONTEND_AUTH_MODE, value: oidc}
+            - {name: OIDC_PROXY_TRUSTED, value: "false"}
+            - {name: PLATFORM_URL, value: "http://platform-app:8080"}
+            - {name: RELEASE_MARKER, value: v1}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 1
+            periodSeconds: 2
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 2
+            periodSeconds: 3
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+            limits: {cpu: 250m, memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: lexagent-resilience
+spec:
+  selector: {app: frontend}
+  ports:
+    - {name: http, port: 80, targetPort: http}

@@ -1,0 +1,71 @@
+[
+  {
+    "metric_id": "documents.recall",
+    "version": "1.0.0",
+    "name": "Recall at 3",
+    "kind": "recall_at_k",
+    "formula": {
+      "input_relevant_field": "expected.relevant_ids",
+      "output_ranked_field": "retrieved_ids",
+      "k": 3
+    }
+  },
+  {
+    "metric_id": "documents.precision",
+    "version": "1.0.0",
+    "name": "Precision at 3",
+    "kind": "precision_at_k",
+    "formula": {
+      "input_relevant_field": "expected.relevant_ids",
+      "output_ranked_field": "retrieved_ids",
+      "k": 3
+    }
+  },
+  {
+    "metric_id": "documents.mrr",
+    "version": "1.0.0",
+    "name": "Reciprocal rank",
+    "kind": "mrr",
+    "formula": {
+      "input_relevant_field": "expected.relevant_ids",
+      "output_ranked_field": "retrieved_ids",
+      "k": 3
+    }
+  },
+  {
+    "metric_id": "documents.ndcg",
+    "version": "1.0.0",
+    "name": "NDCG at 3",
+    "kind": "ndcg",
+    "formula": {
+      "input_relevant_field": "expected.relevant_ids",
+      "output_ranked_field": "retrieved_ids",
+      "k": 3
+    }
+  },
+  {
+    "metric_id": "documents.citation",
+    "version": "1.0.0",
+    "name": "Citation accuracy",
+    "kind": "citation_accuracy",
+    "formula": {
+      "input_expected_field": "expected.citation_ids",
+      "output_actual_field": "citation_ids"
+    }
+  },
+  {
+    "metric_id": "documents.grounding",
+    "version": "1.1.0",
+    "name": "Frozen-reference lexical grounding with complete-sentence support",
+    "kind": "grounding",
+    "formula": {
+      "input_citations_field": "expected.citations",
+      "output_claims_field": "evaluation_claims",
+      "gate": {
+        "min_entailment": 1,
+        "require_all_claims": true,
+        "fail_on_unknown": true
+      }
+    }
+  }
+]

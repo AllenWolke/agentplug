@@ -1,0 +1,33 @@
+{
+  "at": "2026-10-10T00:27:30.727536+08:00",
+  "actual_source_go_sdk": true,
+  "actual_kafka": true,
+  "actual_public_approval": true,
+  "run_id": "g1-16-source-delivered-notice-cancel-v2-20261010",
+  "run_status": "cancelled",
+  "cancellation_verified": true,
+  "progress": {
+    "version": "cancellation-compensation/v1",
+    "cancellation_id": "a293766b6b938246e84501868b05ca1c5d20c4560bd89b81e898bd7f2f6f0b5c",
+    "phase": "complete",
+    "stop_confirmed": true,
+    "total": 1,
+    "compensated": 1,
+    "no_effect": 0,
+    "unresolved": 0,
+    "needs_attention": 0
+  },
+  "delivered_before_cancel": 1,
+  "all_notices_withdrawn": true,
+  "forward_closed": true,
+  "absent_from_user_inbox": true,
+  "outsider_cancel_http": 403,
+  "old_cancelling_preserved": 30,
+  "old_runs_replayed": false,
+  "overall_g1_16_accepted": false,
+  "frozen_test_prompt_used": true,
+  "temporary_prompt_policy_published": true,
+  "original_asset_refs_restored": true,
+  "resource_grants_changed": false,
+  "model_tool_budget_policies_changed": false
+}

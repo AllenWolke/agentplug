@@ -1,0 +1,24 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata: {name: lexagent-require-image-digest}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [apps]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [deployments, statefulsets, daemonsets]
+  validations:
+    - expression: "object.spec.template.spec.containers.all(c, c.image.contains('@sha256:'))"
+      message: LexAgent production workloads must use immutable sha256 image digests.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata: {name: lexagent-require-image-digest}
+spec:
+  policyName: lexagent-require-image-digest
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: lexagent}}
+

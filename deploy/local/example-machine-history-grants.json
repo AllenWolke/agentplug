@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "scope": {
+    "tenant_id": "tenant-demo",
+    "department_id": "dept-demo",
+    "application_id": "app-demo"
+  },
+  "grants": [
+    {
+      "id": "example-go-machine-history-read-v1",
+      "subject_type": "service_principal",
+      "subject_id": "example-go-machine",
+      "agent_id": "example-go-operations",
+      "agent_instance_id": "example-go-operations-installation",
+      "action": "history.read",
+      "data_scope": { "type": "approved_organization" }
+    },
+    {
+      "id": "example-python-machine-history-read-v1",
+      "subject_type": "service_principal",
+      "subject_id": "example-python-machine",
+      "agent_id": "example-python-documents",
+      "agent_instance_id": "example-python-documents-installation",
+      "action": "history.read",
+      "data_scope": { "type": "approved_organization" }
+    },
+    {
+      "id": "example-java-machine-history-read-v1",
+      "subject_type": "service_principal",
+      "subject_id": "example-java-machine",
+      "agent_id": "example-java-tickets",
+      "agent_instance_id": "example-java-tickets-installation",
+      "action": "history.read",
+      "data_scope": { "type": "approved_organization" }
+    }
+  ]
+}

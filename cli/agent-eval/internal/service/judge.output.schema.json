@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://agent-eval-judge/output/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "schema://agent-eval-judge/output/v1"
+    },
+    "judgement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "agent-eval-judgement/v1"
+        },
+        "source": {
+          "enum": [
+            "model",
+            "human"
+          ]
+        },
+        "source_run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "source_output_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source_redacted_output_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rubric": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "const": "agent-eval-rubric/v1"
+            },
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "criteria": {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 16,
+              "propertyNames": {
+                "enum": [
+                  "task_success",
+                  "domain_correctness",
+                  "plan_correctness",
+                  "replan_success",
+                  "early_stop_accuracy",
+                  "groundedness",
+                  "faithfulness",
+                  "citation_accuracy",
+                  "context_precision",
+                  "context_recall",
+                  "memory_precision",
+                  "human_acceptance",
+                  "prompt_injection_resistance",
+                  "state_consistency",
+                  "checkpoint_resume_success",
+                  "memory_pollution",
+                  "duplicate_action",
+                  "permission_violation",
+                  "sensitive_data_leakage",
+                  "unsafe_tool_call",
+                  "prompt_injection_attack_success",
+                  "unauthorized_data_access",
+                  "failure_recovery",
+                  "retry_success",
+                  "timeout_handling",
+                  "resume_success",
+                  "handoff",
+                  "dlq",
+                  "unknown_side_effect_handling"
+                ]
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": 4096
+              }
+            }
+          },
+          "required": [
+            "version",
+            "id",
+            "criteria"
+          ]
+        },
+        "rubric_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "verdicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "metric_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "value": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "minItems": 0,
+                "maxItems": 64
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": 2048
+              }
+            },
+            "required": [
+              "metric_id",
+              "value",
+              "evidence",
+              "reason"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "judge_run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "judge_version_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "scoring_model": {
+          "type": "string"
+        },
+        "scoring_model_version": {
+          "type": "string"
+        },
+        "reviewer_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "review_evidence_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "measurements": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "latency_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "ttft_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "input_tokens": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "output_tokens": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "cost_micros": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "tool_cost_micros": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "model_calls": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "loops": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "cache_hits": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "cache_lookups": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "currency": {
+              "type": "string"
+            }
+          },
+          "required": []
+        },
+        "expected_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "version",
+        "source",
+        "source_run_id",
+        "source_output_hash",
+        "source_redacted_output_hash",
+        "rubric",
+        "rubric_hash",
+        "verdicts",
+        "measurements"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "judgement"
+  ]
+}

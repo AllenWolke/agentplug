@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://example-go-operations/input/v1",
+  "type": "object",
+  "required": [
+    "service",
+    "symptom"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "service": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "symptom": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "observations": {
+      "type": "string",
+      "maxLength": 8192
+    },
+    "policy_snapshot": {
+      "type": "object",
+      "description": "Trusted platform-injected immutable policy references; not user supplied"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/model-governance/v1/access-policy.schema.json",
+  "title": "Model Access Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["scope", "allowed_trust_zones", "max_data_classification"],
+  "properties": {
+    "scope": {"type": "object"},
+    "allowed_trust_zones": {"type": "array", "items": {"enum": ["local", "private", "external"]}},
+    "allowed_models": {"type": "array", "items": {"type": "string"}},
+    "max_data_classification": {"enum": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]}
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "schema": "source-formal-broker-persistence/v1",
+  "at": "2026-10-10T00:23:02.608909+08:00",
+  "same_persistent_volume": true,
+  "source_container_recreated": true,
+  "other_project_broker_unchanged": true,
+  "offsets_before": [
+    {
+      "topic": "platform.notification",
+      "partition": 0,
+      "committed": null,
+      "end": 0,
+      "lag": null
+    },
+    {
+      "topic": "platform.audit",
+      "partition": 0,
+      "committed": 219,
+      "end": 219,
+      "lag": 0
+    },
+    {
+      "topic": "agent-platform.identity.v1",
+      "partition": 0,
+      "committed": null,
+      "end": 0,
+      "lag": null
+    }
+  ],
+  "offsets_after": [
+    {
+      "topic": "platform.notification",
+      "partition": 0,
+      "committed": null,
+      "end": 0,
+      "lag": null
+    },
+    {
+      "topic": "platform.audit",
+      "partition": 0,
+      "committed": 219,
+      "end": 219,
+      "lag": 0
+    },
+    {
+      "topic": "agent-platform.identity.v1",
+      "partition": 0,
+      "committed": null,
+      "end": 0,
+      "lag": null
+    }
+  ],
+  "dlq_records_unchanged": 30,
+  "dlq_sha256_unchanged": true,
+  "old_business_runs_replayed": false,
+  "overall_g1_17_accepted": false
+}

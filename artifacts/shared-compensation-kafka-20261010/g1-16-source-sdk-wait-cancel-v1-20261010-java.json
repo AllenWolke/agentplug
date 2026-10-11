@@ -1,0 +1,26 @@
+{
+  "at": "2026-10-10T00:10:14.401061+08:00",
+  "language": "java",
+  "actual_source_formal_sdk": true,
+  "agent_version": "example-java-tickets-v11",
+  "run_id": "g1-16-source-sdk-wait-cancel-v1-20261010-java",
+  "status": "cancelled",
+  "disposition": "verified",
+  "progress": {
+    "version": "cancellation-compensation/v1",
+    "cancellation_id": "1c47b80feacb0f4f06812d94f8e1d5425c43087bc653e4f94e2f8649f24efb83",
+    "phase": "complete",
+    "stop_confirmed": true,
+    "total": 0,
+    "compensated": 0,
+    "no_effect": 0,
+    "unresolved": 0,
+    "needs_attention": 0
+  },
+  "notice_effects": 0,
+  "outsider_cancel_http": 403,
+  "policy_or_grants_changed": false,
+  "old_runs_replayed": false,
+  "scope": "waiting approval cancellation; no claim of committed business effect rollback",
+  "overall_accepted": false
+}

@@ -1,0 +1,37 @@
+{
+  "schema": "source-native-worker-full-verification/v1",
+  "at": "2026-10-10T00:47:03.034312+08:00",
+  "actual_linux_docker": true,
+  "languages": 3,
+  "test_owner": "source-native-test-20261010",
+  "exit_code": 0,
+  "passed": [
+    "TestEngineMeasurementsRejectMissingNumbersForeignContainerAndLargeOutput",
+    "TestEngineReportedZeroIsDistinctFromMissingMeasurement",
+    "TestTmpfsUsageUsesOnlyFixedStatAndReportsObservedAllocatedBlocks",
+    "TestTmpfsUsageRejectsMalformedOrUnboundedStatOutput",
+    "TestCodeRuntimeValidatesLimitsBeforeLaunching",
+    "TestCodeRuntimeActualThreeLanguagesAndStreamCapture",
+    "TestCodeRuntimeActualThreeLanguagesAndStreamCapture/python",
+    "TestCodeRuntimeActualThreeLanguagesAndStreamCapture/javascript",
+    "TestCodeRuntimeActualThreeLanguagesAndStreamCapture/shell",
+    "TestCodeRuntimeActualKernelPathGuardRejectsTraversalLinksAndDescriptors",
+    "TestCodeRuntimeActualFilesystemNetworkCredentialsAndJobIsolation",
+    "TestCodeRuntimeActualDiskPIDsAndMemoryLimits",
+    "TestCodeRuntimeActualCPUTimeoutCancellationAndOutputLimits",
+    "TestCodeRuntimeIntentionalExitIsNotResourceEvidence",
+    "TestCodeRuntimeIntentionalExitIsNotResourceEvidence/python",
+    "TestCodeRuntimeIntentionalExitIsNotResourceEvidence/javascript",
+    "TestCodeRuntimeIntentionalExitIsNotResourceEvidence/shell",
+    "TestStoppedContainerStateRequiresCompleteMatchingEngineEvidence"
+  ],
+  "failed": [],
+  "skipped": [],
+  "formal_controller_restarted": false,
+  "formal_database_changed": false,
+  "image_profiles": {
+    "python": "sha256:95c82df53f91448094b7ccc6dc387d4dd60569227863c12b547136fb46e6565b",
+    "javascript": "sha256:6a5684f6c773c55ad7bb6507537348a305446f8f1d5f87b90e718193e90b514d",
+    "shell": "sha256:c46c8f25f429f2eb10ffae8e3dcab1956fa47313a773e234f461002bff8e5439"
+  }
+}

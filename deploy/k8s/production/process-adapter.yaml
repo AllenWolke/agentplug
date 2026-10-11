@@ -1,0 +1,51 @@
+# The process adapter executes only the pre-registered command, under a
+# registered rlimit sandbox. Memory is enforced by this container's cgroup, so
+# the memory limit must equal PROCESS_SANDBOX_MEMORY_BYTES; the adapter verifies
+# that equality at start-up and refuses to run when it does not hold.
+# 进程 Adapter 只执行预注册命令，且运行在已登记的 rlimit 沙箱下。内存由本容器 cgroup
+# 强制，因此内存上限必须等于 PROCESS_SANDBOX_MEMORY_BYTES；Adapter 启动时校验该等式，
+# 不成立即拒绝运行。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: process-adapter
+  labels: {app: process-adapter}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: process-adapter}}
+  template:
+    metadata: {labels: {app: process-adapter}}
+    spec:
+      serviceAccountName: lexagent-runtime
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: process-adapter
+          image: ${PROCESS_ADAPTER_IMAGE_DIGEST}
+          env:
+            - name: PROCESS_COMMAND
+              valueFrom: {configMapKeyRef: {name: process-adapter-registration, key: command}}
+            - name: PROCESS_ARGS_JSON
+              valueFrom: {configMapKeyRef: {name: process-adapter-registration, key: args_json}}
+            - name: PROCESS_ENV_JSON
+              valueFrom: {configMapKeyRef: {name: process-adapter-registration, key: env_json, optional: true}}
+            - name: PLATFORM_CONTEXT_PUBLIC_KEY
+              valueFrom: {configMapKeyRef: {name: process-adapter-registration, key: context_public_key}}
+            - name: PLATFORM_CONTEXT_ISSUER
+              valueFrom: {configMapKeyRef: {name: process-adapter-registration, key: context_issuer}}
+            - name: AGENT_ID
+              valueFrom: {configMapKeyRef: {name: process-adapter-registration, key: agent_id, optional: true}}
+            - {name: PROCESS_SANDBOX_MEMORY_BYTES, value: "134217728"}
+            - {name: PROCESS_SANDBOX_CPU_SECONDS, value: "30"}
+            - {name: PROCESS_SANDBOX_MAX_PROCESSES, value: "64"}
+            - {name: PROCESS_SANDBOX_MAX_OUTPUT_BYTES, value: "1048576"}
+            - {name: PROCESS_SANDBOX_TIMEOUT_SECONDS, value: "30"}
+            - {name: PROCESS_SANDBOX_NETWORK, value: "container"}
+            - {name: PROCESS_SANDBOX_REQUIRE_CGROUP_MEMORY, value: "true"}
+          resources: {requests: {cpu: 100m, memory: 64Mi}, limits: {cpu: "1", memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 16Mi}

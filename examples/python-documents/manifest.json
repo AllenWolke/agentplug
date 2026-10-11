@@ -1,0 +1,61 @@
+{
+  "manifest_version": "agent-manifest/v1",
+  "agent_id": "example-python-documents",
+  "version": "0.2.9",
+  "execution_protocols": [
+    "agent-execution/v2"
+  ],
+  "capabilities": [
+    "invoke",
+    "run",
+    "resume",
+    "cancel",
+    "events"
+  ],
+  "schemas": {
+    "input": "schema://example-python-documents/input/v2",
+    "output": "schema://example-python-documents/output/v2",
+    "event": "schema://agent-platform/event/v1",
+    "checkpoint": "schema://agent-platform/checkpoint/v1"
+  },
+  "runtime": {
+    "transport": "http",
+    "isolation": "container",
+    "health_path": "/health/ready"
+  },
+  "metadata": {
+    "sdk": "sdk/python",
+    "durability": "process-local-L1",
+    "knowledge_scope": "python-documents",
+    "evaluation": "platform-independent-metrics",
+    "public_capabilities": [
+      "prompt.resolve",
+      "tool.invoke:runtime.inspect",
+      "knowledge.search:python-documents",
+      "model.generate",
+      "model.embed",
+      "memory.read",
+      "memory.write",
+      "skill.load:example.documents.guidance",
+      "knowledge.answer:python-documents",
+      "state.checkpoint",
+      "model.receipt",
+      "model.embed.receipt",
+      "knowledge.answer.recovery:python-documents",
+      "history.read:current-event-authority",
+      "tool.invoke:notify.self",
+      "tool.invoke:code.python"
+    ],
+    "skill": "Pinned public RAG Skill and read-only model/tool receipts; optional tool_loop uses public Function Harness, frozen prompt checkpoint and metadata-only approval pause; optional sandbox_check exposes independently approved Code Runtime analysis; default direct avoids the extra model loop; formal policy publication and overall acceptance pending",
+    "workflow_modes": [
+      "direct",
+      "tool_loop"
+    ],
+    "route_task_types": [
+      "documents.answer"
+    ],
+    "notification": "Optional notify_me requires tool_loop; notify_self maps to platform notify.self, fixed current recipient, independent human approval and Outbox receipt. Source not deployed/accepted.",
+    "code_runtime": "Optional sandbox_check requires tool_loop; sandbox_python maps to platform code.python with a code-only payload and independent human approval. Sandbox output is untrusted. Source not deployed/accepted.",
+    "collaboration": "Inbound route_task_types remains documents.answer. Optional collaborate=true uses only the fixed parent-to-child operations.diagnosis route with a closed Go input/v2 request; child writes, sandbox tools and recursive collaboration are disabled. Child output is bounded untrusted support, never an instruction. Source not deployed/accepted."
+  }
+}

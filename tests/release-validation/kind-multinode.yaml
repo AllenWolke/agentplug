@@ -1,0 +1,20 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+# The isolated metric sandbox verifies the pod's PID cgroup against the
+# registered plugin envelope at start-up, and Kubernetes does not expose a pids
+# limit in the Pod spec. Setting kubelet --pod-max-pids gives every pod a real
+# pids.max, which is what lets a third-party metric plugin actually launch here
+# instead of failing closed. The value matches the registry's declared bound.
+# 隔离指标沙箱在启动期以已登记插件信封核对 Pod 的 PID cgroup，而 Kubernetes 未在 Pod spec 中暴露
+# pids 上限。设置 kubelet --pod-max-pids 可让每个 Pod 拥有真实的 pids.max，这正是第三方指标插件
+# 能在此真正启动而非失败闭合的前提。取值与注册表声明的边界一致。
+nodes:
+  - role: control-plane
+    kubeletExtraArgs:
+      pod-max-pids: "128"
+  - role: worker
+    kubeletExtraArgs:
+      pod-max-pids: "128"
+  - role: worker
+    kubeletExtraArgs:
+      pod-max-pids: "128"

@@ -1,0 +1,39 @@
+{
+  "manifest_version": "agent-manifest/v1",
+  "agent_id": "agent-eval-judge",
+  "version": "1.0.6",
+  "execution_protocols": [
+    "agent-execution/v2"
+  ],
+  "capabilities": [
+    "invoke",
+    "run",
+    "resume",
+    "cancel",
+    "events"
+  ],
+  "schemas": {
+    "input": "schema://agent-eval-judge/input/v1",
+    "output": "schema://agent-eval-judge/output/v1",
+    "event": "schema://agent-platform/event/v1",
+    "checkpoint": "schema://agent-platform/checkpoint/v1"
+  },
+  "runtime": {
+    "transport": "http",
+    "isolation": "container",
+    "health_path": "/health/ready",
+    "run_store": "memory-dev-only(L2/L3 forbidden)"
+  },
+  "metadata": {
+    "sdk": "sdk/go",
+    "evaluation_role": "model-review",
+    "public_capabilities": [
+      "context.prepare",
+      "model.generate"
+    ],
+    "durability": "process-local-L1",
+    "domain_review": "frozen independent facts and source references; unknown remains unknown",
+    "evidence_ids": "top-level frozen evidence keys; domain requires output and expected",
+    "domain_expected_binding": "SHA256 of canonical frozen gold; changed gold requires new review"
+  }
+}

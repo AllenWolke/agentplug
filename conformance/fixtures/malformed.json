@@ -1,0 +1,1 @@
+{"protocol_version":"agent-execution/v2","context_token":"too-short","scope":{},"operation":"invoke","idempotency_key":"x","input_schema":"not-a-schema","input":{}}

@@ -1,0 +1,117 @@
+# Opt-in overlay: python scripts/compose.py up --examples --runtime --profile modular
+# The code controller is the only application service granted Docker socket access.
+services:
+  platform-app:
+    environment:
+      PLATFORM_CODE_BINDINGS_FILE: /run/secrets/code-runtime/bindings.json
+      PLATFORM_CODE_PERMIT_PRIVATE_KEY_FILE: /run/secrets/code-runtime/platform-permit.key
+      PLATFORM_TOOL_CONFIRMATION_PRIVATE_KEY_FILE: /run/secrets/code-runtime/tool-approval.key
+      PLATFORM_CODE_CONTROLLER_CA_FILE: /run/secrets/code-runtime/controller-ca.crt
+    volumes:
+      - type: bind
+        source: ./.local-secrets/public-runtime-control/bindings.json
+        target: /run/secrets/code-runtime/bindings.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local-secrets/public-runtime-control/platform-permit.key
+        target: /run/secrets/code-runtime/platform-permit.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local-secrets/public-runtime-control/tool-approval.key
+        target: /run/secrets/code-runtime/tool-approval.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local-secrets/public-runtime-control/controller-ca.crt
+        target: /run/secrets/code-runtime/controller-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      default: {}
+      metric-control: {}
+      code-runtime-control:
+        ipv4_address: ${CODE_RUNTIME_PLATFORM_PRIVATE_IP:?set the generated platform address for the private controller network}
+
+  code-runtime:
+    image: agentplug:code-runtime
+    profiles: ["modular", "full"]
+    build:
+      context: .
+      dockerfile: workers/code-runtime/Dockerfile
+      args:
+        CODE_RUNTIME_DOCKER_CLI_IMAGE: ${CODE_RUNTIME_DOCKER_CLI_IMAGE:?set a verified immutable Docker CLI image digest}
+    environment:
+      CODE_RUNTIME_CONFIG_FILE: /etc/agentplug-code/code-runtime.json
+    user: "10001:10001"
+    group_add:
+      - "${CODE_RUNTIME_DOCKER_SOCKET_GID:?set the host Docker socket group ID}"
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local-secrets/public-runtime-control/code-runtime.json
+        target: /etc/agentplug-code/code-runtime.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local-secrets/public-runtime-control/permit-public.key
+        target: /etc/agentplug-code/permit-public.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local-secrets/public-runtime-control/controller-state.key
+        target: /etc/agentplug-code/controller-state.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local-secrets/public-runtime-control/controller.crt
+        target: /etc/agentplug-code/controller.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local-secrets/public-runtime-control/controller.key
+        target: /etc/agentplug-code/controller.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: volume
+        source: code-runtime-state
+        target: /var/lib/agentplug-code/receipts
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+      - /var/lib/agentplug-code/docker:rw,noexec,nosuid,nodev,size=1m,uid=10001,gid=10001,mode=0700
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    stop_grace_period: 20s
+    restart: unless-stopped
+    networks:
+      code-runtime-control:
+        ipv4_address: ${CODE_RUNTIME_PRIVATE_IP:?set the controller's literal private IPv4 address}
+
+volumes:
+  code-runtime-state:
+
+networks:
+  code-runtime-control:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${CODE_RUNTIME_SUBNET:?set a dedicated private subnet for the controller}

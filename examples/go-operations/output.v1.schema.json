@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://example-go-operations/output/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "service",
+    "answer",
+    "knowledge",
+    "context_checks"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "schema://example-go-operations/output/v1"
+    },
+    "service": {
+      "type": "string"
+    },
+    "answer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "knowledge": {
+      "type": "object"
+    },
+    "context_checks": {
+      "type": "object"
+    },
+    "usage": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  }
+}

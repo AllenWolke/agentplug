@@ -1,0 +1,19 @@
+[
+  {
+    "purpose": "evaluation_fixture",
+    "tool_name": "api.eval_fixture",
+    "endpoint": "http://127.0.0.1:8787/fixture",
+    "tenant_id": "replace-test-tenant",
+    "application_id": "replace-test-application",
+    "agent_ids": ["agent-eval-simulation"],
+    "read_only": true,
+    "timeout_seconds": 2,
+    "max_response_bytes": 4096,
+    "query_keys": ["scenario"],
+    "input_schema": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scenario"],
+      "properties": {"scenario": {"type": "string", "enum": ["success", "success-2", "failure", "timeout", "unknown"]}}
+    }
+  }
+]

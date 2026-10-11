@@ -1,0 +1,61 @@
+{
+  "uid": "agentplug-platform-v2",
+  "title": "Agent Platform v2",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Gateway HTTP P95 latency",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(agent_gateway_request_duration_seconds_bucket{job=\"agentplug-platform\"}[5m])))"}]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Gateway 5xx ratio",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "sum(rate(agent_gateway_requests_total{job=\"agentplug-platform\",status_class=\"5xx\"}[5m])) / clamp_min(sum(rate(agent_gateway_requests_total{job=\"agentplug-platform\"}[5m])), 0.001)"}]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Platform and database readiness",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "fieldConfig": {"defaults": {"min": 0, "max": 1}, "overrides": []},
+      "targets": [
+        {"refId": "A", "legendFormat": "platform ready", "expr": "agent_platform_ready{job=\"agentplug-platform\"}"},
+        {"refId": "B", "legendFormat": "database probe", "expr": "agent_platform_database_probe_success{job=\"agentplug-platform\"}"}
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Evaluation queue oldest age",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "agent_evaluation_queue_oldest_age_seconds{job=\"agentplug-platform\"}"}]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Execution recovery oldest age",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "{{stage}}", "expr": "agent_execution_recovery_oldest_age_seconds{job=\"agentplug-platform\"}"}]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Model budget reconciliation oldest age",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "agent_model_budget_reconciliation_oldest_age_seconds{job=\"agentplug-platform\"}"}]
+    }
+  ]
+}

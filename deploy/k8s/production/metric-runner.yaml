@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: metric-runner
+spec:
+  type: ClusterIP
+  selector:
+    app: metric-runner
+  ports:
+    - {name: http, port: 8085, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metric-runner
+  labels: {app: metric-runner}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: metric-runner}}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels: {app: metric-runner}
+    spec:
+      serviceAccountName: lexagent-runtime
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: metric-runner
+          image: registry.example.com/agentplug:metric-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          env:
+            - {name: LEXAGENT_METRIC_SERVICE_ADDR, value: ":8085"}
+            - name: LEXAGENT_METRIC_SERVICE_TOKEN
+              valueFrom: {secretKeyRef: {name: lexagent-production-secret, key: METRIC_RUNNER_TOKEN}}
+            - {name: LEXAGENT_METRIC_NETWORK_MODE, value: none}
+            - {name: LEXAGENT_METRIC_REQUIRE_NONROOT, value: "true"}
+          ports:
+            - {name: http, containerPort: 8085}
+          readinessProbe: {httpGet: {path: /readyz, port: http}, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 6}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 10, periodSeconds: 10, timeoutSeconds: 3}
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "1", memory: 1Gi}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://example-java-tickets/output/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "ticket_id",
+    "draft",
+    "knowledge",
+    "context_checks",
+    "usage"
+  ],
+  "properties": {
+    "schema": {
+      "const": "schema://example-java-tickets/output/v1"
+    },
+    "ticket_id": {
+      "type": "string"
+    },
+    "draft": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32768
+    },
+    "knowledge": {
+      "type": "object"
+    },
+    "context_checks": {
+      "type": "object"
+    },
+    "usage": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  }
+}

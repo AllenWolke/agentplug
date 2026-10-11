@@ -1,0 +1,52 @@
+# The sidecar adapter presents its own workload identity over mutual TLS to the
+# registered upstream. The certificate/key pair and trust anchor are mounted
+# read-only from a Secret supplied by the release overlay; the adapter refuses
+# to start without them instead of degrading to unauthenticated TLS.
+# 侧车 Adapter 经双向 TLS 向已登记上游出示自身工作负载身份。证书/私钥对与信任锚由发布
+# 覆盖层提供的 Secret 以只读方式挂载；缺失时 Adapter 拒绝启动，而不会降级为未认证 TLS。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sidecar-adapter
+  labels: {app: sidecar-adapter}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: sidecar-adapter}}
+  template:
+    metadata: {labels: {app: sidecar-adapter}}
+    spec:
+      serviceAccountName: lexagent-runtime
+      automountServiceAccountToken: false
+      # The distroless nonroot user is exposed by name, so the numeric UID is
+      # pinned for kubelet's runAsNonRoot verification; fsGroup lets the
+      # non-root process read the 0400 mutual TLS material owned by root.
+      # distroless 以名称暴露 nonroot 用户，这里固定数字 UID 供 kubelet 校验；
+      # fsGroup 使非 root 进程可读取 root 属主的 0400 双向 TLS 材料。
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, fsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: sidecar-adapter
+          image: ${SIDECAR_ADAPTER_IMAGE_DIGEST}
+          env:
+            - name: SIDECAR_UPSTREAM_URL
+              valueFrom: {configMapKeyRef: {name: sidecar-adapter-registration, key: upstream_url}}
+            - name: SIDECAR_EVENTS_PATH
+              valueFrom: {configMapKeyRef: {name: sidecar-adapter-registration, key: events_path, optional: true}}
+            - name: PLATFORM_CONTEXT_PUBLIC_KEY
+              valueFrom: {configMapKeyRef: {name: sidecar-adapter-registration, key: context_public_key}}
+            - name: PLATFORM_CONTEXT_ISSUER
+              valueFrom: {configMapKeyRef: {name: sidecar-adapter-registration, key: context_issuer}}
+            - name: AGENT_ID
+              valueFrom: {configMapKeyRef: {name: sidecar-adapter-registration, key: agent_id, optional: true}}
+            - {name: SIDECAR_MTLS_CERT_FILE, value: /etc/lexagent/tls/tls.crt}
+            - {name: SIDECAR_MTLS_KEY_FILE, value: /etc/lexagent/tls/tls.key}
+            - {name: SIDECAR_MTLS_CA_FILE, value: /etc/lexagent/tls/ca.crt}
+          resources: {requests: {cpu: 100m, memory: 64Mi}, limits: {cpu: "1", memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: mtls, mountPath: /etc/lexagent/tls, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: mtls
+          secret: {secretName: sidecar-adapter-mtls, defaultMode: 0400}
+        - name: tmp
+          emptyDir: {sizeLimit: 16Mi}

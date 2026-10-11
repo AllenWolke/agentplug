@@ -1,0 +1,262 @@
+openapi: 3.1.0
+info:
+  title: Agent Execution Contract
+  version: 2.0.0
+  description: Language-neutral internal contract between Platform Runtime Gateway and Agent Execution Services.
+servers:
+  - url: /internal/agent-execution/v2
+security:
+  - platformContext: []
+paths:
+  /invoke:
+    post:
+      operationId: invokeAgent
+      x-required-capability: invoke
+      requestBody: {$ref: '#/components/requestBodies/ExecuteRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/ExecuteResponse'}
+        '409': {$ref: '#/components/responses/AppError'}
+        '422': {$ref: '#/components/responses/AppError'}
+        '426': {$ref: '#/components/responses/AppError'}
+  /runs:
+    post:
+      operationId: createAgentRun
+      x-required-capability: run
+      requestBody: {$ref: '#/components/requestBodies/ExecuteRequest'}
+      responses:
+        '202': {$ref: '#/components/responses/ExecuteResponse'}
+        '409': {$ref: '#/components/responses/AppError'}
+        '422': {$ref: '#/components/responses/AppError'}
+  /runs/{run_id}/resume:
+    post:
+      operationId: resumeAgentRun
+      x-required-capability: resume
+      parameters: [{$ref: '#/components/parameters/RunID'}]
+      requestBody: {$ref: '#/components/requestBodies/ExecuteRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/ExecuteResponse'}
+        '409': {$ref: '#/components/responses/AppError'}
+  /runs/{run_id}/cancel:
+    post:
+      operationId: cancelAgentRun
+      x-required-capability: cancel
+      parameters: [{$ref: '#/components/parameters/RunID'}]
+      requestBody: {$ref: '#/components/requestBodies/ExecuteRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/ExecuteResponse'}
+        '409': {$ref: '#/components/responses/AppError'}
+  /runs/{run_id}/delegations:
+    post:
+      operationId: delegateAgentRun
+      x-required-capability: delegate
+      description: Creates a child Run through the Gateway; the child re-enters the normal run pipeline.
+      parameters: [{$ref: '#/components/parameters/RunID'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DelegationRequest'}
+      responses:
+        '202': {$ref: '#/components/responses/ExecuteResponse'}
+        '403': {$ref: '#/components/responses/AppError'}
+        '409': {$ref: '#/components/responses/AppError'}
+  /runs/{run_id}/events:
+    post:
+      operationId: streamAgentRunEvents
+      x-required-capability: events
+      parameters:
+        - {$ref: '#/components/parameters/RunID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventRequest'}
+      responses:
+        '200':
+          description: Strict SSE stream. Invalid id, event, JSON or truncated events are protocol errors.
+          content:
+            text/event-stream:
+              schema: {$ref: '#/components/schemas/ExecutionEvent'}
+        '404': {$ref: '#/components/responses/AppError'}
+components:
+  securitySchemes:
+    platformContext:
+      type: http
+      scheme: bearer
+      bearerFormat: JWS
+      description: Short-lived scoped capability token issued by the Platform Runtime Gateway.
+  parameters:
+    RunID:
+      name: run_id
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+  requestBodies:
+    ExecuteRequest:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ExecuteRequest'}
+  responses:
+    ExecuteResponse:
+      description: Accepted or completed execution result.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ExecuteResponse'}
+    AppError:
+      description: Stable application error.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AppError'}
+  schemas:
+    ScopeKey:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, department_id, application_id, agent_instance_id, installation_id, agent_id, agent_version_id, principal_type, principal_id, session_id, run_id, authorization_epoch, trace_id]
+      properties:
+        tenant_id: {type: string, minLength: 1, maxLength: 128}
+        department_id: {type: string, minLength: 1, maxLength: 128}
+        application_id: {type: string, minLength: 1, maxLength: 128}
+        agent_instance_id: {type: string, minLength: 1, maxLength: 128}
+        installation_id: {type: string, minLength: 1, maxLength: 128}
+        agent_id: {type: string, minLength: 1, maxLength: 128}
+        agent_version_id: {type: string, minLength: 1, maxLength: 128}
+        # Match the control-plane subject vocabulary.  Machine OAuth callers
+        # are service principals, not the legacy `service` alias.
+        # 与控制面主体词汇保持一致：机器 OAuth 调用方是 service_principal，
+        # 不是历史 service 别名。
+        principal_type: {type: string, enum: [user, service_principal]}
+        principal_id: {type: string, minLength: 1, maxLength: 128}
+        session_id: {type: string, minLength: 1, maxLength: 128}
+        run_id: {type: string, minLength: 1, maxLength: 128}
+        authorization_epoch: {type: integer, minimum: 1}
+        trace_id: {type: string, pattern: '^[0-9a-f]{32}$'}
+        parent_run_id: {type: string, maxLength: 128}
+        delegation_depth: {type: integer, minimum: 0, maximum: 8}
+    ExecuteRequest:
+      type: object
+      additionalProperties: false
+      required: [protocol_version, context_token, scope, operation, idempotency_key, input_schema, input]
+      properties:
+        protocol_version: {const: agent-execution/v2}
+        context_token: {type: string, minLength: 32, maxLength: 8192}
+        scope: {$ref: '#/components/schemas/ScopeKey'}
+        operation: {type: string, enum: [invoke, run, resume, cancel]}
+        idempotency_key: {type: string, minLength: 8, maxLength: 128}
+        input_schema: {type: string, pattern: '^schema://'}
+        resume_input: {type: object, description: 'Signed resume decision; unsigned Headers are rejected.'}
+        input: {type: object}
+    ExecuteResponse:
+      type: object
+      additionalProperties: false
+      required: [protocol_version, run_id, status]
+      properties:
+        protocol_version: {const: agent-execution/v2}
+        run_id: {type: string}
+        status: {type: string, enum: [accepted, running, waiting, succeeded, failed, cancelled]}
+        output_schema: {type: string, pattern: '^schema://'}
+        output: {type: object}
+        error: {$ref: '#/components/schemas/AppError'}
+        handoff: {$ref: '#/components/schemas/HandlerHandoff'}
+        agent_group_handoff: {$ref: '#/components/schemas/AgentGroupHandoff'}
+      allOf:
+        - not: {required: [handoff, agent_group_handoff]}
+        - if:
+            anyOf:
+              - required: [handoff]
+              - required: [agent_group_handoff]
+          then:
+            properties:
+              status: {const: waiting}
+    RecoveryCheckpointReference:
+      type: object
+      additionalProperties: false
+      required: [state_key, revision, schema_id, content_hash, execution_revision, expires_at]
+      properties:
+        state_key: {type: string, pattern: '^[a-f0-9]{64}$'}
+        revision: {type: integer, minimum: 1, maximum: 64}
+        schema_id: {type: string, pattern: '^schema://', maxLength: 256}
+        content_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        execution_revision: {type: integer, minimum: 1, maximum: 8589934592}
+        expires_at: {type: string, format: date-time}
+    AgentGroupHandoff:
+      type: object
+      additionalProperties: false
+      description: 'Concrete SDK handler exit at persisted group gather; no Tool approval or child execution authority.'
+      required: [version, run_id, execution_revision, body_hash, lease_token_hash, input_fingerprint, origin_operation, group_key, operation_key, last_event_seq, checkpoint, child_keys]
+      properties:
+        version: {const: sdk-agent-group-exit/v1}
+        run_id: {type: string, pattern: '^[A-Za-z0-9_.:-]{1,128}$'}
+        execution_revision: {type: integer, minimum: 1, maximum: 8589934589}
+        body_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        lease_token_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        input_fingerprint: {type: string, pattern: '^[a-f0-9]{64}$'}
+        origin_operation: {type: string, enum: [invoke, run]}
+        group_key: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$'}
+        operation_key: {type: string, minLength: 1, maxLength: 128, description: 'Router identifier: trimmed, excludes wildcard, NUL, CR and LF.'}
+        last_event_seq: {type: integer, minimum: 1, maximum: 9007199254740991}
+        checkpoint: {$ref: '#/components/schemas/RecoveryCheckpointReference'}
+        child_keys:
+          type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
+          items: {type: string, pattern: '^[a-f0-9]{64}$'}
+    HandlerHandoff:
+      type: object
+      additionalProperties: false
+      description: 'Emitted only after an SDK-supervised handler exits. Not a browser assertion or process-stop receipt.'
+      required: [version, run_id, execution_revision, body_hash, lease_token_hash, input_fingerprint, origin_operation, harness_key, tool_name, call_id, last_event_seq]
+      properties:
+        version: {const: sdk-handler-exit/v1}
+        run_id: {type: string, pattern: '^[A-Za-z0-9_.:-]{1,128}$'}
+        execution_revision: {type: integer, minimum: 1, maximum: 9007199254740991}
+        body_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        lease_token_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        input_fingerprint: {type: string, pattern: '^[a-f0-9]{64}$'}
+        origin_operation: {type: string, enum: [invoke, run]}
+        harness_key: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$'}
+        tool_name: {type: string, pattern: '^[A-Za-z0-9_.:-]{1,128}$'}
+        call_id: {type: string, pattern: '^[A-Za-z0-9_.:-]{1,128}$'}
+        last_event_seq: {type: integer, minimum: 1, maximum: 9007199254740991}
+    DelegationRequest:
+      type: object
+      additionalProperties: false
+      required: [parent, child, requested_actions, estimated_cost_micros]
+      properties:
+        parent: {$ref: '#/components/schemas/ExecuteRequest'}
+        child: {$ref: '#/components/schemas/ExecuteRequest'}
+        requested_actions:
+          type: array
+          maxItems: 32
+          items: {type: string, minLength: 1, maxLength: 128}
+        estimated_cost_micros: {type: integer, minimum: 0, maximum: 1000000000}
+    EventRequest:
+      type: object
+      additionalProperties: false
+      required: [protocol_version, context_token, scope, after_seq, policy_snapshot_hash]
+      properties:
+        protocol_version: {const: agent-execution/v2}
+        context_token: {type: string, minLength: 32, maxLength: 8192}
+        scope: {$ref: '#/components/schemas/ScopeKey'}
+        after_seq: {type: integer, minimum: 0, maximum: 9007199254740991}
+        policy_snapshot_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+    ExecutionEvent:
+      type: object
+      additionalProperties: false
+      required: [run_id, seq, event_type, occurred_at, payload]
+      properties:
+        run_id: {type: string}
+        seq: {type: integer, minimum: 1, maximum: 9007199254740991}
+        event_type: {type: string, enum: [accepted, started, progress, waiting, artifact, completed, failed, cancelled]}
+        occurred_at: {type: string, format: date-time}
+        payload: {type: object}
+    AppError:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable]
+      properties:
+        code: {type: string, pattern: '^[A-Z][A-Z0-9_]{2,63}$'}
+        message: {type: string, minLength: 1, maxLength: 512}
+        retryable: {type: boolean}
+        details: {type: object, maxProperties: 32}

@@ -1,0 +1,35 @@
+# Adapter workers are independently scalable and receive only published
+# mapping plans from the control plane. / Adapter 独立扩缩容，只接收控制面已发布计划。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: declarative-adapter
+  labels: {app: declarative-adapter}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: declarative-adapter}}
+  template:
+    metadata: {labels: {app: declarative-adapter}}
+    spec:
+      serviceAccountName: lexagent-runtime
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: declarative-adapter
+          image: ${DECLARATIVE_ADAPTER_IMAGE_DIGEST}
+          env:
+            - {name: ADAPTER_DESCRIPTOR, value: /etc/lexagent/descriptor.json}
+            # The adapter refuses to start without the platform context public
+            # key used to verify delegated execution contexts, mirroring the
+            # registration ConfigMaps of the process/sidecar adapters.
+            # Adapter 缺少平台上下文公钥即拒绝启动，用于校验委托执行上下文，
+            # 与 process/sidecar Adapter 的登记 ConfigMap 口径一致。
+            - name: PLATFORM_CONTEXT_PUBLIC_KEY
+              valueFrom: {secretKeyRef: {name: agent-platform-context-public-key, key: context-public.b64}}
+            - {name: PLATFORM_CONTEXT_ISSUER, value: platform}
+          volumeMounts:
+            - {name: descriptor, mountPath: /etc/lexagent, readOnly: true}
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "1", memory: 512Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+      volumes:
+        - name: descriptor
+          configMap: {name: declarative-adapter-descriptor}

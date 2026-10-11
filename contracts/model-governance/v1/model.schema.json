@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/model-governance/v1/model.schema.json",
+  "title": "Model Definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["provider_id", "model_key", "kind", "display_name", "context_limit"],
+  "properties": {
+    "provider_id": {"type": "string", "minLength": 1},
+    "model_key": {"type": "string", "minLength": 1, "maxLength": 128},
+    "kind": {"enum": ["chat", "embedding"]},
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 128},
+    "context_limit": {"type": "integer", "minimum": 1, "maximum": 2000000},
+    "capabilities": {"type": "object"}
+  }
+}

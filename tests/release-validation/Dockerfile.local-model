@@ -1,0 +1,25 @@
+ARG LOCAL_MODEL_BASE_IMAGE=python:3.11-slim
+FROM ${LOCAL_MODEL_BASE_IMAGE}
+
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG PYTORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
+WORKDIR /app
+COPY tests/release-validation/requirements.local-model.txt /app/requirements.txt
+# 默认基础镜像会安装CPU Torch；本机若已有经验证的推理基础镜像，可以通过
+# LOCAL_MODEL_BASE_IMAGE复用其中的Torch层。两种方式最终均运行相同Linux容器。
+RUN python -c "import torch" 2>/dev/null || python -m pip install --no-cache-dir \
+    --timeout 600 --retries 12 --index-url ${PYTORCH_INDEX_URL} torch==2.12.0+cpu
+RUN python -m pip install --no-cache-dir --timeout 180 --retries 8 \
+    --index-url ${PIP_INDEX_URL} -r /app/requirements.txt
+
+COPY tests/release-validation/local_openai_server.py /app/local_openai_server.py
+COPY tests/release-validation/local_model_supervisor.py /app/local_model_supervisor.py
+
+EXPOSE 18000
+CMD ["python", "/app/local_model_supervisor.py"]

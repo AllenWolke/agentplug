@@ -1,0 +1,12 @@
+version: agent-compatibility/v1
+platform_protocol: agent-execution/v2
+languages:
+  python:
+    transports: [http, grpc, process, sidecar]
+    adapters: [legacy-http, grpc, process, sidecar]
+  go:
+    transports: [http, grpc, process, sidecar]
+    adapters: [legacy-http, grpc, process, sidecar]
+  java:
+    transports: [http, grpc, sidecar]
+    adapters: [legacy-http, grpc, sidecar]

@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexagent.local/contracts/agent-evaluation/v1/cli-suite.schema.json",
+  "title": "Independent CLI evaluation suite v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "agent-eval-suite/v1"
+    },
+    "mode": {
+      "enum": [
+        "offline",
+        "simulation"
+      ]
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "department_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "application_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "tenant_id",
+        "department_id",
+        "application_id"
+      ]
+    },
+    "repeat": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 3
+    },
+    "concurrency": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16,
+      "default": 1
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "limit_micros": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "limit_tokens",
+        "limit_micros"
+      ]
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "installation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "agent_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "version_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "suite_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "dataset_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "metric_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "cases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "case_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._-]{1,128}$"
+                },
+                "input": {
+                  "type": "object",
+                  "not": {
+                    "required": [
+                      "policy_snapshot"
+                    ]
+                  }
+                },
+                "expected": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "assertions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "op": {
+                            "enum": [
+                              "equals",
+                              "exists",
+                              "contains",
+                              "gte",
+                              "lte"
+                            ]
+                          },
+                          "value": {}
+                        },
+                        "required": [
+                          "path",
+                          "op",
+                          "value"
+                        ]
+                      },
+                      "minItems": 0
+                    },
+                    "tools": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "allowed": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "required": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "forbidden": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "parameters": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object"
+                          }
+                        },
+                        "dependencies": {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          "minItems": 0
+                        },
+                        "maximum_calls": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "minimum_steps": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": []
+                    },
+                    "relevant_ids": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "citation_ids": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "required_trace": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "not_applicable": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": []
+                }
+              },
+              "required": [
+                "case_id",
+                "input",
+                "expected"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 10000
+          }
+        },
+        "required": [
+          "installation_id",
+          "agent_id",
+          "version_id",
+          "revision",
+          "cases"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 100
+    },
+    "simulation_profile": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400,
+      "default": 1800
+    },
+    "dataset_source": {
+      "enum": [
+        "manual_gold",
+        "imported_redacted",
+        "synthetic_generated"
+      ]
+    },
+    "thresholds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "metric_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "minimum": {
+            "type": "number",
+            "minimum": 0
+          },
+          "maximum": {
+            "type": "number",
+            "minimum": 0
+          },
+          "minimum_samples": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "maximum_missing": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "metric_id",
+          "minimum_samples",
+          "maximum_missing"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "minimum"
+            ]
+          },
+          {
+            "required": [
+              "maximum"
+            ]
+          }
+        ]
+      },
+      "minItems": 0
+    }
+  },
+  "required": [
+    "version",
+    "mode",
+    "budget",
+    "targets"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "simulation"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "workspace",
+          "simulation_profile"
+        ]
+      }
+    }
+  ]
+}
