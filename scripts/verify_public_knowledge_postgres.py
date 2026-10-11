@@ -862,7 +862,7 @@ try:
                 private_env = TEMP/'go.env'
                 go_settings = {'PUBLIC_TEST_POSTGRES_MIGRATION_DSN': 'postgres://postgres:'+password+'@127.0.0.1:5432/knowledge_test?sslmode=disable',
                                'GOMAXPROCS':'2','GOPROXY':'file:///module-cache','GOSUMDB':'off','GOTOOLCHAIN':'local',
-                               'GOCACHE':'/test-cache/build','GOMODCACHE':'/test-cache/mod','GOFLAGS':'-buildvcs=false','CGO_ENABLED':'1'}
+                               'GOCACHE':'/test-cache/build','GOMODCACHE':'/test-cache/mod','GOFLAGS':'-buildvcs=false','CGO_ENABLED':'1','HOME':'/tmp'}
                 if args.containerized_go:
                     # Build caches stay in the disposable Linux filesystem;
                     # bind mounts on Windows are used only for small evidence.
@@ -898,7 +898,14 @@ try:
                 private_env.write_text(''.join(key+'='+value+'\n' for key,value in go_settings.items()),encoding='utf-8')
                 private_env.chmod(0o600)
                 go_cache = TEMP/'go-cache';go_cache.mkdir()
+                # Private handoff/evidence files are created with mode 0600.
+                # On Linux they must belong to the host runner so it can read
+                # them and remove the owned module/build cache after the test.
+                # Docker Desktop bind mounts use the host filesystem ACLs.
+                container_user = ['--user', str(os.getuid())+':'+str(os.getgid())] if os.name == 'posix' else []
+                receipt['go_container_user'] = container_user[1] if container_user else 'Docker Desktop default'
                 container_prefix = ['docker','run','--rm','--name',GO_NAME,'--label','agentplug.test.owner='+OWNER,
+                    *container_user,
                     '--network','container:'+NAME,'--env-file',str(private_env),
                     '--mount','type=bind,source='+str(ROOT)+',target=/workspace,readonly',
                     '--mount','type=bind,source='+str(download)+',target=/module-cache,readonly',
@@ -1430,6 +1437,12 @@ finally:
                 if not candidate.resolve().is_relative_to(resolved) or candidate.is_symlink():
                     raise RuntimeError('refusing cleanup outside owned temporary directory')
                 candidate.chmod(stat.S_IREAD | stat.S_IWRITE | (stat.S_IEXEC if candidate.is_dir() else 0))
+                # Go module files live in owner-readable, non-writable
+                # directories. Unlink/rmdir needs write access on the parent,
+                # even when the file itself has already been made writable.
+                parent = candidate.parent
+                if parent.resolve().is_relative_to(resolved) and not parent.is_symlink():
+                    parent.chmod(stat.S_IREAD | stat.S_IWRITE | stat.S_IEXEC)
                 function(path)
             try:
                 shutil.rmtree(TEMP, onexc=remove_readonly)

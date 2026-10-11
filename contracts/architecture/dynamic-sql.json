@@ -184,12 +184,12 @@
     "reason": "Reviewed transaction-only database/sql adapter passes the query identifier unchanged to its owned transaction. No SQL is constructed, no table ownership granted; caller repository SQL remains checked by the existing module boundary gate. Exact method/source hash and query identifier required."
   },
   "identity/principal_directory.go#*SQLStore.PagePermissionPrincipals": {
-    "source_sha256": "bb46f6a81b26998ed9559397046e941734afb831345848e7fc8116f5d20db3c3",
+    "source_sha256": "f7ab0cc0ffc738fe3175ef482c58b74b76e76966edd1952f02df5ce5658bdc67",
     "tables": [
       "platform_identity_principal",
       "platform_identity_membership"
     ],
-    "reason": "Reviewed same-file permissionPrincipalWhere: fixed human/tenant/id and active, time-valid department/application membership EXISTS predicates; fixed OFFSET 0 retains correlation for complete subject/organization lookup with cold statistics. All input values and pagination parameter-bound. Count/page retain repeatable-read snapshot and live IAM checks; only two Identity-owned tables read."
+    "reason": "Reviewed PagePermissionPrincipals and same-file permissionPrincipalWhere: fixed human/tenant/id predicates and an uncorrelated active, time-valid membership IN subquery wrapped in IS TRUE. Both principal and membership are explicitly tenant-bound; department/application and all time/id/pagination inputs are bound values, never SQL fragments. The membership set avoids duplicate multi-application members and repeated correlated scans under cold statistics. Count/page retain one repeatable-read snapshot and live IAM checks; only the two listed Identity-owned tables are read. Actual PostgreSQL tests cover cross-tenant membership, wrong department/application, expired/future/revoked membership and injection; two-CPU scale acceptance preserves the original limits."
   },
   "agentcoordination/descendant_stop.go#*SQLRouteStore.readDescendantStopBatchTx": {
     "source_sha256": "698851a679e286137ce7156bb9982da956e1b648050df4308e4abb3b018d2f6b",
