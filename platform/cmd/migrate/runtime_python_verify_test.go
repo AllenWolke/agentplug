@@ -89,7 +89,10 @@ func verifyRuntimePythonExample(t *testing.T, ctx context.Context, db *sql.DB, c
 	invoke("PUT", "knowledge/sources/python-documents/documents/runbook", map[string]any{"expected_source_revision": 0, "expected_document_version": 0, "idempotency_key": "python-process-source", "body": string(body), "acl": knowledge.DocumentACL{OwnerPrincipalID: base.scope.PrincipalID, Readers: []string{f.scope.PrincipalID, f.machine}}}, base.scope.PrincipalID, base.session, 200, nil)
 	var index knowledge.IndexTaskReceipt
 	invoke("POST", "knowledge/indexes/python-documents/tasks", knowledge.IndexTaskRequest{InstallationID: f.scope.InstallationID, IdempotencyKey: "python-process-index", Mode: "full", Config: knowledge.IndexSettings{Dimensions: f.dimensions, WindowRunes: 4096, OverlapRunes: 64, MaximumDocuments: 10, MaximumChunks: 100}}, base.scope.PrincipalID, base.session, 202, &index)
-	indexWait, runWait := 20*time.Second, 25*time.Second
+	// The published runtime policy allows a 60-second task. The old 25-second
+	// polling window could fail a valid, still-running cold process before its
+	// actual task deadline; allow five seconds for terminal outcome projection.
+	indexWait, runWait := 20*time.Second, time.Duration(f.taskTimeoutSeconds)*time.Second+5*time.Second
 	if f.live {
 		indexWait, runWait = 90*time.Second, 330*time.Second
 	}

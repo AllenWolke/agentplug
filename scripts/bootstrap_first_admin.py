@@ -24,9 +24,11 @@ def main():
     for candidate in args.compose_overlay:
         try:
             resolved=candidate.expanduser().resolve(strict=True)
-            resolved.relative_to((ROOT/'.local-secrets').resolve())
+            clean_replay = re.fullmatch(r'agentplug-test-clean-[a-f0-9]{12}', args.project) is not None
+            allowed_root = ROOT/'.tmp'/args.project if clean_replay else ROOT/'.local-secrets'
+            resolved.relative_to(allowed_root.resolve())
         except (OSError,ValueError):
-            parser.error('Compose overlays must be existing regular files under .local-secrets')
+            parser.error('Compose overlays must be private files under .local-secrets or the exact clean test project directory')
         if candidate.is_symlink() or not resolved.is_file() or (os.name!='nt' and resolved.stat().st_mode&0o077):
             parser.error('Compose overlays must be owner-private regular files')
         try:
@@ -35,8 +37,8 @@ def main():
             parser.error('Compose overlay is invalid JSON')
         services=overlay.get('services') if isinstance(overlay,dict) else None
         image_kinds={'platform-app':'platform','platform-migrate':'platform','frontend':'frontend','metric-runner':'metric-runner'}
-        suffix=args.project.removeprefix('agentplug-test-public-')
-        if not args.project.startswith('agentplug-test-public-') or not suffix or not isinstance(services,dict) or not services or any(name not in image_kinds or not isinstance(spec,dict) or spec.get('image')!='agentplug:test-'+image_kinds.get(name,'')+'-'+suffix for name,spec in services.items()):
+        suffix=args.project if clean_replay else args.project.removeprefix('agentplug-test-public-')
+        if (not clean_replay and not args.project.startswith('agentplug-test-public-')) or not suffix or not isinstance(services,dict) or not services or any(name not in image_kinds or not isinstance(spec,dict) or spec.get('image')!='agentplug:test-'+image_kinds.get(name,'')+'-'+suffix for name,spec in services.items()):
             parser.error('Compose overlay must bind only platform images to the exact isolated public replay project tag')
         overlays.append(resolved)
     with args.config.open('rb') as file:

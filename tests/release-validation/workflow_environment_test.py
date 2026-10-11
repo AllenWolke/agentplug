@@ -25,8 +25,9 @@ def test_metric_race_gate_executes_all_packages_with_enforced_limits():
 @pytest.fixture
 def verifier_functions():
     source = ast.parse((ROOT / 'scripts/verify_public_knowledge_postgres.py').read_text(encoding='utf-8'))
-    functions = [node for node in source.body if isinstance(node, ast.FunctionDef) and node.name in {'run', 'safe_event_value'}]
-    namespace = {'subprocess': subprocess, 're': re, 'Path': Path, 'receipt': {}, 'password': 'owned-db-secret', 'runtime_password': 'owned-runtime-secret'}
+    functions = [node for node in source.body if isinstance(node, ast.FunctionDef) and node.name in {'run', 'safe_event_value', 'sanitized_test_tail'}]
+    import os
+    namespace = {'subprocess': subprocess, 'os': os, 're': re, 'Path': Path, 'receipt': {}, 'password': 'owned-db-secret', 'runtime_password': 'owned-runtime-secret'}
     exec(compile(ast.Module(body=functions, type_ignores=[]), '<verifier helpers>', 'exec'), namespace)
     return namespace
 
@@ -44,6 +45,20 @@ def test_fixture_setup_failure_is_diagnosable_without_private_values(monkeypatch
     for secret in ('owned-db-secret', 'owned-runtime-secret', 'sensitive-signing-value', 'another-secret', 'postgresql://'):
         assert secret not in diagnostic
         assert secret not in verifier_functions['receipt']['fixture_error_summary']
+
+
+def test_failed_suite_tail_retains_assertion_and_redacts_credentials(tmp_path, verifier_functions):
+    log = tmp_path / 'failed-suite.log'
+    log.write_text('old progress\n' * 5000 + '\n--- FAIL: TestSQLPermissionScaleAcceptance\n'
+                   'permission scale latency threshold failed\n'
+                   'postgresql://user:owned-db-secret@127.0.0.1/db TOKEN=another-secret\n'
+                   'owned-runtime-secret\n', encoding='utf-8')
+    diagnostic = verifier_functions['sanitized_test_tail'](log, ('owned-db-secret', 'owned-runtime-secret'))
+    assert len(diagnostic) <= 8000
+    assert 'TestSQLPermissionScaleAcceptance' in diagnostic
+    assert 'permission scale latency threshold failed' in diagnostic
+    for secret in ('owned-db-secret', 'owned-runtime-secret', 'another-secret', 'postgresql://'):
+        assert secret not in diagnostic
 
 
 def test_postgres_readiness_waits_for_final_tcp_server():

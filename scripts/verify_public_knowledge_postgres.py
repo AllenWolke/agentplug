@@ -200,6 +200,7 @@ PYTHON_NAME = NAME + "-python"
 KAFKA_NAME = NAME + "-kafka"
 TEMP = ROOT / ".tmp" / OWNER
 EVIDENCE = ROOT / "docs/新增需求/github作品改造"
+SCALE_EVIDENCE = EVIDENCE / ("T3-04A-PostgreSQL权限规模测量" + ("-" + (args.batch_id or OWNER)) + ".json")
 IMAGE = os.environ.get("KNOWLEDGE_TEST_POSTGRES_IMAGE", "pgvector/pgvector:pg16")
 if IMAGE not in {"pgvector/pgvector:pg16", "ankane/pgvector:latest"}:
     raise SystemExit("unsupported fixture image")
@@ -300,6 +301,15 @@ def run(args, **kwargs):
         receipt['fixture_error_summary'] = diagnostic
         print('Fixture setup failed (exit ' + str(error.returncode) + '):\n' + diagnostic, flush=True)
         raise
+
+
+def sanitized_test_tail(path, secrets_to_redact):
+    """Read a bounded failure diagnostic without exposing fixture credentials."""
+    with path.open('rb') as source:
+        source.seek(0, os.SEEK_END)
+        source.seek(max(0, source.tell() - 16384))
+        raw = source.read(16384).decode('utf-8', errors='replace')
+    return safe_event_value(raw, secrets_to_redact)[-8000:]
 
 
 GO_JSON_LIMIT = 64 * 1024 * 1024
@@ -710,7 +720,7 @@ try:
         receipt['go_max_procs']=2
         receipt['postgres_tmpfs_bytes']=1073741824
         env['PERMISSION_SCALE_TEST']='1'
-        env['PERMISSION_SCALE_EVIDENCE_PATH']=str(EVIDENCE/'T3-04A-PostgreSQL权限规模测量.json')
+        env['PERMISSION_SCALE_EVIDENCE_PATH']=str(SCALE_EVIDENCE)
     if args.suite == 'usage':
         packages = ['./internal/usagecost']
         selection = ['-run', 'TestSQLModelBudget|TestSQLUsageConcurrentFirstEventsRemainExactlyOnce|TestSQLUsageLegacyBrowserBoundaryAndAuthorizedBudget']
@@ -1005,7 +1015,7 @@ REVOKE DELETE ON platform_compensation_step,platform_compensation_local_effect,p
                     process = subprocess.run(command, stdout=output,stderr=subprocess.STDOUT,
                                              timeout=900 if args.live_models else 420 if args.suite == 'process' else 210)
                 if args.suite == 'scale' and (go_cache/'scale-evidence.json').is_file():
-                    shutil.copyfile(go_cache/'scale-evidence.json', EVIDENCE/'T3-04A-PostgreSQL权限规模测量.json')
+                    shutil.copyfile(go_cache/'scale-evidence.json', SCALE_EVIDENCE)
                 if args.live_models and not args.python_example_process:
                     evidence = go_cache / 'live-rag.json'
                     if evidence.is_file():
@@ -1042,6 +1052,13 @@ REVOKE DELETE ON platform_compensation_step,platform_compensation_local_effect,p
     if args.suite == 'checkpoint':
         receipt['sdk_test_cases'] = len(cases)
         receipt['sdk_passed_count'] = len(passed)
+    if args.suite == 'scale':
+        measurement = SCALE_EVIDENCE
+        if measurement.is_file():
+            metrics = json.loads(measurement.read_text(encoding='utf-8'))
+            receipt['scale_metrics'] = {key: metrics[key] for key in (
+                'users', 'role_bindings', 'resource_grants', 'concurrency',
+                'samples_per_operation', 'list_p95_ms', 'decision_p95_ms', 'passed')}
     expected = 0 if args.suite == 'platform-all-go' else 5 if args.suite == 'index' else 7 if args.suite == 'source' else (15 if args.suite == 'knowledge' else 11)
     if args.retrieval_cache:
         expected = 2
@@ -1333,6 +1350,13 @@ REVOKE DELETE ON platform_compensation_step,platform_compensation_local_effect,p
 except Exception as error:
     # Never dump subprocess stdout/stderr or its credential-bearing environment.
     receipt["failure"] = type(error).__name__ + (": " + str(error) if not isinstance(error, subprocess.CalledProcessError) else ": fixture command failed")
+    if 'log' in locals() and log.is_file():
+        private_values = [locals().get('password', ''), locals().get('runtime_password', '')]
+        private_values.extend(value for key, value in locals().get('env', {}).items()
+                              if re.search(r'(?i)password|secret|token|key|dsn|credential', key))
+        diagnostic = sanitized_test_tail(log, private_values)
+        receipt['test_failure_summary'] = diagnostic
+        print('PostgreSQL suite ' + args.suite + ' failed:\n' + diagnostic, flush=True)
 finally:
     if args.suite == 'platform-all-go' and 'log' in locals() and log.is_file():
         if 'go_json_summary' not in receipt:
@@ -1354,8 +1378,20 @@ finally:
         actual_python=json.loads(python_inspect.stdout)[0]
         if actual_python.get('Config',{}).get('Labels',{}).get('agentplug.test.owner')!=OWNER:
             receipt['cleanup_errors'].append('Python container ownership mismatch')
-        elif subprocess.run(['docker','rm','--force',PYTHON_NAME],capture_output=True).returncode:
-            receipt['cleanup_errors'].append('owned Python container removal failed')
+        else:
+            if 'failure' in receipt:
+                try:
+                    python_log = subprocess.run(['docker','logs','--tail','80',PYTHON_NAME], capture_output=True, timeout=15)
+                    private_values = [locals().get('password', ''), locals().get('runtime_password', '')]
+                    private_values.extend(value for key, value in locals().get('settings', {}).items()
+                                          if re.search(r'(?i)password|secret|token|key|dsn|credential', key))
+                    diagnostic = safe_event_value((python_log.stdout + python_log.stderr).decode('utf-8', errors='replace'), private_values)[-8000:]
+                    receipt['python_failure_summary'] = diagnostic
+                    print('Owned Python Agent failure diagnostic:\n' + diagnostic, flush=True)
+                except (OSError, subprocess.SubprocessError) as diagnostic_error:
+                    receipt['python_failure_summary'] = 'Agent logs unavailable: ' + type(diagnostic_error).__name__
+            if subprocess.run(['docker','rm','--force',PYTHON_NAME],capture_output=True).returncode:
+                receipt['cleanup_errors'].append('owned Python container removal failed')
     receipt['temporary_python_container_removed']=subprocess.run(['docker','inspect',PYTHON_NAME],capture_output=True).returncode!=0
     if not receipt['temporary_python_container_removed']:receipt['cleanup_errors'].append('owned Python container remains')
     go_inspect = subprocess.run(['docker','inspect',GO_NAME],capture_output=True)

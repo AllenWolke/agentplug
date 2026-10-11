@@ -91,6 +91,7 @@ def main():
             image_services={name:{'image':image_tags[index]} for name,index in [('platform-app',0),('platform-migrate',0),('frontend',1),('metric-runner',2)]}
             image_services['platform-migrate']['profiles']=['init']
             overlay.write_text(json.dumps({'services':image_services}),encoding='utf-8')
+            overlay.chmod(0o600)
             base[base.index('--profile'):base.index('--profile')]=['-f',str(overlay)]
             run(['build','platform-app','frontend','metric-runner'],timeout=900)
             report['temporary_images_built']=image_tags
@@ -112,6 +113,8 @@ def main():
         config_file=temporary/'first-administrator.json'
         config_file.write_text(json.dumps(configuration),encoding='utf-8');config_file.chmod(0o600)
         command=[sys.executable,'-B',str(ROOT/'scripts/bootstrap_first_admin.py'),'--project',owner,'--env-file',str(env_file),'--config',str(config_file)]
+        if args.build_images:
+            command.extend(['--compose-overlay', str(overlay)])
         first=subprocess.run(command,cwd=ROOT,capture_output=True,timeout=60)
         if first.returncode:raise RuntimeError('documented administrator initialization refused')
         if b'FIRST ADMINISTRATOR BOOTSTRAP PASS' not in first.stdout:raise RuntimeError('administrator bootstrap missing receipt')
@@ -180,6 +183,13 @@ def main():
         report['complete']=True
     except Exception as error:
         report['failure']=type(error).__name__
+        # The high-level failure message contains no request/configuration
+        # payload; redact fixture values before publishing it nonetheless.
+        diagnostic = str(error)
+        for value in [*locals().get('settings', {}).values(), locals().get('account_password', '')]:
+            if value:
+                diagnostic = diagnostic.replace(value, '<redacted>')
+        report['failure_summary'] = diagnostic[-3000:]
     finally:
         if started:
             result=run(['down','--volumes','--remove-orphans'],require=False)

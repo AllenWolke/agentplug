@@ -75,9 +75,10 @@ func (s *SQLStore) PagePermissionPrincipals(ctx context.Context, actor sharedker
 	return result, nil
 }
 
-// Only fixed predicates are assembled. OFFSET 0 retains a correlated lookup
-// using the complete subject/organization index; stale bulk-load statistics
-// must not turn this into repeated scans of the entire organization.
+// Only fixed predicates are assembled. The uncorrelated membership subquery
+// builds the authorized subject set once, rather than probing it for every
+// principal counted. IS TRUE retains a hashed subplan even with stale bulk-load
+// statistics and excludes non-matches without duplicating multi-app members.
 // Count and page share the same predicate and repeatable-read snapshot.
 func permissionPrincipalWhere(scope ManagementScope, id string, now time.Time) (string, []any) {
 	where := `p.principal_type='user' AND p.tenant_id=?`
@@ -87,13 +88,13 @@ func permissionPrincipalWhere(scope ManagementScope, id string, now time.Time) (
 		args = append(args, id)
 	}
 	if scope.DepartmentID != "" {
-		where += ` AND EXISTS (SELECT 1 FROM platform_identity_membership m WHERE m.subject_id=p.id AND m.tenant_id=p.tenant_id AND m.department_id=?`
-		args = append(args, scope.DepartmentID)
+		where += ` AND (p.id IN (SELECT m.subject_id FROM platform_identity_membership m WHERE m.tenant_id=? AND m.department_id=?`
+		args = append(args, scope.TenantID, scope.DepartmentID)
 		if scope.ApplicationID != "" {
 			where += ` AND m.application_id=?`
 			args = append(args, scope.ApplicationID)
 		}
-		where += ` AND m.status='active' AND (m.starts_at IS NULL OR m.starts_at<=?) AND (m.expires_at IS NULL OR m.expires_at>?) OFFSET 0)`
+		where += ` AND m.status='active' AND (m.starts_at IS NULL OR m.starts_at<=?) AND (m.expires_at IS NULL OR m.expires_at>?))) IS TRUE`
 		args = append(args, now, now)
 	}
 	return where, args

@@ -32,6 +32,13 @@ func TestSQLPermissionPrincipalDirectoryScopesAndValidity(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// An inconsistent foreign-company membership must never admit a local user.
+	if err := f.store.CreatePrincipal(f.ctx, Principal{Type: PrincipalUser, ID: "directory-foreign-membership", TenantID: scope.TenantID, IsActive: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.ExecContext(f.ctx, sqlutil.Bind(`INSERT INTO platform_identity_membership(id,subject_id,tenant_id,department_id,application_id,status,revision,payload,scope_hash) VALUES(?,?,?,?,?,'active',1,?,?)`), "directory-foreign-member", "directory-foreign-membership", "foreign-tenant", scope.DepartmentID, scope.ApplicationID, "{}", permissionHash([]byte("directory-foreign-member"))); err != nil {
+		t.Fatal(err)
+	}
 	// A second active membership in the same department must not duplicate users.
 	id := f.actors[1].PrincipalID
 	if _, err := f.db.ExecContext(f.ctx, sqlutil.Bind(`INSERT INTO platform_identity_membership(id,subject_id,tenant_id,department_id,application_id,status,revision,payload,scope_hash) VALUES(?,?,?,?,?,'active',1,?,?)`), "directory-duplicate", id, scope.TenantID, scope.DepartmentID, "other-app", "{}", permissionHash([]byte("directory-duplicate"))); err != nil {
@@ -45,7 +52,7 @@ func TestSQLPermissionPrincipalDirectoryScopesAndValidity(t *testing.T) {
 	if err != nil || next.Total != 3 || len(next.Items) != 1 || page.Items[1].ID >= next.Items[0].ID {
 		t.Fatalf("page/order mismatch: %+v %v", next, err)
 	}
-	for _, id := range []string{"directory-other-app", "directory-other-dept", "directory-expired", "directory-future", "directory-revoked", "' OR 1=1 --"} {
+	for _, id := range []string{"directory-other-app", "directory-other-dept", "directory-expired", "directory-future", "directory-revoked", "directory-foreign-membership", "' OR 1=1 --"} {
 		result, err := f.store.PagePermissionPrincipals(f.ctx, f.actors[2], scope, id, 1, 20)
 		if err != nil || result.Total != 0 || len(result.Items) != 0 {
 			t.Fatalf("id filter leaks %q: %+v %v", id, result, err)
@@ -65,7 +72,7 @@ func TestSQLPermissionPrincipalDirectoryScopesAndValidity(t *testing.T) {
 	tenant.Type = "tenant"
 	tenant.DepartmentID = ""
 	result, err = f.store.PagePermissionPrincipals(f.ctx, f.actors[0], tenant, "", 1, 20)
-	if err != nil || result.Total != 8 {
+	if err != nil || result.Total != 9 {
 		t.Fatalf("tenant metadata: %+v %v", result, err)
 	}
 	raw, err := json.Marshal(result)

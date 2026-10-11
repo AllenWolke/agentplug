@@ -165,7 +165,7 @@ def test_signed_image_promotion_depends_on_quality_and_scans() -> None:
         "github.event.workflow_run.head_repository.id == github.event.repository.id",
     ):
         assert requirement in condition
-    checkout = next(step for step in image_job["steps"] if step.get("uses") == "actions/checkout@v4")
+    checkout = next(step for step in image_job["steps"] if step.get("uses") == "actions/checkout@v5")
     assert "workflow_run.head_sha" in checkout["with"]["ref"]
     build = next(step for step in image_job["steps"] if step.get("id") == "build")
     assert "workflow_run.head_sha" in build["with"]["tags"]
@@ -205,7 +205,7 @@ def test_required_sql_checks_fail_if_tests_are_skipped_or_not_selected() -> None
         Loader=yaml.BaseLoader,
     )
     sql = quality['jobs']['identity-sql']
-    command = next(step['run'] for step in sql['steps'] if '--suite identity' in step.get('run', ''))
+    command = '\n'.join(step.get('run', '') for step in sql['steps'])
     for suite in ('identity', 'capability', 'conversation'):
         assert 'python scripts/verify_public_knowledge_postgres.py --suite ' + suite in command
     verifier = (ROOT / 'scripts/verify_public_knowledge_postgres.py').read_text(encoding='utf-8')
@@ -231,7 +231,7 @@ def test_codeql_has_per_language_builds_for_all_active_go_and_java_sources() -> 
     job = supply["jobs"]["sast-and-secrets"]
     modes = {item["language"]: item["build-mode"] for item in job["strategy"]["matrix"]["include"]}
     assert modes == {"go": "manual", "java-kotlin": "manual", "javascript-typescript": "none", "python": "none"}
-    init = next(step for step in job["steps"] if step.get("uses") == "github/codeql-action/init@v3")
+    init = next(step for step in job["steps"] if step.get("uses") == "github/codeql-action/init@v4")
     assert init["with"]["languages"] == "${{ matrix.language }}"
     go_build = next(step for step in job["steps"] if step.get("name") == "Trace every active Go module")
     java_build = next(step for step in job["steps"] if step.get("name") == "Trace Java SDK reactor and generated templates")
@@ -241,7 +241,7 @@ def test_codeql_has_per_language_builds_for_all_active_go_and_java_sources() -> 
         assert path.parent.relative_to(ROOT).as_posix() in go_build["run"]
     for pom in ("sdk/java/pom.xml", "templates/java-generic/pom.xml", "templates/java-spring-ai/pom.xml"):
         assert pom + " clean test" in java_build["run"]
-    analyze = next(step for step in job["steps"] if step.get("uses") == "github/codeql-action/analyze@v3")
+    analyze = next(step for step in job["steps"] if step.get("uses") == "github/codeql-action/analyze@v4")
     assert job["steps"].index(init) < job["steps"].index(go_build) < job["steps"].index(analyze)
     assert job["steps"].index(init) < job["steps"].index(java_build) < job["steps"].index(analyze)
 
@@ -252,7 +252,7 @@ def test_history_scanner_supports_workflow_run_and_does_not_need_comment_permiss
         Loader=yaml.BaseLoader,
     )
     job = supply["jobs"]["history-secret-scan"]
-    checkout = next(step for step in job["steps"] if step.get("uses") == "actions/checkout@v4")
+    checkout = next(step for step in job["steps"] if step.get("uses") == "actions/checkout@v5")
     assert checkout["with"]["fetch-depth"] == "0"
     assert "workflow_run.head_sha" in checkout["with"]["ref"]
     command = next(step["run"] for step in job["steps"] if "git /repo" in step.get("run", ""))

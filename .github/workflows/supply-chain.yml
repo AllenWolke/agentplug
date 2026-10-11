@@ -19,7 +19,7 @@ jobs:
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.id == github.event.repository.id)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -33,22 +33,22 @@ jobs:
           - language: python
             build-mode: none
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: matrix.language == 'go'
         with:
           go-version: '1.25.1'
           cache-dependency-path: '**/go.sum'
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         if: matrix.language == 'java-kotlin'
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -72,7 +72,7 @@ jobs:
           mvn --batch-mode --no-transfer-progress -f sdk/java/pom.xml clean test
           mvn --batch-mode --no-transfer-progress -f templates/java-generic/pom.xml clean test
           mvn --batch-mode --no-transfer-progress -f templates/java-spring-ai/pom.xml clean test
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with:
           category: /language:${{ matrix.language }}
 
@@ -82,21 +82,21 @@ jobs:
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.id == github.event.repository.id)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: anchore/sbom-action@v0
         with: {path: ., format: cyclonedx-json, output-file: lexagent-sbom.cdx.json}
-      - uses: aquasecurity/trivy-action@0.33.1
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with: {name: lexagent-sbom, path: lexagent-sbom.cdx.json, retention-days: 90}
 
   history-secret-scan:
@@ -105,13 +105,13 @@ jobs:
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.id == github.event.repository.id)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Verify scanner exceptions and deleted-history detection
@@ -133,7 +133,7 @@ jobs:
       github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.id == github.event.repository.id
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         include:
@@ -198,12 +198,12 @@ jobs:
             context: templates/python-langgraph
             dockerfile: templates/python-langgraph/Dockerfile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}'}
       - id: registry
         name: Normalize registry owner
@@ -212,7 +212,7 @@ jobs:
           REGISTRY_OWNER: ${{ github.repository_owner }}
         run: printf 'prefix=ghcr.io/%s\n' "${REGISTRY_OWNER,,}" >> "$GITHUB_OUTPUT"
       - id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: '${{ matrix.context }}'
           file: '${{ matrix.dockerfile }}'
@@ -222,7 +222,7 @@ jobs:
           provenance: mode=max
           sbom: true
           tags: ${{ steps.registry.outputs.prefix }}/agentplug:${{ matrix.name }}-${{ github.event.workflow_run.head_sha }}
-      - uses: aquasecurity/trivy-action@0.33.1
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: ${{ steps.registry.outputs.prefix }}/agentplug@${{ steps.build.outputs.digest }}

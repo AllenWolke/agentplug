@@ -38,6 +38,7 @@ type runtimeGoFixture struct {
 	cache                                               *runtimeKnowledgeReplay
 	answerCache                                         bool
 	python                                              bool
+	taskTimeoutSeconds                                  int
 }
 
 func processFreeAddress(t *testing.T) string {
@@ -254,6 +255,7 @@ func prepareRuntimeGoFixture(t *testing.T, ctx context.Context, db *sql.DB, base
 		snapshot.Model.InputMicrosPer1KTokens, snapshot.Model.OutputMicrosPer1KTokens = 100000, 100000
 		snapshot.Model.MaxTokens, snapshot.Runtime.TaskTimeoutSeconds = 1024, 300
 	}
+	f.taskTimeoutSeconds = snapshot.Runtime.TaskTimeoutSeconds
 	if snapshot.ValidateDetails() != nil || len(snapshot.Tool.Functions) != 1 || snapshot.Tool.Functions[0].Name != "inspect" || snapshot.Tool.Functions[0].ToolName != "runtime.inspect" || modelgateway.ValidateFunctionRequest(snapshot.Tool, []string{"inspect"}, []modelgateway.Message{{Role: "user", Content: "fixture input"}}) != nil {
 		t.Fatal("published runtime fixture does not satisfy the example's exact Harness function contract")
 	}

@@ -17,21 +17,21 @@ concurrency:
 
 jobs:
   secret-scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: python scripts/scan_secrets.py
       - run: python scripts/test_scan_secrets.py
 
   quality-policy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install Python quality dependencies
@@ -39,10 +39,10 @@ jobs:
           python -m pip install pytest==8.3.3 pytest-asyncio==0.24.0 PyYAML==6.0.2 fastapi
           python -m pip install -e './sdk/python[grpc,telemetry,checkpoint]'  -r templates/python-langgraph/requirements.txt -r templates/python-generic/requirements.txt
           python -m pip check
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.1'
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -84,7 +84,7 @@ jobs:
       - run: mvn --batch-mode --no-transfer-progress -f templates/java-generic/pom.xml test
       - run: mvn --batch-mode --no-transfer-progress -f templates/java-spring-ai/pom.xml test
       - run: python scripts/run_agent_create_timing.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: template-live-conformance
@@ -93,11 +93,11 @@ jobs:
             .tmp/agent-create-timing.json
 
   docker-plugin-sandbox:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: secret-scan
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify non-root plugin sandbox and seccomp egress denial
         run: |
           set -o pipefail
@@ -111,26 +111,26 @@ jobs:
           for required in TestSandboxRunsRegisteredPluginUnderTheSharedResultContract TestSandboxBlocksMaliciousPlugins TestSandboxSeccompDeniesEgress TestSandboxKillsRunawayPlugin; do
             grep -F -- "--- PASS: $required" .tmp/docker-plugin-sandbox.txt
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: docker-plugin-sandbox
           path: .tmp/docker-plugin-sandbox.txt
 
   native-host-deployment:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: secret-scan
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.1'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -143,7 +143,7 @@ jobs:
       - run: |
           set -o pipefail
           bash scripts/test_native_linux_sandbox.sh 2>&1 | tee artifacts/production-review/native-linux-sandbox-ci.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: native-host-deployment-result
@@ -152,7 +152,7 @@ jobs:
             artifacts/production-review/native-linux-sandbox-ci.txt
 
   platform-go:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -166,14 +166,14 @@ jobs:
       run:
         working-directory: ${{ matrix.module }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.1'
           cache-dependency-path: ${{ matrix.module }}/go.mod
       # Platform conformance executes the real validation-domain adapter.
       # 平台契约回归执行真实校验领域适配器，不能因未安装 Python 依赖假通过。
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: matrix.module == 'platform'
         with:
           python-version: '3.12'
@@ -196,65 +196,79 @@ jobs:
             go test -race -count=1 ./...
 
   identity-sql:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.1'
           cache-dependency-path: platform/go.sum
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: docker pull pgvector/pgvector:pg16
       # The verifier owns random credentials and enforces named PASS/no SKIP,
       # then removes only its temporary container and credential directory.
-      - name: Require PostgreSQL Identity SQL, revocation, memory and history boundaries
+      - name: Require PostgreSQL knowledge sources, retrieval and indexing
         run: |
           python scripts/verify_public_knowledge_postgres.py --suite source
           python scripts/verify_public_knowledge_postgres.py --suite knowledge
           python scripts/verify_public_knowledge_postgres.py --suite index
-          python scripts/verify_public_knowledge_postgres.py --suite identity-full --coverage
-          python scripts/verify_public_knowledge_postgres.py --suite identity --administrator-scopes --batch-id administrator-scopes-ci
-          python scripts/verify_public_knowledge_postgres.py --suite scale
+      - name: Require full Identity SQL and critical-package coverage
+        run: python scripts/verify_public_knowledge_postgres.py --suite identity-full --coverage
+      - name: Require administrator scope and self-grant boundaries
+        run: python scripts/verify_public_knowledge_postgres.py --suite identity --administrator-scopes --batch-id administrator-scopes-ci
+      - name: Require 10000-user permission scale acceptance
+        run: python scripts/verify_public_knowledge_postgres.py --suite scale
+      - name: Require capability ledger, recovery and billing
+        run: |
           python scripts/verify_public_knowledge_postgres.py --suite capability
           python scripts/verify_public_knowledge_postgres.py --suite capability-recovery
           python scripts/verify_public_knowledge_postgres.py --suite capability-billing
+      - name: Require execution recovery, erasure, audit and platform ports
+        run: |
           python scripts/verify_public_knowledge_postgres.py --suite execution
           python scripts/verify_public_knowledge_postgres.py --suite execution-recovery
           python scripts/verify_public_knowledge_postgres.py --suite erasure-audit
           python scripts/verify_public_knowledge_postgres.py --suite platform-ports
+      - name: Require real platform and Python Agent processes
+        run: |
           docker pull golang:1.25-bookworm
           (cd platform && go mod download)
           python scripts/verify_public_knowledge_postgres.py --suite process --answer-cache-process
           docker build -t agentplug:example-python -f examples/python-documents/Dockerfile .
           python scripts/verify_public_knowledge_postgres.py --suite process --python-example-process
+      - name: Require maintenance and Kafka authorization events
+        run: |
           python scripts/verify_public_knowledge_postgres.py --suite maintenance
           docker pull apache/kafka:3.9.1
           python scripts/verify_public_knowledge_postgres.py --suite kafka
+      - name: Require usage, RAG evaluation and conversation boundaries
+        run: |
           python scripts/verify_public_knowledge_postgres.py --suite usage
           python scripts/verify_public_knowledge_postgres.py --suite evaluation --rag-evaluation
           python scripts/verify_public_knowledge_postgres.py --suite evaluation --real-rag-metrics
           python scripts/verify_public_knowledge_postgres.py --suite conversation
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: identity-and-lifecycle-sql
           path: |
-            docs/新增需求/github作品改造/*实际验证.*
-            docs/新增需求/github作品改造/*权限规模测量.json
+            docs/新增需求/github作品改造/*实际验证*.json
+            docs/新增需求/github作品改造/*实际验证*.log
+            docs/新增需求/github作品改造/*权限规模测量*.json
 
   first-administrator-sql:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.1'
           cache-dependency-path: platform/go.sum
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: docker pull pgvector/pgvector:pg16
@@ -262,7 +276,7 @@ jobs:
         run: |
           python scripts/verify_public_knowledge_postgres.py --suite administration
           python scripts/verify_public_knowledge_postgres.py --suite administration --local-admin-bootstrap
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: first-administrator-sql
@@ -271,11 +285,11 @@ jobs:
             docs/新增需求/github作品改造/*本地密码首管理员实际PG验证.*
 
   checkpoint-sql:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install SDK and PostgreSQL Graph test dependencies
@@ -283,35 +297,35 @@ jobs:
       - run: docker pull pgvector/pgvector:pg16
       - name: Require real PostgreSQL role verification and full Python SDK
         run: python scripts/verify_public_knowledge_postgres.py --suite checkpoint --sdk-full
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: checkpoint-sql
           path: docs/新增需求/github作品改造/*SDK检查点实际验证.*
 
   postgres-backup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.1'
           cache-dependency-path: platform/go.sum
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: docker pull pgvector/pgvector:pg16
       - name: Require full native backup and isolated data restore
         run: python scripts/verify_postgres_backup_isolated.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: postgres-backup-restore
           path: docs/新增需求/github作品改造/*备份恢复实际验证.json
 
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         project: [frontend]
@@ -319,10 +333,10 @@ jobs:
       run:
         working-directory: ${{ matrix.project }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: ${{ matrix.project }}/package-lock.json
       - run: npm ci
@@ -333,12 +347,12 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: python -m pip install pytest==8.3.3 pytest-asyncio==0.24.0 PyYAML==6.0.2 fastapi
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.1'
       - name: Static productization gates
@@ -384,14 +398,14 @@ jobs:
             echo '{"os":"macos","compose_config":"passed","shell_syntax":"passed","process_boundary":"passed","docker_e2e":"not_executed","status":"portable_gate_passed","environment_boundary":"Docker Engine unavailable on hosted macOS runner"}' > .tmp/macos-gate.json
             echo "macOS Docker Engine unavailable; required Compose config and shell gates passed"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: macos-gate
           path: .tmp/macos-gate.json
 
   compose-e2e:
     needs: [secret-scan, quality-policy, platform-go, identity-sql, first-administrator-sql, checkpoint-sql, postgres-backup, web]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       DB_PASSWORD: ci-platform-db-pass
@@ -399,7 +413,7 @@ jobs:
       FRONTEND_HOST_PORT: '13000'
       COMPOSE_PROJECT_NAME: lexagent-ci-${{ github.run_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate modular Compose entrypoint
         env:
           INTERNAL_SIGNING_SECRET: ci-platform-signing-secret
@@ -422,13 +436,13 @@ jobs:
 
   modular-cutover:
     needs: [quality-policy]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
       DB_PASSWORD: ci-modular-db-pass
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install modular E2E signing dependency

@@ -109,11 +109,23 @@ func TestSQLPermissionScaleAcceptance(t *testing.T) {
 				begin := time.Now()
 				response, err := client.Do(r)
 				if err == nil {
-					_, err = io.Copy(io.Discard, response.Body)
-					response.Body.Close()
 					if response.StatusCode != http.StatusOK {
 						err = fmt.Errorf("list HTTP %d", response.StatusCode)
+					} else {
+						var page OrganizationPage[Principal]
+						err = json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&page)
+						if err == nil && (page.Total != users+3 || len(page.Items) != 20 || page.Page != 1 || page.PageSize != 20) {
+							err = fmt.Errorf("list returned incomplete count/page: total=%d items=%d page=%d size=%d", page.Total, len(page.Items), page.Page, page.PageSize)
+						}
+						seen := map[string]bool{}
+						for _, principal := range page.Items {
+							if principal.Type != PrincipalUser || principal.TenantID != scope.TenantID || seen[principal.ID] {
+								err = fmt.Errorf("list returned an out-of-scope or duplicated principal")
+							}
+							seen[principal.ID] = true
+						}
 					}
+					response.Body.Close()
 				}
 				elapsed := time.Since(begin)
 				mu.Lock()
