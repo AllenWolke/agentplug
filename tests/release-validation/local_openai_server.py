@@ -10,15 +10,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from transformers import (
-    AutoModel,
-    AutoModelForCausalLM,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-)
 
 
 MODEL_PATH = Path(
@@ -136,6 +129,16 @@ async def lifespan(_: FastAPI):
     missing = [str(path) for path in required_paths if not path.is_dir()]
     if missing:
         raise RuntimeError("model directories do not exist: " + ", ".join(missing))
+    # Admission and cancellation checks do not perform inference. Load the
+    # optional model backend only when this service actually starts.
+    import torch
+    from transformers import (
+        AutoModel,
+        AutoModelForCausalLM,
+        AutoModelForSequenceClassification,
+        AutoTokenizer,
+    )
+
     torch.set_num_threads(max(1, int(os.getenv("LOCAL_MODEL_CPU_THREADS", "8"))))
     runtime.chat_tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
     runtime.chat_model = AutoModelForCausalLM.from_pretrained(MODEL_PATH, dtype="auto")
@@ -187,6 +190,8 @@ async def _run_inference(route_name: str, function: Any, argument: Any) -> dict[
 
 
 def _generate(request: ChatRequest) -> dict[str, Any]:
+    import torch
+
     prompt = runtime.chat_tokenizer.apply_chat_template(
         request.messages, tokenize=False, add_generation_prompt=True
     )
@@ -243,6 +248,8 @@ async def chat_completions(request: ChatRequest) -> dict[str, Any]:
 
 
 def _embed(texts: list[str]) -> dict[str, Any]:
+    import torch
+
     encoded = runtime.embedding_tokenizer(
         texts,
         return_tensors="pt",
@@ -279,6 +286,8 @@ async def embeddings(request: EmbeddingRequest) -> dict[str, Any]:
 
 
 def _rerank(request: RerankRequest) -> dict[str, Any]:
+    import torch
+
     pairs = [[request.query, document] for document in request.documents]
     encoded = runtime.rerank_tokenizer(
         pairs,

@@ -28,7 +28,9 @@ def main() -> int:
     failures: list[str] = []
     environment = os.environ.copy()
     for module, packages in TARGETS.items():
-        command = ["go", "test", "-cover", *packages]
+        # SQL integration fixtures share an owned test database. Serialize
+        # packages so schema setup/cleanup cannot race across package binaries.
+        command = ["go", "test", "-p=1", "-cover", *packages]
         result = subprocess.run(
             command,
             cwd=ROOT / module,

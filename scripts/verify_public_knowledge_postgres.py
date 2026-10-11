@@ -31,6 +31,8 @@ parser.add_argument('--live-models', action='store_true', help='process suite on
 parser.add_argument('--rag-evaluation', action='store_true', help='evaluation suite only; include independent RAG grounding evidence')
 parser.add_argument('--real-rag-metrics', action='store_true', help='evaluation suite only; actual repository metric-service and frozen gold reference SQL evidence')
 parser.add_argument('--local-admin-bootstrap', action='store_true', help='administration suite only; real local-password first administrator without fabricated OIDC')
+parser.add_argument('--containerized-go', action='store_true', help='scale/administration only; run Linux Go next to the owned PostgreSQL, using the existing offline module cache')
+parser.add_argument('--coverage', action='store_true', help='identity-full only; require critical-package coverage with the same owned PostgreSQL credentials')
 parser.add_argument('--retrieval-cache', action='store_true', help='knowledge suite only; focused SQL retrieval-cache and live IAM backend checks')
 parser.add_argument('--answer-cache', action='store_true', help='knowledge suite only; focused governed RAG answer-cache checks')
 parser.add_argument('--answer-cache-process', action='store_true', help='process suite only; actual signed HTTP answer-cache and SQL billing with controlled upstream')
@@ -169,6 +171,10 @@ if args.business_state and (args.suite != 'capability' or args.function_calling)
     raise SystemExit('business state requires its own focused capability suite')
 if args.local_admin_bootstrap and args.suite != 'administration':
     raise SystemExit('local administrator bootstrap requires administration suite')
+if args.containerized_go and args.suite not in {'scale', 'administration'}:
+    raise SystemExit('containerized Go is supported only for scale/administration')
+if args.coverage and args.suite != 'identity-full':
+    raise SystemExit('SQL coverage requires the identity-full fixture')
 if args.real_rag_metrics and (args.suite != 'evaluation' or args.rag_evaluation):
     raise SystemExit('real RAG metrics require the focused evaluation suite')
 if args.python_example_process and (args.suite != 'process' or args.answer_cache_process):
@@ -275,7 +281,25 @@ if args.batch_id:
 
 
 def run(args, **kwargs):
-    return subprocess.run(args, check=True, capture_output=True, **kwargs)
+    try:
+        return subprocess.run(args, check=True, capture_output=True, **kwargs)
+    except subprocess.CalledProcessError as error:
+        # A failing setup command used to hide its entire diagnostic, making
+        # migration/container failures impossible to distinguish in CI. Never
+        # include argv or the environment; redact the owned fixture credentials.
+        private_values = [globals().get('password', ''), globals().get('runtime_password', '')]
+        for key, value in kwargs.get('env', {}).items():
+            if re.search(r'(?i)password|secret|token|key|dsn|credential', key):
+                private_values.append(value)
+        output = (error.stdout or b'') + (error.stderr or b'')
+        if isinstance(output, bytes):
+            output = output.decode('utf-8', errors='replace')
+        diagnostic = safe_event_value(output, private_values)[-4000:]
+        receipt['fixture_exit_code'] = error.returncode
+        receipt['fixture_program'] = Path(args[0]).name
+        receipt['fixture_error_summary'] = diagnostic
+        print('Fixture setup failed (exit ' + str(error.returncode) + '):\n' + diagnostic, flush=True)
+        raise
 
 
 GO_JSON_LIMIT = 64 * 1024 * 1024
@@ -542,12 +566,15 @@ try:
          "--tmpfs", "/var/run/postgresql:rw,nosuid,uid=999,gid=999,mode=0700",
          "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m", IMAGE])
     for attempt in range(60):
-        ready = subprocess.run(["docker", "exec", NAME, "pg_isready", "-U", "postgres", "-d", "knowledge_test"], capture_output=True)
+        # The image starts a socket-only temporary server during initdb. Only
+        # TCP readiness proves that the final server (used by Go) is running.
+        ready = subprocess.run(["docker", "exec", NAME, "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "knowledge_test"], capture_output=True)
         if ready.returncode == 0:
             break
         time.sleep(0.5)
     else:
         raise RuntimeError("owned PostgreSQL readiness timed out")
+    receipt['database_ready_over_tcp'] = True
     # The local socket admin applies explicit DDL, then creates a DML-only role.
     schema = (ROOT / "platform/internal/knowledge/schema.sql").read_text(encoding="utf-8")
     schema += "\n" + (ROOT / "platform/internal/knowledge/source_schema.sql").read_text(encoding="utf-8")
@@ -769,8 +796,9 @@ try:
         migration_env['DB_DRIVER'] = 'pgx'
         migration_env['DB_DSN'] = env['PUBLIC_TEST_POSTGRES_MIGRATION_DSN']
         migration_env.pop('PLATFORM_DEV_RUNTIME_PASSWORD', None)
-        run(['go', 'run', './cmd/migrate'], cwd=ROOT / 'platform', env=migration_env)
-        receipt['actual_complete_migration_command'] = True
+        if not args.containerized_go:
+            run(['go', 'run', './cmd/migrate'], cwd=ROOT / 'platform', env=migration_env)
+            receipt['actual_complete_migration_command'] = True
         packages = ['./cmd/bootstrap-admin']
         selection = ['-run', '^TestFirstAdministratorPostgres$']
         if args.local_admin_bootstrap:
@@ -816,7 +844,7 @@ try:
         receipt['sdk_workflow_database'] = True
     else:
         with (open(os.devnull, 'wb') if args.suite == 'platform-all-go' else log.open("wb")) as output:
-            if args.suite in {'process', 'maintenance', 'kafka', 'platform-all-go'}:
+            if args.suite in {'process', 'maintenance', 'kafka', 'platform-all-go'} or args.containerized_go:
                 go_image = 'golang:1.25-bookworm'
                 run(['docker','image','inspect',go_image])
                 download = Path(os.environ.get('USERPROFILE',str(Path.home())))/'go/pkg/mod/cache/download'
@@ -825,6 +853,12 @@ try:
                 go_settings = {'PUBLIC_TEST_POSTGRES_MIGRATION_DSN': 'postgres://postgres:'+password+'@127.0.0.1:5432/knowledge_test?sslmode=disable',
                                'GOMAXPROCS':'2','GOPROXY':'file:///module-cache','GOSUMDB':'off','GOTOOLCHAIN':'local',
                                'GOCACHE':'/test-cache/build','GOMODCACHE':'/test-cache/mod','GOFLAGS':'-buildvcs=false','CGO_ENABLED':'1'}
+                if args.containerized_go:
+                    # Build caches stay in the disposable Linux filesystem;
+                    # bind mounts on Windows are used only for small evidence.
+                    go_settings.update(GOCACHE='/tmp/go-build', GOMODCACHE='/tmp/go-mod')
+                if args.suite == 'scale':
+                    go_settings.update(PERMISSION_SCALE_TEST='1', PERMISSION_SCALE_EVIDENCE_PATH='/test-cache/scale-evidence.json')
                 if args.suite == 'platform-all-go':
                     runtime_internal_dsn = 'postgres://knowledge_test_runtime:'+runtime_password+'@127.0.0.1:5432/knowledge_test?sslmode=disable'
                     go_settings.update(PUBLIC_TEST_POSTGRES_RUNTIME_DSN=runtime_internal_dsn,
@@ -860,6 +894,11 @@ try:
                     '--mount','type=bind,source='+str(download)+',target=/module-cache,readonly',
                     '--mount','type=bind,source='+str(go_cache)+',target=/test-cache',
                     '--workdir','/workspace/platform',go_image]
+                if args.suite == 'administration':
+                    go_settings.update(APP_ENV='test', DB_DRIVER='pgx', DB_DSN=go_settings['PUBLIC_TEST_POSTGRES_MIGRATION_DSN'])
+                    private_env.write_text(''.join(key+'='+value+'\n' for key,value in go_settings.items()), encoding='utf-8')
+                    run([*container_prefix, 'go', 'run', './cmd/migrate'], timeout=300)
+                    receipt['actual_complete_migration_command'] = True
                 if args.suite == 'platform-all-go':
                     receipt['postgres_host_auth'].update(verify_postgres_runtime_password_auth(container_prefix, go_cache))
                     run([*container_prefix, 'go', 'run', './cmd/migrate'], timeout=300)
@@ -965,6 +1004,8 @@ REVOKE DELETE ON platform_compensation_step,platform_compensation_local_effect,p
                 elif args.suite != 'platform-all-go':
                     process = subprocess.run(command, stdout=output,stderr=subprocess.STDOUT,
                                              timeout=900 if args.live_models else 420 if args.suite == 'process' else 210)
+                if args.suite == 'scale' and (go_cache/'scale-evidence.json').is_file():
+                    shutil.copyfile(go_cache/'scale-evidence.json', EVIDENCE/'T3-04A-PostgreSQL权限规模测量.json')
                 if args.live_models and not args.python_example_process:
                     evidence = go_cache / 'live-rag.json'
                     if evidence.is_file():
@@ -1274,6 +1315,19 @@ REVOKE DELETE ON platform_compensation_step,platform_compensation_local_effect,p
         receipt['knowledge_management_public_http_integrated'] = 'TestPostgresIndexKnowledgeManagementControl' in receipt['passed_tests']
         receipt['knowledge_management_http_test_scope'] = 'Real loopback HTTP, SQL IAM and browser session checks; seeded authentication facts, not full frontend password login or real platform subprocess'
     if args.suite == "process" and not args.checkpoint_agent_process: receipt["platform_http_live"] = True
+    if args.coverage and receipt['tests_passed']:
+        coverage_log = TEMP / 'critical-coverage.log'
+        with coverage_log.open('wb') as output:
+            coverage = subprocess.run([sys.executable, str(ROOT/'scripts/check_go_coverage.py')], cwd=ROOT,
+                                      env=env, stdout=output, stderr=subprocess.STDOUT, timeout=600)
+        diagnostic = safe_event_value(coverage_log.read_text(encoding='utf-8', errors='replace'), (password, runtime_password))
+        with log.open('a', encoding='utf-8') as output:
+            output.write('\n' + diagnostic)
+        print(diagnostic, flush=True)
+        receipt['critical_coverage_exit_code'] = coverage.returncode
+        receipt['critical_coverage_passed'] = coverage.returncode == 0
+        receipt['critical_coverage_scope'] = 'All nine critical packages with owned real PostgreSQL; packages run serially; original thresholds unchanged'
+        receipt['tests_passed'] = receipt['tests_passed'] and receipt['critical_coverage_passed']
     if not receipt["tests_passed"]:
         raise RuntimeError("PostgreSQL suite acceptance failed; see saved log")
 except Exception as error:

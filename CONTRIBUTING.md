@@ -49,6 +49,15 @@ python scripts/verify_python_grouped_regression.py --batch-id your-unique-batch
 python scripts/verify_public_knowledge_postgres.py --suite platform-all-go --batch-id your-unique-batch
 ```
 
+关键 Go 包的覆盖率包含数据库路径，使用相同的隔离验证器运行：
+
+```text
+docker pull pgvector/pgvector:pg16
+python scripts/verify_public_knowledge_postgres.py --suite identity-full --coverage --batch-id your-unique-coverage-batch
+```
+
+该命令先验证身份 SQL，再用同一临时数据库串行测量九个关键包的覆盖率，保留既定阈值。`scripts/unit.sh` 和 `scripts/unit.ps1` 也使用该入口。不要用缺少 PostgreSQL 夹具的单元测试覆盖率替代完整门禁。
+
 该验证器要求 Docker 及已有 Go 依赖缓存，创建独立数据库与随机凭据，结束后清理自己创建的资源。它不会把专用夹具、真实模型或 Code Runtime 用例的跳过记为通过。数据库集成和业务端到端验收的前提不同，不能用普通单元测试代替。
 
 发布前检查 `.github/workflows` 中与该交付相关的任务。维护者需在真实 GitHub 仓库配置权限、私密安全报告和发布参数；本地文件存在不代表这些远端功能已经启用。

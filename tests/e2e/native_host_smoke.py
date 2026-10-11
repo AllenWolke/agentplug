@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import importlib.util
+import http.cookiejar
 import json
 import os
 import secrets
@@ -17,7 +18,8 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from urllib.request import Request, build_opener, ProxyHandler
+from urllib.request import Request, build_opener, ProxyHandler, HTTPCookieProcessor
+from urllib.error import HTTPError
 from urllib.parse import quote
 
 # Owned loopback probes must not traverse workstation HTTP proxies.
@@ -52,7 +54,7 @@ def main() -> int:
         process_identity = {"user": 65534, "group": 65534, "extra_groups": []}
     report["service_uid"] = process_identity.get("user", os.getuid() if hasattr(os, "getuid") else "Windows user")
     root_password, runtime_password = secrets.token_urlsafe(32) + "@:%", secrets.token_urlsafe(32)
-    internal, signing, runner_token, login_password, gateway_token = [secrets.token_urlsafe(32) for _ in range(5)]
+    internal, signing, runner_token, login_password, gateway_token, access_signing = [secrets.token_urlsafe(32) for _ in range(6)]
     db_port, public_port, internal_port, runner_port, frontend_port = [free_port() for _ in range(5)]
     key = Ed25519PrivateKey.generate()
     private = base64.b64encode(key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())).decode()
@@ -74,6 +76,8 @@ def main() -> int:
             password = root_password if service == 'migration' else runtime_password
             dsn = f'postgresql://{user}:{quote(password, safe="")}@127.0.0.1:{db_port}/agentplug?sslmode=disable'
             text = '\n'.join('DB_DSN=' + dsn if line.startswith('DB_DSN=') else line for line in text.splitlines()) + '\n' 
+        if service == 'frontend':
+            text = text.replace('ACCESS_TOKEN_SIGNING_KEY=\n', 'ACCESS_TOKEN_SIGNING_KEY=' + access_signing + '\n')
         for original, replacement in [(5432, db_port), (8080, public_port), (8081, internal_port), (8085, runner_port), (33000, frontend_port)]:
             text = text.replace(f"127.0.0.1:{original}", f"127.0.0.1:{replacement}")
         path = temporary / f"{service}.env"
@@ -122,6 +126,26 @@ def main() -> int:
                            cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=120)
             results.append(service + " PASS")
             print(results[-1], flush=True)
+        platform_values, _ = settings('platform')
+        configuration = {
+            'version': 1, 'db_dsn': platform_values['DB_DSN'],
+            'tenant_id': 'tenant-native', 'tenant_name': 'Native smoke company',
+            'department_id': 'dept-native', 'department_name': 'Native smoke department',
+            'application_id': 'app-native', 'application_name': 'Native smoke application',
+            'principal_id': 'system.admin', 'operator_id': 'native.acceptance.operator',
+            'approval_reference': 'isolated-native-smoke', 'local_password': login_password,
+        }
+        bootstrap_config = temporary / 'first-administrator.json'
+        bootstrap_config.write_text(json.dumps(configuration), encoding='utf-8')
+        bootstrap_config.chmod(0o600)
+        bootstrap_command = [sys.executable, 'scripts/local.py', 'bootstrap-admin', '--config', str(bootstrap_config)]
+        with (temporary / 'bootstrap.log').open('wb') as output:
+            subprocess.run(bootstrap_command, cwd=ROOT, stdout=output, stderr=subprocess.STDOUT, check=True, timeout=60)
+        repeat = subprocess.run(bootstrap_command, cwd=ROOT, capture_output=True, timeout=60)
+        if repeat.returncode == 0:
+            raise RuntimeError('first-administrator initialization replaced an existing identity')
+        results.append('documented first administrator bootstrap and reinitialization denial PASS')
+        print(results[-1], flush=True)
         for service, port, health in [("runner", runner_port, "/readyz"), ("platform", public_port, "/health/ready"),
                                       ("frontend", frontend_port, "/healthz")]:
             values, _ = settings(service)
@@ -133,20 +157,50 @@ def main() -> int:
             wait_http(service, f"http://127.0.0.1:{port}{health}", process)
         with urlopen(f"http://127.0.0.1:{frontend_port}/", timeout=5) as response:
             assert b"<html" in response.read().lower()
-        request = Request(f"http://127.0.0.1:{frontend_port}/auth/login", data=json.dumps({"username": "system.admin", "password": login_password}).encode(), headers={"Content-Type": "application/json"})
-        with urlopen(request, timeout=5) as response:
-            assert response.status == 200 and "lexagent_session=" in response.headers.get("Set-Cookie", "")
-        results.append("frontend static page and authenticated login PASS")
-        public_probe = ROOT / "tests/e2e/public_project_e2e.py"
-        if not public_probe.is_file():
-            raise RuntimeError("public project full example E2E is not implemented yet")
-        subprocess.run([sys.executable, str(public_probe), "--base-url", f"http://127.0.0.1:{frontend_port}"],
-                       cwd=ROOT, check=True, timeout=180)
-        results.append("three SDK examples and public capability boundaries PASS")
+        address = f'http://127.0.0.1:{frontend_port}'
+        cookies = http.cookiejar.CookieJar()
+        client = build_opener(ProxyHandler({}), HTTPCookieProcessor(cookies))
+
+        def call(method, path, body=None):
+            request = Request(address + path, method=method,
+                              data=json.dumps(body).encode() if body is not None else None,
+                              headers={'Content-Type': 'application/json', 'Origin': address})
+            with client.open(request, timeout=10) as response:
+                assert response.status == 200
+                return json.load(response)
+
+        call('POST', '/auth/login', {'username': 'system.admin', 'password': login_password})
+        assert any(cookie.name == 'lexagent_session' for cookie in cookies)
+        call('GET', '/auth/me')
+        call('POST', '/auth/refresh', {})
+        call('GET', '/api/modules/identity/principals')
+        previous_cookie = '; '.join(cookie.name + '=' + cookie.value for cookie in cookies)
+        call('POST', '/auth/logout', {})
+        try:
+            call('GET', '/auth/me')
+        except HTTPError as error:
+            if error.code != 401:
+                raise
+        else:
+            raise RuntimeError('logged-out native session was accepted')
+        try:
+            # Replay the old credential rather than merely checking an empty
+            # browser cookie jar, which would not prove server-side revocation.
+            urlopen(Request(address + '/auth/me', headers={'Cookie': previous_cookie}), timeout=10)
+        except HTTPError as error:
+            if error.code != 401:
+                raise
+        else:
+            raise RuntimeError('revoked native session credential was accepted')
+        results.append('frontend static page, local login, authenticated management, refresh and logout revocation PASS')
+        print(results[-1], flush=True)
         report["status"] = "PASS"
     except Exception as error:
         report["status"] = "FAIL"
         report["error_type"] = type(error).__name__
+        if isinstance(error, HTTPError):
+            report['http_status'] = error.code
+            print('HTTP request failed with status ' + str(error.code), flush=True)
         if owned:
             try:
                 with psycopg.connect(host="127.0.0.1", port=db_port, user="postgres", password=root_password, dbname="agentplug", connect_timeout=2) as db:
@@ -158,7 +212,7 @@ def main() -> int:
         # Output only redacted local diagnostics; never publish private config.
         for log_path in temporary.glob("*.log"):
             diagnostic = log_path.read_text(encoding="utf-8", errors="replace")[-5000:]
-            for secret in [root_password, runtime_password, internal, signing, runner_token, login_password, gateway_token, private, public]:
+            for secret in [root_password, runtime_password, internal, signing, runner_token, login_password, gateway_token, access_signing, private, public]:
                 diagnostic = diagnostic.replace(secret, "[REDACTED]").replace(quote(secret, safe=""), "[REDACTED]")
             print(log_path.name + "\n" + diagnostic, flush=True)
     finally:

@@ -257,7 +257,8 @@ Write-Host "[agent create timing]" -ForegroundColor Cyan
 if ($LASTEXITCODE -ne 0) { throw "agent create timing gate failed" }
 
 Write-Host "[critical package coverage thresholds]" -ForegroundColor Cyan
-& python (Join-Path $projectRoot "scripts\check_go_coverage.py")
+$coverageBatch = "unit-" + [guid]::NewGuid().ToString("N")
+& python (Join-Path $projectRoot "scripts\verify_public_knowledge_postgres.py") --suite identity-full --coverage --batch-id $coverageBatch
 if ($LASTEXITCODE -ne 0) { throw "critical package coverage gate failed" }
 
 Write-Host "[frontend test/build]" -ForegroundColor Cyan

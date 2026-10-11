@@ -219,7 +219,7 @@ step "agent create timing"
 "${PYTHON_BIN}" "${project_root}/scripts/run_agent_create_timing.py"
 
 step "critical package coverage thresholds"
-"${PYTHON_BIN}" "${project_root}/scripts/check_go_coverage.py"
+"${PYTHON_BIN}" "${project_root}/scripts/verify_public_knowledge_postgres.py" --suite identity-full --coverage --batch-id "unit-${RANDOM}-$$"
 
 step "frontend test/build"
 (

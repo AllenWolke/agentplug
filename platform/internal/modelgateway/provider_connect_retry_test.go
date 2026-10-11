@@ -32,7 +32,9 @@ func TestProviderConnectRetryRecoversBeforeTLSAndSendsExactlyOnce(t *testing.T) 
 			transport := adapter.client.Transport.(*http.Transport)
 			defer transport.CloseIdleConnections()
 			transport.TLSClientConfig = server.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
-			transport.TLSHandshakeTimeout = 10 * time.Millisecond
+			// A healthy TLS handshake must have enough time under the race detector.
+			// The stalled pipe below still exercises the real transport timeout.
+			transport.TLSHandshakeTimeout = time.Second
 			originalDial := transport.DialContext
 			transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 				if connects.Add(1) <= 2 {
@@ -44,7 +46,8 @@ func TestProviderConnectRetryRecoversBeforeTLSAndSendsExactlyOnce(t *testing.T) 
 						_ = peer.Close()
 					} else {
 						// 标准 TLS 握手真实超时，未发送 HTTP 请求；关闭夹具防止泄漏。
-						time.AfterFunc(50*time.Millisecond, func() { _ = peer.Close() })
+						timer := time.AfterFunc(2*transport.TLSHandshakeTimeout, func() { _ = peer.Close() })
+						t.Cleanup(func() { timer.Stop(); _ = peer.Close(); _ = client.Close() })
 					}
 					return client, nil
 				}

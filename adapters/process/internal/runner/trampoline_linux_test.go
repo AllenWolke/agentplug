@@ -5,18 +5,40 @@ package runner
 import (
 	"context"
 	"errors"
-	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
 	agentplatform "github.com/lexagent/agent-platform-sdk-go/agentplatform"
 )
 
+// The parent remains race-instrumented. Execute the same ordinary adapter
+// binary used in production as the trampoline, without spending the registered
+// target's process budget on an additional race-instrumented test runtime.
+func productionTrampoline(t *testing.T) string {
+	t.Helper()
+	binary := filepath.Join(t.TempDir(), "adapter")
+	command := exec.Command("go", "build", "-race=false", "-buildvcs=false", "-o", binary, "../../cmd/adapter")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("build production trampoline: %v\n%s", err, output)
+	}
+	return binary
+}
+
 // limitsProbe reports the target's own RLIMIT_CPU and RLIMIT_NPROC. It reads
 // /proc/self/limits because dash's ulimit does not implement -u.
 // limitsProbe 自报目标的 RLIMIT_CPU 与 RLIMIT_NPROC：dash 的 ulimit 不支持 -u，
 // 因此读取 /proc/self/limits。
-const limitsProbe = `printf '{"cpu":"%s","processes":"%s"}' "$(grep '^Max cpu time' /proc/self/limits | tr -s ' ' | cut -d' ' -f4)" "$(grep '^Max processes' /proc/self/limits | tr -s ' ' | cut -d' ' -f4)"`
+// Use shell builtins: RLIMIT_NPROC includes all threads of this UID, so grep,
+// tr and cut pipelines consume the tiny envelope before it can be inspected.
+const limitsProbe = `while read -r first second third fourth rest; do
+case "$first $second" in
+"Max cpu") cpu="$fourth" ;;
+"Max processes") processes="$third" ;;
+esac
+done < /proc/self/limits
+printf '{"cpu":"%s","processes":"%s"}' "$cpu" "$processes"`
 
 // TestTrampolineAppliesRegisteredLimits is the running evidence that the rlimit
 // envelope actually reaches the target: the target reports its own RLIMIT_CPU
@@ -31,7 +53,7 @@ func TestTrampolineAppliesRegisteredLimits(t *testing.T) {
 		Binary:  "/bin/sh",
 		Args:    []string{"-c", limitsProbe},
 		Sandbox: sandbox,
-		Self:    os.Args[0],
+		Self:    productionTrampoline(t),
 	}
 	response, err := r.Invoke(context.Background(), request())
 	if err != nil {
@@ -50,7 +72,7 @@ func TestTrampolineAppliesRegisteredLimits(t *testing.T) {
 // TestTrampolineRunsRegisteredCommandRoundTrip 证明正常路径经跳板仍端到端可用：
 // stdin 载荷进、JSON 文档出。
 func TestTrampolineRunsRegisteredCommandRoundTrip(t *testing.T) {
-	r := Runner{Binary: "/bin/cat", Sandbox: registeredSandbox(), Self: os.Args[0]}
+	r := Runner{Binary: "/bin/cat", Sandbox: registeredSandbox(), Self: productionTrampoline(t)}
 	response, err := r.Invoke(context.Background(), request())
 	if err != nil {
 		t.Fatalf("Invoke() error = %v", err)
@@ -68,7 +90,7 @@ func TestTrampolineEnforcesCPUTimeBudget(t *testing.T) {
 	sandbox := registeredSandbox()
 	sandbox.MaxCPUSeconds = 1
 	sandbox.Timeout = 30 * time.Second
-	r := Runner{Binary: "/bin/sh", Args: []string{"-c", "while :; do :; done"}, Sandbox: sandbox, Self: os.Args[0]}
+	r := Runner{Binary: "/bin/sh", Args: []string{"-c", "while :; do :; done"}, Sandbox: sandbox, Self: productionTrampoline(t)}
 	started := time.Now()
 	_, err := r.Invoke(context.Background(), request())
 	elapsed := time.Since(started)
@@ -87,7 +109,7 @@ func TestTrampolineEnforcesCPUTimeBudget(t *testing.T) {
 func TestTrampolineReportsOutputLimitBreach(t *testing.T) {
 	sandbox := registeredSandbox()
 	sandbox.MaxOutputBytes = 32
-	r := Runner{Binary: "/bin/sh", Args: []string{"-c", "yes x | head -c 4096"}, Sandbox: sandbox, Self: os.Args[0]}
+	r := Runner{Binary: "/bin/sh", Args: []string{"-c", `i=0; while [ "$i" -lt 4096 ]; do printf x; i=$((i+1)); done`}, Sandbox: sandbox, Self: productionTrampoline(t)}
 	_, err := r.Invoke(context.Background(), request())
 	if !errors.Is(err, ErrOutputLimit) {
 		t.Fatalf("expected ErrOutputLimit, got %v", err)
