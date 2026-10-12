@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -99,8 +100,81 @@ func (f *synchronousReviewFixture) approve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.module.dispatcher.dispatch(context.Background(), run); err != nil {
+	// Production approval enqueues a durable command. The previous invoke may
+	// still own the local single-flight guard after committing waiting; the
+	// running dispatcher reconciles an unleased resume after that owner exits.
+	// A one-shot direct dispatch here can silently merge with the old owner.
+	dispatcher := f.module.dispatcher
+	ctx, cancel := context.WithCancel(context.Background())
+	dispatcher.Start(ctx)
+	t.Cleanup(func() {
+		cancel()
+		shutdown, stop := context.WithTimeout(context.Background(), 3*time.Second)
+		defer stop()
+		if err := dispatcher.Close(shutdown); err != nil {
+			t.Errorf("approval dispatcher shutdown: %v", err)
+		}
+	})
+	dispatcher.Enqueue(run)
+}
+
+// Hold the old dispatch after the durable waiting commit, before its deferred
+// single-flight release. This makes the formerly intermittent race explicit.
+type synchronousWaitingCommitBarrier struct {
+	*platformruntime.Store
+	committed chan struct{}
+	release   chan struct{}
+}
+
+func (s *synchronousWaitingCommitBarrier) FinalizeLeased(id string, status platformruntime.Status, revision uint64, token string, output, payload map[string]any) (platformruntime.Run, error) {
+	run, err := s.Store.FinalizeLeased(id, status, revision, token, output, payload)
+	if err == nil && status == platformruntime.StatusWaiting {
+		close(s.committed)
+		<-s.release
+	}
+	return run, err
+}
+
+func TestSynchronousReviewResumeQueuedBeforeOwnerReleaseRechecksRevocation(t *testing.T) {
+	f := newSynchronousReviewFixture(t)
+	barrier := &synchronousWaitingCommitBarrier{Store: f.store, committed: make(chan struct{}), release: make(chan struct{})}
+	f.module.store = barrier
+	f.module.dispatcher.repository = barrier
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(barrier.release) }) }
+	t.Cleanup(release)
+	f.gateway.beforeSuccess = func() { f.revoked.Store(true) }
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	result := f.invoke(ctx)
+	select {
+	case <-barrier.committed:
+	case <-ctx.Done():
+		t.Fatal("waiting commit did not reach the ownership barrier")
+	}
+	f.approve(t)
+	// Prove the first resume delivery hits the held owner, without relying on
+	// whether the worker happens to consume its queue before we release it.
+	run, err := f.store.Get(f.scope.RunID)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if err := f.module.dispatcher.dispatch(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	if run.Status != platformruntime.StatusRunning || run.LeaseToken != "" || f.gateway.resumes.Load() != 0 {
+		t.Fatal("resume bypassed the previous dispatch owner")
+	}
+	release()
+	if got := <-result; !errors.Is(got.err, contract.ErrPermissionDenied) || got.response.Output != nil {
+		t.Fatalf("reconciled result bypassed revocation: %+v", got)
+	}
+	run, err = f.store.Get(f.scope.RunID)
+	if err != nil || run.Status != platformruntime.StatusSucceeded {
+		t.Fatalf("approved resume did not preserve terminal history: %s, %v", run.Status, err)
+	}
+	if f.gateway.invokes.Load() != 1 || f.gateway.resumes.Load() != 1 {
+		t.Fatal("ownership handover repeated or lost business work")
 	}
 }
 
