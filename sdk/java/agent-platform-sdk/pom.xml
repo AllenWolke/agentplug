@@ -12,7 +12,7 @@
 
   <properties>
     <junit.version>5.11.4</junit.version>
-    <jackson.version>2.18.2</jackson.version>
+    <jackson.version>2.18.11</jackson.version>
   </properties>
 
   <dependencies>

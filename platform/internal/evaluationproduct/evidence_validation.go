@@ -38,7 +38,9 @@ func evaluationReportHash(evidence EvidenceData, cases []CaseResultData) (string
 }
 
 func verifyEvidenceCases(ctx context.Context, store Store, scope Scope, evidence EvidenceData, inputs []json.RawMessage) error {
-	if store == nil || !scope.valid() || !validID(evidence.RunID) || evidence.SampleCount <= 0 || len(evidence.CaseResultIDs) != evidence.SampleCount || len(evidence.Metrics) == 0 {
+	// Validate against the frozen dataset before allocating or querying cases.
+	// Keep the same ceilings as dataset admission, including for stored evidence.
+	if store == nil || !scope.valid() || !validID(evidence.RunID) || evidence.SampleCount <= 0 || evidence.SampleCount > 10000 || len(inputs) != evidence.SampleCount || len(evidence.CaseResultIDs) != evidence.SampleCount || len(evidence.Metrics) == 0 || len(evidence.Metrics) > 100 {
 		return ErrSnapshotInvalid
 	}
 	results := make([]CaseResultData, evidence.SampleCount)
@@ -51,7 +53,7 @@ func verifyEvidenceCases(ctx context.Context, store Store, scope Scope, evidence
 			return snapshotInvalid("evidence case result is missing")
 		}
 		result, err := decodeCaseResult(row)
-		if err != nil || result.RunID != evidence.RunID || result.Index != i || len(result.Metrics) != len(evidence.Metrics) || len(inputs) != evidence.SampleCount || result.InputHash != Checksum(inputs[i]) {
+		if err != nil || result.RunID != evidence.RunID || result.Index != i || len(result.Metrics) != len(evidence.Metrics) || result.InputHash != Checksum(inputs[i]) {
 			return snapshotInvalid("evidence case result is invalid")
 		}
 		for metricIndex, metric := range evidence.Metrics {

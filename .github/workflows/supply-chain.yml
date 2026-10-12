@@ -40,30 +40,46 @@ jobs:
       - uses: actions/setup-go@v6
         if: matrix.language == 'go'
         with:
-          go-version: '1.25.1'
-          cache-dependency-path: '**/go.sum'
+          go-version: '1.26.9'
+          # Keep the extraction cache independent of other workflow jobs.
+          cache: false
       - uses: actions/setup-java@v5
         if: matrix.language == 'java-kotlin'
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - uses: actions/setup-python@v6
+        if: matrix.language == 'go'
+        with:
+          python-version: '3.12'
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          # Keep the default checks and include the Go quality suite reviewed locally.
+          queries: ${{ matrix.language == 'go' && '+security-and-quality' || '' }}
       - name: Trace every active Go module
         if: matrix.language == 'go'
+        env:
+          CODEQL_EXTRACTOR_GO_BUILD_TRACING: 'on'
         run: |
           set -euo pipefail
+          export GOCACHE="$RUNNER_TEMP/codeql-go-cache"
           for module in adapters/grpc-mapping adapters/legacy-http adapters/process adapters/sidecar agents/examples/go-eino cli/agent-eval cli/agentctl contracts/agent-evaluation/go contracts/code-runtime examples/go-operations frontend platform sdk/go templates/go-eino templates/go-generic workers/code-runtime workers/metric-runner; do
-            main_packages=$(go -C "$module" list -f '{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...)
-            if [[ -n "$main_packages" ]]; then
-              mkdir -p "$RUNNER_TEMP/codeql-go/$module"
-              go -C "$module" build -o "$RUNNER_TEMP/codeql-go/$module/" ./...
-            else
-              go -C "$module" build ./...
-            fi
+            # CodeQL's Go interceptor expects "build" as the first argument.
+            # "go -C directory build" compiles but is skipped by the extractor.
+            output="$RUNNER_TEMP/codeql-go/$module"
+            mkdir -p "$output"
+            (
+              cd "$module"
+              main_packages=$(go list -f '{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...)
+              if [[ -n "$main_packages" ]]; then
+                go build -o "$output/" ./...
+              else
+                go build ./...
+              fi
+            )
           done
       - name: Trace Java SDK reactor and generated templates
         if: matrix.language == 'java-kotlin'
@@ -73,8 +89,43 @@ jobs:
           mvn --batch-mode --no-transfer-progress -f templates/java-generic/pom.xml clean test
           mvn --batch-mode --no-transfer-progress -f templates/java-spring-ai/pom.xml clean test
       - uses: github/codeql-action/analyze@v4
+        id: codeql
         with:
           category: /language:${{ matrix.language }}
+          output: ${{ runner.temp }}/codeql-raw
+          # v4 explicitly supports SARIF post-processing with failure-only.
+          # Analysis failures still fail this job and retain debugging uploads.
+          upload: ${{ matrix.language == 'go' && 'failure-only' || 'always' }}
+          ref: ${{ github.event_name == 'workflow_run' && 'refs/heads/main' || github.ref }}
+          sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Verify reviewed CodeQL exception negative controls
+        if: matrix.language == 'go'
+        run: python scripts/test_codeql_false_positives.py
+      - name: Apply exact reviewed Go false positives to an upload copy
+        if: matrix.language == 'go'
+        run: |
+          python scripts/filter_codeql_false_positives.py \
+            --input "${{ steps.codeql.outputs.sarif-output }}/go.sarif" \
+            --output "$RUNNER_TEMP/codeql-reviewed/go.sarif" \
+            --summary "$RUNNER_TEMP/codeql-reviewed/review.json"
+      - uses: github/codeql-action/upload-sarif@v4
+        if: matrix.language == 'go'
+        with:
+          sarif_file: ${{ runner.temp }}/codeql-reviewed/go.sarif
+          category: /language:go
+          ref: ${{ github.event_name == 'workflow_run' && 'refs/heads/main' || github.ref }}
+          sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+          wait-for-processing: true
+      - name: Retain raw Go analysis and exact review receipt
+        uses: actions/upload-artifact@v6
+        if: always() && matrix.language == 'go'
+        with:
+          name: codeql-go-reviewed-results
+          path: |
+            ${{ runner.temp }}/codeql-raw/*.sarif
+            ${{ runner.temp }}/codeql-reviewed/*.sarif
+            ${{ runner.temp }}/codeql-reviewed/review.json
+          retention-days: 90
 
   sbom-and-vulnerability:
     if: >-
@@ -88,16 +139,26 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: anchore/sbom-action@v0
-        with: {path: ., format: cyclonedx-json, output-file: lexagent-sbom.cdx.json}
+        with: {path: ., format: cyclonedx-json, output-file: lexagent-sbom.cdx.json, upload-artifact: false}
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.70.0
           scan-type: fs
           scan-ref: .
+          scanners: vuln
+          format: json
+          output: trivy-source.json
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
       - uses: actions/upload-artifact@v6
-        with: {name: lexagent-sbom, path: lexagent-sbom.cdx.json, retention-days: 90}
+        if: always()
+        with:
+          name: lexagent-sbom
+          path: |
+            lexagent-sbom.cdx.json
+            trivy-source.json
+          retention-days: 90
 
   history-secret-scan:
     if: >-
@@ -118,12 +179,22 @@ jobs:
         run: python scripts/test_gitleaks_allowlists.py
       - name: Scan full fetched history without event-specific Action code
         run: |
+          mkdir -p "$RUNNER_TEMP/history-scan"
           docker run --rm --network none --read-only --tmpfs /tmp \
+            --user "$(id -u):$(id -g)" -e HOME=/tmp \
             -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo \
             --mount "type=bind,source=$PWD,target=/repo,readonly" \
-            zricethezav/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055 git /repo --config=/repo/.gitleaks.toml --log-opts=--all --redact --no-banner
+            --mount "type=bind,source=$RUNNER_TEMP/history-scan,target=/reports" \
+            zricethezav/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055 git /repo --config=/repo/.gitleaks.toml --log-opts=--all --redact --no-banner --report-format=json --report-path=/reports/history.json
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: history-secret-scan
+          path: ${{ runner.temp }}/history-scan/history.json
+          retention-days: 14
 
   image-provenance:
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: write
@@ -135,6 +206,8 @@ jobs:
       github.event.workflow_run.head_repository.id == github.event.repository.id
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
+      max-parallel: 4
       matrix:
         include:
           - name: platform
@@ -158,6 +231,9 @@ jobs:
           - name: code-runtime
             context: .
             dockerfile: workers/code-runtime/Dockerfile
+            # Required runtime base; this immutable Docker CLI index includes
+            # Linux AMD64 and ARM64, matching the published image platforms.
+            build-args: CODE_RUNTIME_DOCKER_CLI_IMAGE=docker.io/library/docker:29-cli@sha256:1a4c7cb63513f349bdad01fcc6e0f3f2f67d37b9da86f14dc0d4a0942eecda00
           - name: agent-eval
             context: .
             dockerfile: cli/agent-eval/Dockerfile
@@ -217,15 +293,38 @@ jobs:
           context: '${{ matrix.context }}'
           file: '${{ matrix.dockerfile }}'
           target: ${{ matrix.target || '' }}
+          build-args: ${{ matrix.build-args || '' }}
           platforms: linux/amd64,linux/arm64
           push: true
+          pull: true
           provenance: mode=max
           sbom: true
           tags: ${{ steps.registry.outputs.prefix }}/agentplug:${{ matrix.name }}-${{ github.event.workflow_run.head_sha }}
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.70.0
           scan-type: image
           image-ref: ${{ steps.registry.outputs.prefix }}/agentplug@${{ steps.build.outputs.digest }}
+          scanners: vuln
+          format: json
+          output: trivy-image-amd64.json
+          timeout: 15m
+          trivy-config: .github/trivy-amd64.yaml
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Scan ARM64 image
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: v0.70.0
+          scan-type: image
+          image-ref: ${{ steps.registry.outputs.prefix }}/agentplug@${{ steps.build.outputs.digest }}
+          scanners: vuln
+          format: json
+          output: trivy-image-arm64.json
+          timeout: 15m
+          trivy-config: .github/trivy-arm64.yaml
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
@@ -238,3 +337,11 @@ jobs:
       - uses: sigstore/cosign-installer@v3
       - run: cosign sign --yes -a source_commit=${{ github.event.workflow_run.head_sha }} ${{ steps.registry.outputs.prefix }}/agentplug@${{ steps.build.outputs.digest }}
       - run: cosign attest --yes --type spdxjson --predicate image-sbom.spdx.json ${{ steps.registry.outputs.prefix }}/agentplug@${{ steps.build.outputs.digest }}
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: image-supply-chain-${{ matrix.name }}
+          path: |
+            trivy-image-*.json
+            image-sbom.spdx.json
+          retention-days: 30

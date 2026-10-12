@@ -1,0 +1,3 @@
+# Select the actual platform manifest, rather than scanning the runner default.
+image:
+  platform: linux/amd64

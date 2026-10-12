@@ -11,7 +11,7 @@ import java.util.Base64;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.boot.web.context.ServerPortInfoApplicationContextInitializer;
+import org.springframework.boot.web.server.context.ServerPortInfoApplicationContextInitializer;
 
 /** Auto-configuration tests: fail closed without platform material, wire the
  * full surface when it is present. / 自动装配测试：平台材料缺失即失败闭合；

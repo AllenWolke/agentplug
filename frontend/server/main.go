@@ -1032,20 +1032,53 @@ func (g *gateway) serveStatic(w http.ResponseWriter, r *http.Request) {
 	// Browsers may otherwise heuristically cache a previous index.html and keep
 	// requesting bundles which no longer exist in the new image.
 	w.Header().Set("Cache-Control", "no-store")
-	clean := filepath.Clean(strings.TrimPrefix(r.URL.Path, "/"))
-	if clean == "." || strings.HasPrefix(clean, "..") {
-		clean = "index.html"
+	name := strings.TrimPrefix(r.URL.Path, "/")
+	if name == "" {
+		name = "index.html"
 	}
-	candidate := filepath.Join(g.staticRoot, clean)
-	if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-		http.ServeFile(w, r, candidate)
+	if !filepath.IsLocal(name) || strings.ContainsAny(name, "\\:\x00") {
+		http.NotFound(w, r)
+		return
+	}
+	// Root confines both lookup and open, including symlinks and concurrent
+	// renames. A lexical path check alone cannot protect the later file open.
+	root, err := os.OpenRoot(g.staticRoot)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer root.Close()
+	file, err := root.Open(name)
+	if err == nil {
+		defer file.Close()
+		if info, statErr := file.Stat(); statErr == nil && info.Mode().IsRegular() {
+			if strings.HasSuffix(r.URL.Path, "/index.html") {
+				http.Redirect(w, r, "./", http.StatusMovedPermanently)
+				return
+			}
+			http.ServeContent(w, r, info.Name(), info.ModTime(), file)
+			return
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		http.NotFound(w, r)
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/assets/") {
 		http.NotFound(w, r)
 		return
 	}
-	http.ServeFile(w, r, filepath.Join(g.staticRoot, "index.html"))
+	entry, err := root.Open("index.html")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer entry.Close()
+	info, err := entry.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		http.NotFound(w, r)
+		return
+	}
+	http.ServeContent(w, r, info.Name(), info.ModTime(), entry)
 }
 
 func contains(items []string, want string) bool {

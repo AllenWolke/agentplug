@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build the modular-monolith platform from the repository root.
 # 从仓库根目录构建模块化单体平台，保证 Docker/Linux 与本地模块布局一致。
-FROM golang:1.25.1-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm AS build
 
 WORKDIR /src/platform
 # Use the official module proxy by default. Private/offline environments can
@@ -47,7 +47,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates wget \
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates wget \
     && addgroup -g 10001 -S lexagent \
     && adduser -u 10001 -S -G lexagent lexagent
 

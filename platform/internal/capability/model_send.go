@@ -24,11 +24,11 @@ func (m *Module) releaseUnsentAdmission(ctx context.Context, scope, key, fingerp
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err := m.prepareModelSend(writeCtx, scope, key, fingerprint, reservation, time.Now().UTC().Add(2*time.Minute), attemptToken); err != nil {
-		log.Printf("unsent admission accounting retained trace=%s error_type=%T", traceID, err)
+		log.Printf("unsent admission accounting retained trace=%q error_type=%T", traceID, err)
 		return true
 	}
 	if err := m.abortUnsentModel(writeCtx, scope, key, fingerprint, reservation, attemptToken); err != nil {
-		log.Printf("unsent admission proof awaits accounting trace=%s error_type=%T", traceID, err)
+		log.Printf("unsent admission proof awaits accounting trace=%q error_type=%T", traceID, err)
 	}
 	return true
 }

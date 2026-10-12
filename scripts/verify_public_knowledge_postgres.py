@@ -855,7 +855,7 @@ try:
     else:
         with (open(os.devnull, 'wb') if args.suite == 'platform-all-go' else log.open("wb")) as output:
             if args.suite in {'process', 'maintenance', 'kafka', 'platform-all-go'} or args.containerized_go:
-                go_image = 'golang:1.25-bookworm'
+                go_image = 'golang:1.26.9-bookworm'
                 run(['docker','image','inspect',go_image])
                 download = Path(os.environ.get('USERPROFILE',str(Path.home())))/'go/pkg/mod/cache/download'
                 if not download.is_dir(): raise RuntimeError('existing offline Go module download cache required')

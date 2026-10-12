@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS web-build
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS web-build
 WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
@@ -6,14 +6,16 @@ COPY frontend/index.html frontend/vite.config.js frontend/styles.css ./
 COPY frontend/src ./src
 RUN npm run build
 
-FROM golang:1.25.1-bookworm AS gateway-build
+FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm AS gateway-build
+ARG TARGETOS=linux
+ARG TARGETARCH
 WORKDIR /src/frontend
 COPY frontend/go.mod ./go.mod
 COPY frontend/server ./server
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/frontend-gateway ./server
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/frontend-gateway ./server
 
 FROM alpine:3.21
-RUN addgroup -S lexagent && adduser -S -G lexagent lexagent
+RUN apk upgrade --no-cache && addgroup -S lexagent && adduser -S -G lexagent lexagent
 WORKDIR /app
 COPY --from=gateway-build /out/frontend-gateway /usr/local/bin/frontend-gateway
 COPY --from=web-build /src/frontend/dist ./

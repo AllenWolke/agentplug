@@ -19,7 +19,7 @@ docker compose version
 ## 2. 准备私有配置
 
 ```text
-python -m pip install "cryptography>=43,<46"
+python -m pip install "cryptography>=50,<51"
 python scripts/prepare_local_development.py
 ```
 

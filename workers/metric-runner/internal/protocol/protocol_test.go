@@ -3,15 +3,62 @@ package protocol
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestLoadDescriptorRejectsOversizedDocumentAtReadBoundary(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "plugin.json")
+	f, err := os.Create(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(32 << 20); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	if _, err := LoadDescriptor(file); !errors.Is(err, ErrDescriptorInvalid) {
+		t.Fatalf("oversized descriptor accepted: %v", err)
+	}
+	runtime.ReadMemStats(&after)
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 4<<20 {
+		t.Fatalf("descriptor limit applied after allocating file contents: %d bytes", allocated)
+	}
+}
+
+func TestArtifactStreamingDigestPreservesFullFileVerification(t *testing.T) {
+	data := []byte(strings.Repeat("plugin-artifact-", 100000))
+	sum := sha256.Sum256(data)
+	d := Descriptor{SHA256: hex.EncodeToString(sum[:])}
+	file := filepath.Join(t.TempDir(), "plugin")
+	if err := os.WriteFile(file, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.VerifyArtifact(file); err != nil {
+		t.Fatal(err)
+	}
+	data[len(data)-1] ^= 1
+	if err := os.WriteFile(file, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.VerifyArtifact(file); !errors.Is(err, ErrDigestMismatch) {
+		t.Fatalf("tail tampering not detected: %v", err)
+	}
+}
 
 func validLimits() Limits {
 	return Limits{MaxCPUSeconds: 2, MaxMemoryBytes: 64 << 20, MaxPIDs: 8, MaxOutputBytes: 256 << 10, TimeoutSeconds: 5}

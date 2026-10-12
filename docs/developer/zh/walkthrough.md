@@ -6,10 +6,10 @@
 
 ## 先运行完整流程
 
-需要 Python 3.12+、Go 1.25+、Docker Engine / Docker Desktop 和 Compose v2，以及下载 Python 包、Go 模块和基础镜像的网络。Docker 引擎须处于运行状态。在平台仓库根目录执行：
+需要 Python 3.12+、Go 1.26.9+、Docker Engine / Docker Desktop 和 Compose v2，以及下载 Python 包、Go 模块和基础镜像的网络。Docker 引擎须处于运行状态。在平台仓库根目录执行：
 
 ```text
-python -m pip install "cryptography>=43,<46"
+python -m pip install "cryptography>=50,<51"
 python tests/e2e/developer_walkthrough.py --report .tmp/developer-walkthrough-report.json
 ```
 

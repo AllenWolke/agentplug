@@ -17,7 +17,7 @@ func modelBudgetMessages(messages []modelgateway.Message, policy policyasset.Too
 	result := make([]struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
-	}, 0, len(messages)+len(names))
+	}, 0, len(messages))
 	appendContent := func(role, content string) {
 		result = append(result, struct {
 			Role    string `json:"role"`

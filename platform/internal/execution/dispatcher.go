@@ -339,7 +339,7 @@ func (d *Dispatcher) Enqueue(run platformruntime.Run) {
 	if len(d.childQueues) != 0 {
 		depth, err := scheduledDelegationDepth(run)
 		if err != nil {
-			log.Printf("execution queue rejected run_id=%s code=DELEGATION_DEPTH_INVALID", run.ID)
+			log.Printf("execution queue rejected run_id=%q code=DELEGATION_DEPTH_INVALID", run.ID)
 			return
 		}
 		if depth > 0 {
@@ -544,7 +544,6 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 					return nil
 				}
 			}
-			lastErr = requestErr
 			lastCode, _ = classifyDispatchFailure(0, requestErr)
 			if eventErr := d.recordDispatchFailure(ctx, run.ID, attempt, lastCode, false, 0); eventErr != nil {
 				return eventErr
@@ -557,7 +556,6 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 		cancel()
 		if status >= 200 && status < 300 {
 			if readErr != nil {
-				lastErr = fmt.Errorf("read agent response: %w", readErr)
 				lastCode, _ = classifyDispatchFailure(status, readErr)
 				if eventErr := d.recordDispatchFailure(ctx, run.ID, attempt, lastCode, false, status); eventErr != nil {
 					return eventErr
@@ -575,7 +573,6 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 				Output map[string]any `json:"output"`
 			}
 			if len(body) > 0 && json.Unmarshal(body, &result) != nil {
-				lastErr = errors.New("agent returned malformed execution response")
 				lastCode = "AGENT_CONTRACT_INVALID"
 				if eventErr := d.recordDispatchFailure(ctx, run.ID, attempt, lastCode, false, status); eventErr != nil {
 					return eventErr
@@ -601,7 +598,6 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 			case "succeeded":
 				// Only explicit terminal success is accepted. / 只接受明确成功终态。
 			default:
-				lastErr = fmt.Errorf("agent returned unsupported status %q", result.Status)
 				lastCode = "AGENT_CONTRACT_INVALID"
 				if eventErr := d.recordDispatchFailure(ctx, run.ID, attempt, lastCode, false, status); eventErr != nil {
 					return eventErr
@@ -612,7 +608,6 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 		}
 		// Untrusted response bodies must not enter durable events or error logs.
 		// 不可信上游响应正文不得进入持久化事件或错误日志。
-		lastErr = fmt.Errorf("agent returned HTTP %d", status)
 		lastCode, _ = classifyDispatchFailure(status, nil)
 		if eventErr := d.recordDispatchFailure(ctx, run.ID, attempt, lastCode, false, status); eventErr != nil {
 			return eventErr
@@ -944,13 +939,13 @@ func (d *Dispatcher) reconcileOutcomes(ctx context.Context) {
 			cancel()
 			if err != nil {
 				telemetry.RecordExecutionReconciliationFailure("outcome")
-				log.Printf("execution outcome projection pending run_id=%s code=PROJECTION_FAILED", run.ID)
+				log.Printf("execution outcome projection pending run_id=%q code=PROJECTION_FAILED", run.ID)
 				continue
 			}
 		}
 		if err := d.repository.AcknowledgeOutcome(run.ID, outcome.Revision); err != nil {
 			telemetry.RecordExecutionReconciliationFailure("outcome")
-			log.Printf("execution outcome acknowledgment pending run_id=%s code=OUTCOME_ACK_FAILED", run.ID)
+			log.Printf("execution outcome acknowledgment pending run_id=%q code=OUTCOME_ACK_FAILED", run.ID)
 		}
 	}
 	if len(outcomes) < 64 {

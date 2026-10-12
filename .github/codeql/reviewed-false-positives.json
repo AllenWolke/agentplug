@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-10-12",
+  "documentation": "docs/security/codeql-false-positives.md",
+  "exceptions": [
+    {
+      "id": "CQ-003",
+      "rule_id": "go/path-injection",
+      "path": "workers/metric-runner/internal/protocol/protocol.go",
+      "region": {
+        "startLine": 116,
+        "startColumn": 23,
+        "endColumn": 27
+      },
+      "result_sha256": "8eb336080d91ec49a36a01760451300730c9b3f01085821533f775f3d07f986f",
+      "source_sha256": {
+        "workers/metric-runner/cmd/metric-service/main.go": "4dfe6687c069eaaf8075debae2e7c00fe4c2935d54db03b3072b8b64ac29ebf5",
+        "workers/metric-runner/internal/engine/engine.go": "63e83465ad5da6cc65ecbd1daf76b52b1e829817da97ad640a1d33a85505200e",
+        "workers/metric-runner/internal/protocol/protocol.go": "ecc08faea471efca8ad6805cc4bcce29558aa31910b39154721ba5aedd3efed8",
+        "workers/metric-runner/internal/sandbox/plugin.go": "96607324f3c19c2ea9b79c1db2d93db8366e0169f468846a71a933770998cacc"
+      },
+      "reason": "The request provides only a validated registry ID. ResolveRegistered rejects traversal and constructs a fixed descriptor path under the operator-owned registry; no request-supplied filesystem path reaches LoadDescriptor.",
+      "tests": [
+        "workers/metric-runner/internal/protocol/protocol_test.go:TestResolveRegisteredRejectsTraversal",
+        "workers/metric-runner/internal/protocol/protocol_test.go:TestDescriptorValidateRejectsUnsafeRegistration"
+      ]
+    },
+    {
+      "id": "CQ-004",
+      "rule_id": "go/path-injection",
+      "path": "workers/metric-runner/internal/protocol/protocol.go",
+      "region": {
+        "startLine": 249,
+        "startColumn": 23,
+        "endColumn": 27
+      },
+      "result_sha256": "e185dd3a650328c4d6dc1136ad29a52773ddc974fa721629e6c9856339908873",
+      "source_sha256": {
+        "workers/metric-runner/cmd/metric-service/main.go": "4dfe6687c069eaaf8075debae2e7c00fe4c2935d54db03b3072b8b64ac29ebf5",
+        "workers/metric-runner/internal/engine/engine.go": "63e83465ad5da6cc65ecbd1daf76b52b1e829817da97ad640a1d33a85505200e",
+        "workers/metric-runner/internal/protocol/protocol.go": "ecc08faea471efca8ad6805cc4bcce29558aa31910b39154721ba5aedd3efed8",
+        "workers/metric-runner/internal/sandbox/plugin.go": "96607324f3c19c2ea9b79c1db2d93db8366e0169f468846a71a933770998cacc"
+      },
+      "reason": "The artifact path is derived from the validated registry ID and validated registered entrypoint. PluginRunner verifies the pinned Ed25519 signature before artifact verification; business callers cannot choose an arbitrary host path or alter the operator-owned registry.",
+      "tests": [
+        "workers/metric-runner/internal/protocol/protocol_test.go:TestDescriptorSignatureAndDigest",
+        "workers/metric-runner/internal/protocol/protocol_test.go:TestResolveRegisteredRejectsTraversal"
+      ]
+    },
+    {
+      "id": "CQ-005",
+      "rule_id": "go/zipslip",
+      "path": "cli/agentctl/internal/template/remote.go",
+      "region": {
+        "startLine": 281,
+        "startColumn": 3,
+        "endColumn": 33
+      },
+      "result_sha256": "1028275db4a4d4248bbbf7ae8523b35e7461f75048d2101e80d6a1dcd64d0d44",
+      "source_sha256": {
+        "cli/agentctl/internal/template/remote.go": "8ab69ee5c53f5e8621f5a624b495b577d5dcaec6acb4559550e340e060f851f9",
+        "cli/agentctl/internal/template/upgrade.go": "ac75d32937cd6e73789b11936e0f60097384164cd0e17da6c70a856564c2bb34"
+      },
+      "reason": "The downloaded archive is extracted only into a fresh private staging directory. safeArchivePath and safeRelative reject absolute paths, parent traversal and device paths; only regular files/directories are accepted, with links, duplicate entries and size limits enforced before writes.",
+      "tests": [
+        "cli/agentctl/internal/template/remote_test.go:TestRemoteMaliciousMatrix",
+        "cli/agentctl/internal/template/remote_test.go:TestExtractTarGzLimits"
+      ]
+    },
+    {
+      "id": "CQ-027",
+      "rule_id": "go/log-injection",
+      "path": "platform/internal/capability/runtime_observation.go",
+      "region": {
+        "startLine": 347,
+        "startColumn": 39,
+        "endColumn": 42
+      },
+      "result_sha256": "4365ddcb57268f29f161c645bf05714cd89063d5904987e563d5a1e069d02d2f",
+      "source_sha256": {
+        "platform/internal/capability/module.go": "a377d6ca8d78ec6827cf4a01dbadb2be03f2952e098a57a2ed1b50d2631f2186",
+        "platform/internal/capability/runtime_observation.go": "57b6f3376e65dda1c6f898f0cecebe363df34ddb3a482641be27e8c71adc5d77"
+      },
+      "reason": "The log argument is compact JSON produced by encoding/json.Marshal from platform-built observation fields, including strings, numeric values, timestamps, a typed permission scope and a resource-usage map. JSON escapes CR, LF and control characters in strings; the logged value is serialized JSON rather than raw provider text, so untrusted metadata cannot create an additional physical log record.",
+      "tests": [
+        "platform/internal/capability/log_boundary_test.go:TestRuntimeObservationJSONKeepsUntrustedMetadataOnOneLine"
+      ]
+    },
+    {
+      "id": "CQ-029",
+      "rule_id": "go/useless-assignment-to-field",
+      "path": "platform/cmd/platform/main.go",
+      "region": {
+        "startLine": 832,
+        "startColumn": 4,
+        "endColumn": 23
+      },
+      "result_sha256": "0f22c81555defb38fccdeb0230433b8d2d273b9ad63cf7f5bed8f1e8e1c5e254",
+      "source_sha256": {
+        "platform/cmd/platform/coordinated_ancestry_guard.go": "867d49dc9d6ada555ae96da87e25e5fb22d127117cbbb7106ff9fb68e6336925",
+        "platform/cmd/platform/evaluation_execution_authority.go": "b6bbf908aacbb16a03f2fc246811f20d94ab0283872d8eddf78d837e0b88522f",
+        "platform/cmd/platform/main.go": "7279a01a19942c47d692408faa3d074df0455ba658a9a6bb984ab621c0f2a26c"
+      },
+      "reason": "The assigned evaluation authority is read by coordinatedAncestryGuard.Check through a value-receiver method captured after this assignment and passed to the execution guard. Removing it denies valid evaluation child executions; this is not a dead field store.",
+      "tests": [
+        "platform/cmd/platform/evaluation_execution_authority_test.go"
+      ]
+    }
+  ]
+}

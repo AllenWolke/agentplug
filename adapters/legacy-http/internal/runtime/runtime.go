@@ -162,7 +162,7 @@ func (cfg Config) serveInvoke(client *http.Client, w http.ResponseWriter, r *htt
 	if !ok {
 		return
 	}
-	legacyInput := input.Input
+	var legacyInput map[string]any
 	if plan != nil {
 		mapped, applyErr := mapping.Apply(plan.Request, input.Input, map[string]any{"tenant_id": input.Scope.TenantID, "run_id": input.Scope.RunID}, nil)
 		if applyErr != nil {

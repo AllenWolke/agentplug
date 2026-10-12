@@ -19,3 +19,11 @@ tampered and mis-scoped capabilities are rejected:
 ```bash
 java -cp "target/agent-0.1.0.jar:target/lib/*" generated.CapabilitySelfCheck
 ```
+
+The runtime installs Ubuntu security updates with signature verification.
+If the ARM package server is unreachable, Docker builds accept
+`--build-arg UBUNTU_PORTS_MIRROR=https://mirror.sjtu.edu.cn/ubuntu-ports`.
+The default uses Ubuntu's official HTTPS server; do not disable APT signatures.
+
+运行时构建会安装 Ubuntu 安全更新并核验包签名。ARM 软件源无法访问时，可通过上述
+构建参数选择镜像站；默认使用 Ubuntu 官方 HTTPS 源，不应关闭 APT 签名校验。

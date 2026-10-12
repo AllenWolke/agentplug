@@ -305,7 +305,6 @@ func (s *SQLStore) Apply(ctx context.Context, event Event) (Snapshot, error) {
 	err = tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT tenant_id,department_id,application_id,agent_id,agent_version_id,run_id,provider,model,input_tokens,output_tokens,cost_micros,step_id FROM platform_usage_event WHERE event_id=? FOR UPDATE`), event.ID).Scan(
 		&existing.Scope.TenantID, &existing.Scope.DepartmentID, &existing.Scope.ApplicationID, &existing.Scope.AgentID, &existing.Scope.AgentVersionID, &existing.Scope.RunID, &existing.Provider, &existing.Model, &existing.InputTokens, &existing.OutputTokens, &existing.CostMicros, &existingStepID)
 	if err == nil {
-		existing.ID = event.ID
 		if existingStepID.Valid {
 			existing.StepID = &existingStepID.String
 		}

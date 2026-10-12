@@ -6,10 +6,10 @@ This connects [platform setup](quickstart.md), [business development](first-agen
 
 ## Execute the complete route
 
-Install Python 3.12+, Go 1.25+, Docker Engine / Docker Desktop and Compose v2. The engine must be running. Network access is needed for Python packages, Go modules and base images. From the repository root:
+Install Python 3.12+, Go 1.26.9+, Docker Engine / Docker Desktop and Compose v2. The engine must be running. Network access is needed for Python packages, Go modules and base images. From the repository root:
 
 ```text
-python -m pip install "cryptography>=43,<46"
+python -m pip install "cryptography>=50,<51"
 python tests/e2e/developer_walkthrough.py --report .tmp/developer-walkthrough-report.json
 ```
 

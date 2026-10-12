@@ -2,7 +2,7 @@
 
 [Developer path](README.md) · [简体中文](../zh/first-agent.md)
 
-Create a deterministic support assistant to verify project structure and SDK wiring before platform publication. No paid model or enterprise knowledge setup is required for this local business example. Install Go 1.25+, Python 3.12+ and Docker for image builds.
+Create a deterministic support assistant to verify project structure and SDK wiring before platform publication. No paid model or enterprise knowledge setup is required for this local business example. Install Go 1.26.9+, Python 3.12+ and Docker for image builds.
 
 ## 1. Generate
 

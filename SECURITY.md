@@ -14,6 +14,10 @@
 
 备份、日志、公共知识投影、对象存储和通知副作用的责任见[备份说明](deploy/backup/README.md)与[生命周期说明](docs/DATA-LIFECYCLE.md)。逻辑删除不等于所有外部副本物理擦除；恢复备份后须重新对账撤权、删除和 Legal Hold。
 
+## 自动扫描与误报审查
+
+供应链工作流保留 CodeQL、依赖与镜像漏洞检查、完整历史密钥扫描、SBOM 和镜像签名。已审查的具体 CodeQL 误报采用位置、数据流和防护源码哈希共同匹配；代码变化后自动恢复告警。五条处理依据、反向测试和复核流程见[CodeQL 精确误报处理](docs/security/codeql-false-positives.md)。
+
 ## 报告问题
 
 上传 GitHub 后，由维护者启用仓库的 Private vulnerability reporting，并通过仓库 Security 页面提供私密报告入口。本地源码尚未关联 GitHub 远端，因此这里不虚构联系地址、已经启用的入口或响应时限；维护者应在公开发布前确认真实渠道可用。

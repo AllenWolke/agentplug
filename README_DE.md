@@ -71,7 +71,7 @@ Folgen Sie dieser Reihenfolge: das Projekt verstehen, einen ersten Agenten ausf�
 Für den Einstieg empfehlen wir **Docker Compose**. Voraussetzungen: Python 3.12+, Docker Engine / Docker Desktop und Compose v2. Führen Sie im Stammverzeichnis des heruntergeladenen Repositorys aus:
 
 ```text
-python -m pip install "cryptography>=43,<46"
+python -m pip install "cryptography>=50,<51"
 python scripts/prepare_local_development.py
 python scripts/compose.py config --env-file .env
 python scripts/init_platform.py --env-file .env
@@ -99,7 +99,7 @@ Der Agentenkatalog ist zunächst leer. Nach dem Start der Basisdienste folgen En
 
 ### Lokaler Quellcode
 
-Installieren Sie Go 1.25+, Node.js 20+, Python 3.12+ und PostgreSQL 16 + pgvector. Java-Agenten benötigen zusätzlich JDK 21 und Maven. Bereiten Sie die vier privaten Konfigurationen gemäß [Hostbereitstellung, Englisch](docs/developer/en/deployment.md#local-source-and-host-processes) vor.
+Installieren Sie Go 1.26.9+, Node.js 20+, Python 3.12+ und PostgreSQL 16 + pgvector. Java-Agenten benötigen zusätzlich JDK 21 und Maven. Bereiten Sie die vier privaten Konfigurationen gemäß [Hostbereitstellung, Englisch](docs/developer/en/deployment.md#local-source-and-host-processes) vor.
 
 ```text
 python scripts/local.py build

@@ -1,12 +1,14 @@
-FROM golang:1.25.1-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm AS build
+ARG TARGETOS=linux
+ARG TARGETARCH
 ENV GOPROXY=https://goproxy.cn|https://mirrors.aliyun.com/goproxy/|https://proxy.golang.org,direct
 WORKDIR /src
 COPY workers/metric-runner/go.mod ./workers/metric-runner/
 WORKDIR /src/workers/metric-runner
 RUN go mod download
 COPY workers/metric-runner/ ./
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/metric-runner ./cmd/runner
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/metric-service ./cmd/metric-service
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags='-s -w' -o /out/metric-runner ./cmd/runner
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags='-s -w' -o /out/metric-service ./cmd/metric-service
 
 # Bake a signed plugin registry into the image so the isolated dispatch service
 # has a real, verifiable third-party plugin without any external volume. The
@@ -21,7 +23,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/metric-service ./c
 # 在插件启动期重新核对的内容。
 FROM build AS registry
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/plugin-registry ./cmd/plugin-registry
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/example-plugin ./plugins/example
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags='-s -w' -o /out/example-plugin ./plugins/example
 RUN mkdir -p /out/plugins
 RUN printf '%s' '{"root":"/plugins","plugins":[{"id":"example_metric","version":"1.0.0","artifact":"/out/example-plugin","args":[],"limits":{"max_cpu_seconds":5,"max_memory_bytes":1073741824,"max_pids":128,"max_output_bytes":1048576,"timeout_seconds":30}}]}' > /out/registry.json
 RUN /out/plugin-registry -root /plugins -spec /out/registry.json

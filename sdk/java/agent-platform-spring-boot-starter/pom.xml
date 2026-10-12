@@ -12,12 +12,30 @@
   <name>agent-platform-spring-boot-starter</name>
 
   <properties>
-    <spring-boot.version>3.4.1</spring-boot.version>
+    <spring-boot.version>4.0.8</spring-boot.version>
+    <jackson2.version>2.21.7</jackson2.version>
+    <jackson3.version>3.1.7</jackson3.version>
     <opentelemetry.version>1.45.0</opentelemetry.version>
   </properties>
 
   <dependencyManagement>
     <dependencies>
+      <!-- Override vulnerable Boot defaults while keeping the shared Jackson
+           annotations compatible with both mapper generations. -->
+      <dependency>
+        <groupId>tools.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson3.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson2.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
       <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>

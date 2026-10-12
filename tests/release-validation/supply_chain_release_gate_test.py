@@ -1,6 +1,9 @@
 """Only a successful quality run for the exact main-branch commit may sign images."""
 
 from pathlib import Path
+import re
+import subprocess
+import sys
 import tomllib
 
 import yaml
@@ -23,7 +26,7 @@ def test_all_image_operations_use_the_same_normalized_registry_owner() -> None:
     operations += [step['with']['image-ref'] for step in steps if step.get('uses', '').startswith('aquasecurity/trivy-action')]
     operations += [step['with']['image'] for step in steps if step.get('uses') == 'anchore/sbom-action@v0']
     operations += [step['run'] for step in steps if 'cosign ' in step.get('run', '')]
-    assert len(operations) == 5
+    assert len(operations) == 6  # Both published architectures must be scanned.
     assert all(prefix in operation and 'github.repository_owner' not in operation for operation in operations)
 
 
@@ -239,11 +242,52 @@ def test_codeql_has_per_language_builds_for_all_active_go_and_java_sources() -> 
         if any(part.startswith(".") or part in {"node_modules", "target", "out", "venv", "artifacts"} for part in path.relative_to(ROOT).parts):
             continue
         assert path.parent.relative_to(ROOT).as_posix() in go_build["run"]
+    # Go's interceptor dispatches on argv[1]; -C before build is not recognized.
+    executable_lines = [line.strip() for line in go_build['run'].splitlines() if not line.lstrip().startswith('#')]
+    assert not any('go -C ' in line for line in executable_lines)
+    assert 'go build ' in go_build['run']
+    assert 'cd "$module"' in go_build['run']
     for pom in ("sdk/java/pom.xml", "templates/java-generic/pom.xml", "templates/java-spring-ai/pom.xml"):
         assert pom + " clean test" in java_build["run"]
     analyze = next(step for step in job["steps"] if step.get("uses") == "github/codeql-action/analyze@v4")
     assert job["steps"].index(init) < job["steps"].index(go_build) < job["steps"].index(analyze)
     assert job["steps"].index(init) < job["steps"].index(java_build) < job["steps"].index(analyze)
+
+
+def test_codeql_reviews_only_go_after_successful_full_analysis_and_preserves_raw_results() -> None:
+    supply = yaml.load((ROOT / '.github/workflows/supply-chain.yml').read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+    steps = supply['jobs']['sast-and-secrets']['steps']
+    init = next(step for step in steps if step.get('uses') == 'github/codeql-action/init@v4')
+    assert init['with']['queries'] == "${{ matrix.language == 'go' && '+security-and-quality' || '' }}"
+    assert not any(key in init['with'] for key in ('paths-ignore', 'query-filters', 'disable-default-queries'))
+    analyze = next(step for step in steps if step.get('id') == 'codeql')
+    assert analyze['with']['upload'] == "${{ matrix.language == 'go' && 'failure-only' || 'always' }}"
+    controls = next(step for step in steps if step.get('run') == 'python scripts/test_codeql_false_positives.py')
+    process = next(step for step in steps if 'python scripts/filter_codeql_false_positives.py' in step.get('run', ''))
+    upload = next(step for step in steps if step.get('uses') == 'github/codeql-action/upload-sarif@v4')
+    assert steps.index(analyze) < steps.index(controls) < steps.index(process) < steps.index(upload)
+    for step in (controls, process, upload):
+        assert step['if'] == "matrix.language == 'go'"  # implicit success(), never always()
+        assert step.get('continue-on-error', 'false') == 'false'
+    assert '--input "${{ steps.codeql.outputs.sarif-output }}/go.sarif"' in process['run']
+    assert '--output "$RUNNER_TEMP/codeql-reviewed/go.sarif"' in process['run']
+    assert upload['with']['sarif_file'] == '${{ runner.temp }}/codeql-reviewed/go.sarif'
+    assert upload['with']['category'] == '/language:go'
+    for step in (analyze, upload):
+        assert step['with']['sha'] == '${{ github.event.workflow_run.head_sha || github.sha }}'
+        assert step['with']['ref'] == "${{ github.event_name == 'workflow_run' && 'refs/heads/main' || github.ref }}"
+    artifact = next(step for step in steps if step.get('uses') == 'actions/upload-artifact@v6')
+    assert artifact['if'] == "always() && matrix.language == 'go'"
+    for evidence in ('codeql-raw/*.sarif', 'codeql-reviewed/*.sarif', 'codeql-reviewed/review.json'):
+        assert evidence in artifact['with']['path']
+    assert artifact['with']['retention-days'] == '90'
+
+
+def test_codeql_exception_security_negative_controls() -> None:
+    process = subprocess.run([sys.executable, str(ROOT / 'scripts/test_codeql_false_positives.py')],
+                             cwd=ROOT, capture_output=True, text=True, encoding='utf-8', check=False)
+    assert process.returncode == 0, process.stdout + process.stderr
+    assert 'Ran ' in process.stderr and process.stderr.endswith('OK\n')
 
 
 def test_history_scanner_supports_workflow_run_and_does_not_need_comment_permissions() -> None:
@@ -259,3 +303,47 @@ def test_history_scanner_supports_workflow_run_and_does_not_need_comment_permiss
     for required in ("git /repo", "--log-opts=--all", "--redact", "--network none", "readonly", "safe.directory"):
         assert required in command
     assert all(step.get("uses") != "gitleaks/gitleaks-action@v2" for job in supply["jobs"].values() for step in job["steps"])
+
+
+def test_every_published_architecture_is_scanned_before_signing() -> None:
+    supply = yaml.load((ROOT / '.github/workflows/supply-chain.yml').read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+    steps = supply['jobs']['image-provenance']['steps']
+    build = next(step for step in steps if step.get('id') == 'build')
+    required = set(build['with']['platforms'].split(','))
+    scanned = set()
+    for step in steps:
+        if not step.get('uses', '').startswith('aquasecurity/trivy-action'):
+            continue
+        settings = step['with']
+        config = yaml.safe_load((ROOT / settings['trivy-config']).read_text(encoding='utf-8'))
+        scanned.add(config['image']['platform'])
+        assert settings['image-ref'].endswith('@${{ steps.build.outputs.digest }}')
+        assert settings['exit-code'] == '1'
+        assert step.get('continue-on-error', 'false') == 'false'
+        assert steps.index(step) < next(i for i, s in enumerate(steps) if 'cosign sign' in s.get('run', ''))
+    assert scanned == required
+
+
+def test_security_failures_keep_redacted_diagnostics() -> None:
+    supply = yaml.load((ROOT / '.github/workflows/supply-chain.yml').read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+    for name in ('sbom-and-vulnerability', 'history-secret-scan', 'image-provenance'):
+        steps = supply['jobs'][name]['steps']
+        upload = next(step for step in steps if step.get('uses') == 'actions/upload-artifact@v6')
+        assert upload['if'] == 'always()'
+        assert '.json' in upload['with']['path']
+    history = next(step['run'] for step in supply['jobs']['history-secret-scan']['steps'] if 'git /repo' in step.get('run', ''))
+    assert '--redact' in history and '--report-format=json' in history
+    # Gitleaks creates mode-0600 reports. The upload action must own that file.
+    assert '--user "$(id -u):$(id -g)"' in history
+
+
+def test_image_matrix_supplies_required_base_image_arguments() -> None:
+    supply = yaml.load((ROOT / '.github/workflows/supply-chain.yml').read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+    job = supply['jobs']['image-provenance']
+    build = next(step for step in job['steps'] if step.get('id') == 'build')
+    assert build['with']['build-args'] == "${{ matrix.build-args || '' }}"
+    for entry in job['strategy']['matrix']['include']:
+        dockerfile = (ROOT / entry['dockerfile']).read_text(encoding='utf-8')
+        arguments = dict(line.split('=', 1) for line in entry.get('build-args', '').splitlines() if '=' in line)
+        for required in re.findall(r'^FROM\s+\$\{([A-Z_]+)\}', dockerfile, flags=re.MULTILINE):
+            assert re.fullmatch(r'.+@sha256:[a-f0-9]{64}', arguments.get(required, '')), entry['name']

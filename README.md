@@ -71,7 +71,7 @@ AgentPlug 是面向企业的智能体开发、运行与治理平台。使用 **G
 第一次使用推荐 **Docker Compose**。需要 Python 3.12+、Docker Engine / Docker Desktop 和 Compose v2。下载仓库后，在根目录执行：
 
 ```text
-python -m pip install "cryptography>=43,<46"
+python -m pip install "cryptography>=50,<51"
 python scripts/prepare_local_development.py
 python scripts/compose.py config --env-file .env
 python scripts/init_platform.py --env-file .env
@@ -99,7 +99,7 @@ python scripts/compose.py smoke --env-file .env
 
 ### 本地源码运行
 
-安装 Go 1.25+、Node.js 20+、Python 3.12+，准备 PostgreSQL 16 + pgvector。Java Agent 另需 JDK 21 和 Maven。按[本地部署步骤](docs/developer/zh/deployment.md#本地源码与主机进程)填写迁移、平台、前端、Runner 四份私有配置。
+安装 Go 1.26.9+、Node.js 20+、Python 3.12+，准备 PostgreSQL 16 + pgvector。Java Agent 另需 JDK 21 和 Maven。按[本地部署步骤](docs/developer/zh/deployment.md#本地源码与主机进程)填写迁移、平台、前端、Runner 四份私有配置。
 
 ```text
 python scripts/local.py build

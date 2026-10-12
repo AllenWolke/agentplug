@@ -154,7 +154,7 @@ foreach ($lane in $sandboxLanes) {
         "-e", "GOTOOLCHAIN=local",
         "-v", "${sandboxMount}:/workspace",
         "-w", "/workspace/workers/metric-runner",
-        "golang:1.25",
+        "golang:1.26.9-bookworm",
         "go", "test", "-count=1", "-v", "-run", "TestSandbox", "./internal/sandbox/..."
     )
     $sandboxOutput = & docker @sandboxCommand 2>&1

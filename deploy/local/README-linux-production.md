@@ -6,7 +6,7 @@ Linux 是本项目本地生产部署的目标系统。通用安装、平台、�
 
 ## 构建和配置
 
-主机需要 Go 1.25.x、Python 3.12、Node 20/22、PostgreSQL 16 + pgvector，以及支持 memory/pids 控制器和 seccomp 的 Linux 内核。systemd 必须能实际施加资源上限。AMD64 与其他架构均需对当前候选重新运行同样测试，不能只因为 Go 能交叉编译就算验收通过。
+主机需要 Go 1.26.9+、Python 3.12、Node 20/22、PostgreSQL 16 + pgvector，以及支持 memory/pids 控制器和 seccomp 的 Linux 内核。systemd 必须能实际施加资源上限。AMD64 与其他架构均需对当前候选重新运行同样测试，不能只因为 Go 能交叉编译就算验收通过。
 
 从候选源码目录执行：
 

@@ -15,7 +15,7 @@ result = {"owner": OWNER, "passed": False, "cases": [], "temporary_images_built"
 def invoke(mode):
     proc = subprocess.run([
         "docker", "run", "--rm", "--network", "none", "--label", "codex.test.owner=" + OWNER,
-        "--volume", str(TEMP) + ":/fixtures", "golang:1.25-bookworm", "bash", "-c",
+        "--volume", str(TEMP) + ":/fixtures", "golang:1.26.9-bookworm", "bash", "-c",
         'function docker() { return 0; }; export -f docker; bash "$1" status',
         "fixture", "/fixtures/" + mode + "/scripts/platform.sh",
     ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)

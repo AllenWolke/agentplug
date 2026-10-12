@@ -53,7 +53,7 @@ func filterKnowledgeReferences(result map[string]any, plan KnowledgeDocumentPlan
 			if version := stringValue(item["document_version"]); version != "" && version != document.DocumentVersion {
 				continue
 			}
-			copy := make(map[string]any, len(item)+2)
+			copy := make(map[string]any, len(item))
 			for k, v := range item {
 				copy[k] = v
 			}

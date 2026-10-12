@@ -869,7 +869,6 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 			m.error(w, http.StatusForbidden, "EXTERNAL_MODEL_DENIED", "external model provider is disabled by policy", op.Context.TraceID)
 			return
 		}
-		provider = selectedModel.ProviderKey
 	}
 	if in.IdempotencyKey == "" {
 		in.IdempotencyKey = op.Context.IdempotencyKey
@@ -1019,7 +1018,7 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 			if errors.Is(capacityErr, modelcapacity.ErrExceeded) {
 				m.error(w, http.StatusTooManyRequests, "MODEL_CAPACITY_EXCEEDED", "managed local model deployment is at capacity", op.Context.TraceID)
 			} else {
-				log.Printf("model capacity admission unavailable trace=%s deployment_configured=true error_type=%T", op.Context.TraceID, capacityErr)
+				log.Printf("model capacity admission unavailable trace=%q deployment_configured=true error_type=%T", op.Context.TraceID, capacityErr)
 				m.error(w, http.StatusServiceUnavailable, "MODEL_CAPACITY_UNAVAILABLE", "managed local model capacity is unavailable", op.Context.TraceID)
 			}
 			return
@@ -1091,15 +1090,15 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 			if releaseErr := m.modelCapacity.ReleaseCapacity(r.Context(), *capacityLease); releaseErr != nil {
 				// A failed release remains bounded by the SQL lease TTL; do not discard
 				// a known billable result or hide it behind a capacity cleanup error.
-				log.Printf("model capacity lease release deferred to expiry trace=%s error_type=%T", op.Context.TraceID, releaseErr)
+				log.Printf("model capacity lease release deferred to expiry trace=%q error_type=%T", op.Context.TraceID, releaseErr)
 			}
 		} else if capacityLease != nil {
 			// The provider outcome is uncertain. Keep capacity reserved until lease
 			// expiry so a timed-out remote call cannot be immediately oversold.
-			log.Printf("model capacity lease retained for uncertain outcome trace=%s", op.Context.TraceID)
+			log.Printf("model capacity lease retained for uncertain outcome trace=%q", op.Context.TraceID)
 		}
 		if invokeErr != nil {
-			log.Printf("model provider failure run_id=%s embedding=%t error_kind=%s", modelScope.RunID, embeddingCall, modelProviderErrorKind(invokeErr))
+			log.Printf("model provider failure run_id=%q embedding=%t error_kind=%s", modelScope.RunID, embeddingCall, modelProviderErrorKind(invokeErr))
 			if definitelyNoModelCharge(invokeErr) {
 				if err := m.abortUnsentModel(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, *budgetReservation, modelAttemptToken); err != nil {
 					m.error(w, http.StatusBadGateway, "MODEL_RECONCILIATION_REQUIRED", "unsent request accounting could not be finalized", op.Context.TraceID)
@@ -1197,7 +1196,7 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		}
 		_, settleErr := m.modelBudgets.Settle(r.Context(), *budgetReservation, event, approvedPrice.ID)
 		if settleErr != nil {
-			log.Printf("model result requires billing reconciliation trace=%s error_type=%T", op.Context.TraceID, settleErr)
+			log.Printf("model result requires billing reconciliation trace=%q error_type=%T", op.Context.TraceID, settleErr)
 			m.error(w, http.StatusBadGateway, "MODEL_RECONCILIATION_REQUIRED", "provider result is known but usage settlement failed", op.Context.TraceID)
 			return
 		}
@@ -1208,7 +1207,7 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 	if m.modelStore != nil {
 		if err := m.modelStore.Complete(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, result, costCents); err != nil {
 			if governanceConfigured {
-				log.Printf("settled model result requires invocation reconciliation trace=%s error_type=%T", op.Context.TraceID, err)
+				log.Printf("settled model result requires invocation reconciliation trace=%q error_type=%T", op.Context.TraceID, err)
 				m.error(w, http.StatusBadGateway, "MODEL_RECONCILIATION_REQUIRED", "usage was settled but invocation replay record requires reconciliation", op.Context.TraceID)
 				return
 			}
@@ -1301,7 +1300,7 @@ func (m *Module) failModelInvocation(ctx context.Context, scopeHash, key, finger
 		writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		if err := store.FailPreparation(writeCtx, scopeHash, key, fingerprint, attemptToken); err != nil {
-			log.Printf("model preparation terminal state unavailable trace=%s error_type=%T", traceID, err)
+			log.Printf("model preparation terminal state unavailable trace=%q error_type=%T", traceID, err)
 		}
 		return
 	}
@@ -1312,7 +1311,7 @@ func (m *Module) failModelInvocation(ctx context.Context, scopeHash, key, finger
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err := store.Fail(writeCtx, scopeHash, key, fingerprint); err != nil {
-		log.Printf("model invocation terminal state unavailable trace=%s error_type=%T", traceID, err)
+		log.Printf("model invocation terminal state unavailable trace=%q error_type=%T", traceID, err)
 	}
 }
 
@@ -1483,7 +1482,7 @@ func (m *Module) search(w http.ResponseWriter, r *http.Request) {
 				m.error(w, modelError.Status, modelError.Code, "governed knowledge model stage failed", op.Context.TraceID)
 				return
 			}
-			log.Printf("knowledge provider unavailable trace=%s provider=governed-rag error=%v", op.Context.TraceID, err)
+			log.Printf("knowledge provider unavailable trace=%q provider=governed-rag error_type=%T", op.Context.TraceID, err)
 			m.error(w, http.StatusBadGateway, "KNOWLEDGE_PROVIDER_UNAVAILABLE", "knowledge provider unavailable", op.Context.TraceID)
 			return
 		}

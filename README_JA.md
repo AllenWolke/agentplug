@@ -71,7 +71,7 @@ Agent のデモが動いても、運用、デプロイ、権限設定、保守�
 初回は **Docker Compose** を推奨します。Python 3.12+、Docker Engine / Docker Desktop、Compose v2 が必要です。リポジトリのルートで実行します。
 
 ```text
-python -m pip install "cryptography>=43,<46"
+python -m pip install "cryptography>=50,<51"
 python scripts/prepare_local_development.py
 python scripts/compose.py config --env-file .env
 python scripts/init_platform.py --env-file .env
@@ -97,7 +97,7 @@ python scripts/compose.py smoke --env-file .env
 
 ### ローカルソース
 
-Go 1.25+、Node.js 20+、Python 3.12+、PostgreSQL 16 + pgvector が必要です。Java Agent には JDK 21 と Maven も必要です。[英語のホスト設定手順](docs/developer/en/deployment.md#local-source-and-host-processes)に従って、4 種類の非公開設定を準備します。
+Go 1.26.9+、Node.js 20+、Python 3.12+、PostgreSQL 16 + pgvector が必要です。Java Agent には JDK 21 と Maven も必要です。[英語のホスト設定手順](docs/developer/en/deployment.md#local-source-and-host-processes)に従って、4 種類の非公開設定を準備します。
 
 ```text
 python scripts/local.py build

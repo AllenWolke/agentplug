@@ -113,7 +113,14 @@ func DecodeDescriptor(raw []byte) (Descriptor, error) {
 // LoadDescriptor reads and strictly decodes a descriptor from disk.
 // LoadDescriptor 从磁盘读取并严格解码描述符。
 func LoadDescriptor(path string) (Descriptor, error) {
-	raw, err := os.ReadFile(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return Descriptor{}, fmt.Errorf("%w: %v", ErrDescriptorInvalid, err)
+	}
+	defer file.Close()
+	// Enforce the document limit while reading, before decoding or verifying
+	// signatures. A corrupt registry entry must not cause an unbounded read.
+	raw, err := io.ReadAll(io.LimitReader(file, MaxDescriptorBytes+1))
 	if err != nil {
 		return Descriptor{}, fmt.Errorf("%w: %v", ErrDescriptorInvalid, err)
 	}
@@ -239,12 +246,17 @@ func (d Descriptor) VerifyArtifact(path string) error {
 	if expected == "" {
 		return fmt.Errorf("%w: descriptor pins no digest", ErrDigestMismatch)
 	}
-	raw, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDigestMismatch, err)
 	}
-	sum := sha256.Sum256(raw)
-	if hex.EncodeToString(sum[:]) != expected {
+	defer file.Close()
+	// Hash the artifact as a stream, rather than allocating its entire size.
+	sum := sha256.New()
+	if _, err := io.Copy(sum, file); err != nil {
+		return fmt.Errorf("%w: %v", ErrDigestMismatch, err)
+	}
+	if hex.EncodeToString(sum.Sum(nil)) != expected {
 		return ErrDigestMismatch
 	}
 	return nil

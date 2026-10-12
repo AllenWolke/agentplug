@@ -1,6 +1,6 @@
 ARG CODE_RUNTIME_DOCKER_CLI_IMAGE
 
-FROM golang:1.25.1-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
@@ -12,7 +12,10 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldfl
 
 FROM ${CODE_RUNTIME_DOCKER_CLI_IMAGE} AS runtime
 USER 0:0
-RUN mkdir -p /etc/agentplug-code /var/lib/agentplug-code/receipts /var/lib/agentplug-code/docker \
+RUN apk upgrade --no-cache \
+    && rm -f /usr/local/libexec/docker/cli-plugins/docker-buildx \
+             /usr/local/libexec/docker/cli-plugins/docker-compose \
+    && mkdir -p /etc/agentplug-code /var/lib/agentplug-code/receipts /var/lib/agentplug-code/docker \
     && chown -R 10001:10001 /etc/agentplug-code /var/lib/agentplug-code \
     && chmod 0750 /etc/agentplug-code \
     && chmod 0700 /var/lib/agentplug-code /var/lib/agentplug-code/receipts /var/lib/agentplug-code/docker \

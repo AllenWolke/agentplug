@@ -181,6 +181,42 @@ regexTarget = "secret"
 paths = ["^workers/metric\\-runner/cmd/metric\\-service/main_test\\.go$"]
 regexes = ["^placeholder\\-0123456789abcdef0123456789abcdef$"]
 
+
+[[rules.allowlists]]
+description = "checkpoint idempotency identifier; not an issued credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^examples/java\\-tickets/src/main/java/com/lexagent/examples/tickets/TicketAssistant\\.java$"]
+regexes = ["^ticket\\-plan\\-v1$"]
+
+[[rules.allowlists]]
+description = "synthetic transport test signing constant"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^examples/python\\-documents/tests/test_transport\\.py$"]
+regexes = ["^fixture\\-signing\\-secret\\-with\\-32\\-bytes$"]
+
+[[rules.allowlists]]
+description = "isolated checkpoint recovery fixture signing constant"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^platform/cmd/migrate/runtime_checkpoint_recovery_test\\.go$"]
+regexes = ["^fixture\\-signing\\-secret\\-with\\-32\\-bytes$"]
+
+[[rules.allowlists]]
+description = "isolated Go runtime fixture signing constant"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^platform/cmd/migrate/runtime_go_verify_test\\.go$"]
+regexes = ["^fixture\\-signing\\-secret\\-with\\-32\\-bytes$"]
+
+[[rules.allowlists]]
+description = "isolated Python runtime fixture signing constant"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^platform/cmd/migrate/runtime_python_verify_test\\.go$"]
+regexes = ["^fixture\\-signing\\-secret\\-with\\-32\\-bytes$"]
+
 [[rules]]
 id = "jwt"
 
@@ -190,3 +226,10 @@ condition = "AND"
 regexTarget = "secret"
 paths = ["^contracts/fixtures/execution\\-v2\\-capability\\.json$"]
 regexes = ["^eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9\\.eyJhY3Rpb25zIjpbImludm9rZSJdLCJhZ2VudF9pbnN0YW5jZV9pZCI6Imluc3RhbmNlLWEiLCJhcHBsaWNhdGlvbl9pZCI6InJlZ3VsYXRvcnkiLCJhdWQiOiJjb25mb3JtYW5jZS1hZ2VudCIsImF1dGhvcml6YXRpb25fZXBvY2giOjEsImJvZHlfaGFzaCI6IjlkY2VjNDY1ZjFmMDBkNjY4ZmE1OWY4OWNhZmI2YjViMWJiZTliNDJjZTFhMWZjMjczMjA5ZDg4NjY3ZDdiYzAiLCJleHAiOjE3NjcyMjU3MjAsImlhdCI6MTc2NzIyNTYwMCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uLWEiLCJpc3MiOiJwbGF0Zm9ybS1ydW50aW1lLWdhdGV3YXkiLCJwb2xpY3lfc25hcHNob3RfaGFzaCI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJzdWIiOiJ1c2VyLWEiLCJzdWJqZWN0X3R5cGUiOiJ1c2VyIiwidGVuYW50X2lkIjoidGVuYW50LWEifQ\\.oBB2j8N6XV05fL3Uk2mLYcCPQ1deLxaaubjy75ALXk5aWBXSjn57HtQ0WolSgu9Y8agx_X3TyU6qwx35ta_rDg$"]
+
+[[rules.allowlists]]
+description = "expired deterministic SDK conformance JWT signed by the public fixture key; no live account"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^contracts/fixtures/execution\\-v2\\-capability\\.json$"]
+regexes = ["^eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9\\.eyJhY3Rpb25zIjpbImludm9rZSJdLCJhZ2VudF9pbnN0YW5jZV9pZCI6Imluc3RhbmNlLWEiLCJhcHBsaWNhdGlvbl9pZCI6ImJ1c2luZXNzLWFwcCIsImF1ZCI6ImNvbmZvcm1hbmNlLWFnZW50IiwiYXV0aG9yaXphdGlvbl9lcG9jaCI6MSwiYm9keV9oYXNoIjoiOTMxZWRiY2I5M2VlMzk0ZjJjMzY4MzdmYmI4YWYyMWZlZDI2ZWRlZTE5NjQ5MzVhMDZkNzAyNDM0YzIyMDJlOSIsImV4cCI6MTc2NzIyNTcyMCwiaWF0IjoxNzY3MjI1NjAwLCJpbnN0YWxsYXRpb25faWQiOiJpbnN0YWxsYXRpb24tYSIsImlzcyI6InBsYXRmb3JtLXJ1bnRpbWUtZ2F0ZXdheSIsInBvbGljeV9zbmFwc2hvdF9oYXNoIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsInN1YiI6InVzZXItYSIsInN1YmplY3RfdHlwZSI6InVzZXIiLCJ0ZW5hbnRfaWQiOiJ0ZW5hbnQtYSJ9\\.eZHDlemKffZpalUKX6eyR77GtyvtfUeIkvipk1d6VT80VO49XVgJ_7jp17dE1dxu\\-3XYxB9dB18Q4RICFduVBw$"]

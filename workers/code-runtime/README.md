@@ -20,7 +20,7 @@ stdout/stderr分别限制64KiB～1MiB，墙钟10～60秒。取消、超时、超
 
 ## 独立控制器部署资产
 
-`Dockerfile`和`deploy/compose/compose.runtime.yaml`提供独立控制器部署入口。Compose overlay 未并入默认`compose.yaml`；只在显式叠加后启用。构建上下文必须是仓库根目录，因为 worker 通过`go.mod`的本地 replace 引用`contracts/code-runtime`。构建固定使用`golang:1.25.1-bookworm`；最终阶段的`CODE_RUNTIME_DOCKER_CLI_IMAGE`是必填参数，必须使用含`docker` CLI的不可变`image@sha256:…`引用，不能留空或使用浮动标签。CLI镜像必须支持目标Docker Engine架构；Linux/amd64 可使用固定版本的Docker CLI镜像摘要，例如 `docker.io/library/docker@sha256:cd58b396e427d1ee8cddcc3f3b7e8d8c2ba45755c5dd5b821b6e615e1ccf4586`，并在部署时从实际可信来源核验摘要与架构。
+`Dockerfile`和`deploy/compose/compose.runtime.yaml`提供独立控制器部署入口。Compose overlay 未并入默认`compose.yaml`；只在显式叠加后启用。构建上下文必须是仓库根目录，因为 worker 通过`go.mod`的本地 replace 引用`contracts/code-runtime`。构建固定使用`golang:1.26.9-bookworm`；最终阶段的`CODE_RUNTIME_DOCKER_CLI_IMAGE`是必填参数，必须使用含`docker` CLI的不可变`image@sha256:…`引用，不能留空或使用浮动标签。控制器仅需要 Docker CLI 的执行、检查和清理命令；最终镜像移除上游附带的 Buildx 和 Compose 发布插件，缩小运行时攻击面。CLI镜像必须支持目标Docker Engine架构；Linux/amd64 与 Linux/arm64 可使用已核验的多架构 Docker CLI 索引，例如 `docker.io/library/docker:29-cli@sha256:1a4c7cb63513f349bdad01fcc6e0f3f2f67d37b9da86f14dc0d4a0942eecda00`，并在部署时从实际可信来源核验摘要与架构。
 
 运维先把父目录`.local-secrets`设为仅部署用户可读写，并确认目标子目录不存在。准备器只创建一个新的私有目录，生成十个逐文件材料：`bindings.json`、平台许可签名私钥、工具批准私钥、控制器CA证书、许可公钥、回执加密密钥、控制器证书和私钥、控制器JSON配置、Compose环境文件。CA私钥只在生成时使用且不落盘；该生成器不会创建 IAM Grant、发布策略或启动服务。它预置三个示例语言绑定到命令所给 tenant/application 和三个示例Agent，并将并发设为2；每次执行限制为128 MiB内存、500 milli CPU、5 CPU秒、16个PID、8 MiB临时盘、15秒墙钟和64 KiB输出。准备器根据 controller IP 和专用子网自动选择不与 controller、网络地址、默认网关或广播地址冲突的`CODE_RUNTIME_PLATFORM_PRIVATE_IP`，与`CODE_RUNTIME_PRIVATE_IP`、`CODE_RUNTIME_SUBNET`一并写入`compose.env`。`--docker-cli-image`和`--socket-gid`是可选但必须成对提供；提供时生成的`compose.env`还包含这两个部署变量，省略时则需在部署前从已核验来源补齐。不要把示例绑定直接扩展为未审查的生产Agent授权。
 

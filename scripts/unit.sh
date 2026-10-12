@@ -129,7 +129,7 @@ run_sandbox_lane() {
         -v "${sandbox_mount}:/workspace" \
         -w /workspace/workers/metric-runner \
         "${extra[@]}" \
-        golang:1.25 \
+        golang:1.26.9-bookworm \
         go test -count=1 -v -run TestSandbox ./internal/sandbox/... 2>&1)"
     exit_code=$?
     set -e

@@ -1,12 +1,14 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.25.1-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm AS build
+ARG TARGETOS=linux
+ARG TARGETARCH
 WORKDIR /src/platform
 COPY platform/ ./
 COPY contracts/code-runtime/ /src/contracts/code-runtime/
 COPY contracts/agent-evaluation/go/ /src/contracts/agent-evaluation/go/
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/reversible-api ./cmd/reversible-api
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/reversible-api ./cmd/reversible-api
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates && addgroup -S -g 10001 agentplug && adduser -S -u 10001 -G agentplug agentplug
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates && addgroup -S -g 10001 agentplug && adduser -S -u 10001 -G agentplug agentplug
 COPY --from=build /out/reversible-api /app/reversible-api
 USER 10001:10001
 EXPOSE 8087

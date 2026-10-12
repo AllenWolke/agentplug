@@ -99,7 +99,7 @@ func (m *Module) withRuntimeBudget(w http.ResponseWriter, r *http.Request, op en
 		}
 		// Volatile counters belong only to the authorized response. The immutable
 		// model receipt cannot vary when concurrent root/child charges settle.
-		fresh := make(map[string]any, len(result)+1)
+		fresh := make(map[string]any, len(result))
 		for key, value := range result {
 			if key != "run_budget" {
 				fresh[key] = value

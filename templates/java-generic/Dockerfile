@@ -1,13 +1,18 @@
 # syntax=docker/dockerfile:1
 # The release pipeline pins the base images by digest before publishing.
-FROM maven:3.9.9-eclipse-temurin-17 AS build
+FROM --platform=$BUILDPLATFORM maven:3.9.9-eclipse-temurin-17 AS build
 WORKDIR /src
 COPY pom.xml ./
 COPY platform_entry ./platform_entry
 RUN mvn --batch-mode --no-transfer-progress -DskipTests package
 
-FROM eclipse-temurin:17-jre
-RUN useradd --system --uid 10001 --create-home agent
+FROM eclipse-temurin:17-jre-jammy
+ARG UBUNTU_PORTS_MIRROR=https://ports.ubuntu.com/ubuntu-ports
+RUN sed -i "s|http://ports.ubuntu.com/ubuntu-ports|${UBUNTU_PORTS_MIRROR}|g" /etc/apt/sources.list \
+    && apt-get -o Acquire::Retries=3 update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --create-home agent
 USER 10001:10001
 WORKDIR /app
 COPY --from=build /src/target/agent-0.1.0.jar /app/agent.jar

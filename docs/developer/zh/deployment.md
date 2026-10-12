@@ -8,7 +8,7 @@
 
 ### 准备基础设施和配置
 
-安装 Go 1.25+、Node.js 20+、Python 3.12+、PostgreSQL 16 + pgvector。预置业务数据库、可执行迁移的 schema owner 和独立 `platform_runtime` DML 角色；本地开发迁移也可通过明确的 `PLATFORM_DEV_RUNTIME_PASSWORD` 预置运行角色。数据库连接必须指向你实际准备的地址和账号。
+安装 Go 1.26.9+、Node.js 20+、Python 3.12+、PostgreSQL 16 + pgvector。预置业务数据库、可执行迁移的 schema owner 和独立 `platform_runtime` DML 角色；本地开发迁移也可通过明确的 `PLATFORM_DEV_RUNTIME_PASSWORD` 预置运行角色。数据库连接必须指向你实际准备的地址和账号。
 
 在仓库根目录创建私有目录，复制公开模板，填写真实值：
 

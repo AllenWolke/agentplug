@@ -71,7 +71,7 @@ New to AgentPlug? Follow this order to understand the project, run an agent and 
 Use **Docker Compose** for your first installation. Requirements: Python 3.12+, Docker Engine / Docker Desktop, and Compose v2. Run from the repository root:
 
 ```text
-python -m pip install "cryptography>=43,<46"
+python -m pip install "cryptography>=50,<51"
 python scripts/prepare_local_development.py
 python scripts/compose.py config --env-file .env
 python scripts/init_platform.py --env-file .env
@@ -99,7 +99,7 @@ An empty agent catalog is expected. After the base stack is ready, develop, publ
 
 ### Local source deployment
 
-Install Go 1.25+, Node.js 20+, Python 3.12+, and PostgreSQL 16 + pgvector. Java agents also need JDK 21 and Maven. Prepare separate migration, platform, frontend and Runner configuration using the [local deployment guide](docs/developer/en/deployment.md#local-source-and-host-processes).
+Install Go 1.26.9+, Node.js 20+, Python 3.12+, and PostgreSQL 16 + pgvector. Java agents also need JDK 21 and Maven. Prepare separate migration, platform, frontend and Runner configuration using the [local deployment guide](docs/developer/en/deployment.md#local-source-and-host-processes).
 
 ```text
 python scripts/local.py build

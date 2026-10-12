@@ -243,7 +243,7 @@ func (m *Module) releaseModelBudget(ctx context.Context, reservation usagecost.M
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err := m.modelBudgets.Release(writeCtx, reservation); err != nil {
-		log.Printf("model budget release unavailable trace=%s error_type=%T", traceID, err)
+		log.Printf("model budget release unavailable trace=%q error_type=%T", traceID, err)
 	}
 }
 
@@ -253,11 +253,11 @@ func (m *Module) markModelReconciliation(ctx context.Context, scopeHash, key, fi
 	var holdErr error
 	if store, ok := m.modelBudgets.(usagecost.ModelBudgetReconciliationStore); ok {
 		if err := store.MarkReconciliationNeeded(writeCtx, reservation); err != nil {
-			log.Printf("model budget reconciliation hold unavailable trace=%s error_type=%T", traceID, err)
+			log.Printf("model budget reconciliation hold unavailable trace=%q error_type=%T", traceID, err)
 			holdErr = err
 		}
 	} else {
-		log.Printf("model budget store has no reconciliation hold port trace=%s", traceID)
+		log.Printf("model budget store has no reconciliation hold port trace=%q", traceID)
 		holdErr = errors.New("billing hold store unavailable")
 	}
 	if store, ok := m.modelStore.(ModelBillingRecoveryStore); ok {
@@ -273,11 +273,11 @@ func (m *Module) markModelReconciliation(ctx context.Context, scopeHash, key, fi
 	}
 	store, ok := m.modelStore.(ModelInvocationReconciliationStore)
 	if !ok {
-		log.Printf("model result requires reconciliation but invocation store has no reconciliation port trace=%s", traceID)
+		log.Printf("model result requires reconciliation but invocation store has no reconciliation port trace=%q", traceID)
 		return errors.New("billing recovery store unavailable")
 	}
 	if err := store.MarkReconciliationNeeded(writeCtx, scopeHash, key, fingerprint, response, costCents); err != nil {
-		log.Printf("model result reconciliation marker unavailable trace=%s error_type=%T", traceID, err)
+		log.Printf("model result reconciliation marker unavailable trace=%q error_type=%T", traceID, err)
 		return errors.Join(holdErr, err)
 	}
 	return errors.Join(holdErr, errors.New("billing recovery store unavailable"))

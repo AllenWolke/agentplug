@@ -119,7 +119,7 @@ def main() -> int:
             "PLATFORM_HOST_PORT": args.platform_port, "PLATFORM_INTERNAL_HOST_PORT": args.internal_port,
         })
     except ImportError:
-        print('Install prerequisite: python -m pip install "cryptography>=43,<46"', file=sys.stderr)
+        print('Install prerequisite: python -m pip install "cryptography>=50,<51"', file=sys.stderr)
         return 1
     except (OSError, ValueError, EOFError, KeyboardInterrupt) as error:
         # Do not serialize user data, private paths or environment contents in errors.

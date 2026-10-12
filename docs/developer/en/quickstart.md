@@ -19,7 +19,7 @@ Requirements: Python 3.12+, a running Docker engine and Compose v2. Initial buil
 ## 2. Prepare private configuration
 
 ```text
-python -m pip install "cryptography>=43,<46"
+python -m pip install "cryptography>=50,<51"
 python scripts/prepare_local_development.py
 ```
 
