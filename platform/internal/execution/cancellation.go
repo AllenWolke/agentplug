@@ -2,7 +2,6 @@ package execution
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log"
 	"time"
@@ -13,6 +12,16 @@ import (
 	platformruntime "github.com/lexagent/platform/internal/runtime"
 	"github.com/lexagent/platform/internal/sharedkernel"
 	"github.com/lexagent/platform/internal/telemetry"
+)
+
+// Cancellation reconciliation budgets. The scan lists one bounded page; each
+// due row confirms its stop under its own detached budget so the 10s remote
+// transport ceiling is never truncated by the scan deadline; the round stays
+// bounded so dispatch and outcome reconciliation keep their ticker share.
+const (
+	cancellationScanBound  = 5 * time.Second
+	cancellationItemBound  = 15 * time.Second
+	cancellationRoundBound = 60 * time.Second
 )
 
 type cancellationRepository interface {
@@ -72,12 +81,18 @@ func stopDiagnostic(err error) (string, string) {
 			code = remote.Code
 		}
 	}
+	if phase == "model_settlement" && code == "REMOTE_STOP_UNCONFIRMED" {
+		code = "MODEL_SETTLEMENT_PENDING"
+	}
 	return phase, code
 }
 
 // stopUncertainExecution never assumes a failed transport stopped a remote graph.
 // 网络错误不等于远程图退出；保持 FIFO 占用直到签名停止确认。
 func (d *Dispatcher) stopUncertainExecution(running platformruntime.Run, code string) error {
+	// Persist which stop path/code actually fired so an unconfirmed tail is
+	// auditable by code instead of inferred from downstream cancellation logs.
+	log.Printf("execution stop uncertain run_id=%q revision=%d code=%s", running.ID, running.Revision, code)
 	store, ok := d.repository.(interface {
 		BeginCancellationWithReason(string, uint64, string) (platformruntime.Run, error)
 	})
@@ -98,11 +113,15 @@ func (d *Dispatcher) stopUncertainExecution(running platformruntime.Run, code st
 	// The Invoke context can already be cancelled; stopping needs a new bounded
 	// control context, not a cancelled transport or a fresh business grant.
 	// Invoke context 可能已取消；停止控制使用新的有界 context，不恢复业务授权。
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// The control budget must cover a loaded database plus the remote stop; 2s was
+	// shorter than the observed admission/commit latency and could never confirm a
+	// stop under load, leaving the Run pending forever. Reuse the per-item bound.
+	ctx, cancel := context.WithTimeout(context.Background(), cancellationItemBound)
 	defer cancel()
 	if err := d.confirmCancellation(ctx, pending); err != nil {
 		telemetry.RecordExecutionReconciliationFailure("cancellation")
-		log.Printf("execution stop pending run_id=%s code=REMOTE_STOP_UNCONFIRMED", running.ID)
+		phase, reason := stopDiagnostic(err)
+		log.Printf("execution stop pending run_id=%q phase=%s code=%s", running.ID, phase, reason)
 	}
 	return nil
 }
@@ -128,7 +147,8 @@ func (m *Module) requestCancellation(ctx context.Context, run platformruntime.Ru
 	}
 	if err := m.dispatcher.confirmCancellation(ctx, pending); err != nil {
 		telemetry.RecordExecutionReconciliationFailure("cancellation")
-		log.Printf("execution cancellation pending run_id=%s code=REMOTE_STOP_UNCONFIRMED", pending.ID)
+		phase, code := stopDiagnostic(err)
+		log.Printf("execution cancellation pending run_id=%q phase=%s code=%s", pending.ID, phase, code)
 		// Durable intent is the response, not a fabricated terminal success.
 		// 返回持久化待取消状态，不伪造终态；补偿循环继续处理。
 		return pending, nil
@@ -137,6 +157,9 @@ func (m *Module) requestCancellation(ctx context.Context, run platformruntime.Ru
 }
 
 func (d *Dispatcher) confirmCancellation(ctx context.Context, pending platformruntime.Run) error {
+	if d.recoveryHolds.Contains(pending.ID) {
+		return stopPhaseError{"operator_recovery_hold", sharedkernel.ErrAutomaticRecoveryHeld}
+	}
 	if pending.Status != platformruntime.StatusCancelling && pending.Status != platformruntime.StatusRecovering {
 		return platformruntime.ErrInvalidTransition
 	}
@@ -154,7 +177,18 @@ func (d *Dispatcher) confirmCancellation(ctx context.Context, pending platformru
 			}
 		}
 	}
-	if pending.Status == platformruntime.StatusCancelling && pending.LeaseToken != "" {
+	var acknowledgedRevision uint64
+	ackStore, supportsAck := d.repository.(cancellationAcknowledgementStore)
+	if supportsAck && pending.Status == platformruntime.StatusCancelling && pending.LeaseToken != "" {
+		revision, found, err := ackStore.ReadCancellationAgentAcknowledgement(ctx, pending)
+		if err != nil {
+			return stopPhaseError{"agent_stop_receipt_read", err}
+		}
+		if found {
+			acknowledgedRevision = revision
+		}
+	}
+	if pending.Status == platformruntime.StatusCancelling && pending.LeaseToken != "" && acknowledgedRevision == 0 {
 		if store, ok := d.repository.(interface {
 			TryCancelUndispatched(context.Context, platformruntime.Run) (bool, error)
 		}); ok {
@@ -187,7 +221,10 @@ func (d *Dispatcher) confirmCancellation(ctx context.Context, pending platformru
 		return err
 	}
 	var request contract.ExecuteRequest
-	if err := json.Unmarshal(pending.RequestJSON, &request); err != nil || request.Scope.RunID != pending.ID {
+	if err := contract.DecodeJSONPreservingNumbers(pending.RequestJSON, &request); err != nil || request.Scope.RunID != pending.ID {
+		return platformruntime.ErrInvalidRequest
+	}
+	if err := bindRunAuthorization(pending, &request); err != nil {
 		return platformruntime.ErrInvalidRequest
 	}
 	scope := pending.Scope
@@ -196,7 +233,6 @@ func (d *Dispatcher) confirmCancellation(ctx context.Context, pending platformru
 		return platformruntime.ErrInvalidRequest
 	}
 	var evidence StopEvidence
-	var acknowledgedRevision uint64
 	var handoff *contract.HandlerHandoff
 	var groupHandoff *contract.AgentGroupHandoff
 	groupStore, supportsGroup := d.repository.(interface {
@@ -207,7 +243,7 @@ func (d *Dispatcher) confirmCancellation(ctx context.Context, pending platformru
 		CancellationWaitingHandoff(context.Context, platformruntime.Run) (contract.HandlerHandoff, error)
 		CancelWithWaitingHandoff(string, uint64, contract.HandlerHandoff) (platformruntime.Run, error)
 	})
-	if supportsHandoff && pending.Status == platformruntime.StatusCancelling {
+	if acknowledgedRevision == 0 && supportsHandoff && pending.Status == platformruntime.StatusCancelling {
 		receipt, err := handoffStore.CancellationWaitingHandoff(ctx, pending)
 		if err != nil && !errors.Is(err, ErrStopEvidenceAbsent) {
 			return stopPhaseError{"waiting_handoff", err}
@@ -216,7 +252,7 @@ func (d *Dispatcher) confirmCancellation(ctx context.Context, pending platformru
 			handoff = &receipt
 		}
 	}
-	if handoff == nil && supportsGroup && pending.Status == platformruntime.StatusCancelling {
+	if acknowledgedRevision == 0 && handoff == nil && supportsGroup && pending.Status == platformruntime.StatusCancelling {
 		receipt, err := groupStore.CancellationAgentGroupHandoff(ctx, pending)
 		if err != nil && !errors.Is(err, ErrStopEvidenceAbsent) {
 			return stopPhaseError{"group_wait_handoff", err}
@@ -225,7 +261,7 @@ func (d *Dispatcher) confirmCancellation(ctx context.Context, pending platformru
 			groupHandoff = &receipt
 		}
 	}
-	if handoff == nil && groupHandoff == nil && d.stopEvidence != nil {
+	if acknowledgedRevision == 0 && handoff == nil && groupHandoff == nil && d.stopEvidence != nil {
 		proof, err := d.stopEvidence.VerifyStopped(ctx, pending)
 		if err != nil && !errors.Is(err, ErrStopEvidenceAbsent) {
 			return stopPhaseError{"controller_stop_evidence", err}
@@ -234,7 +270,7 @@ func (d *Dispatcher) confirmCancellation(ctx context.Context, pending platformru
 			evidence = proof
 		}
 	}
-	if handoff == nil && groupHandoff == nil && evidence.Source == "" {
+	if acknowledgedRevision == 0 && handoff == nil && groupHandoff == nil && evidence.Source == "" {
 		executionRevision, err := d.cancellationExecutionRevision(ctx, pending)
 		if err != nil {
 			return stopPhaseError{"dispatch_generation", err}
@@ -270,6 +306,11 @@ func (d *Dispatcher) confirmCancellation(ctx context.Context, pending platformru
 			return stopPhaseError{"remote_response", agentgateway.ErrInvalidResponse}
 		}
 		acknowledgedRevision = executionRevision
+		if supportsAck && pending.Status == platformruntime.StatusCancelling {
+			if err := ackStore.RecordCancellationAgentAcknowledgement(ctx, pending, acknowledgedRevision); err != nil {
+				return stopPhaseError{"agent_stop_receipt_commit", err}
+			}
+		}
 	}
 	// Remote exit is necessary but insufficient: an interrupted HTTP client may
 	// leave a provider charge awaiting reconciliation. Retain FIFO until settled.
@@ -380,16 +421,31 @@ func (d *Dispatcher) reconcileCancellations(ctx context.Context) {
 	}
 	d.cancellationScanMu.Lock()
 	defer d.cancellationScanMu.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
+	parent := ctx
+	// The scan budget lists one bounded page only. A due row's stop
+	// confirmation can legitimately wait for a remote stop acknowledgement
+	// (the transport ceiling alone is 10s), so truncating it under the scan
+	// deadline misreports an unconfirmed stop as failed and backs the row off.
+	// Each visited row therefore gets its own bounded budget detached from the
+	// scan deadline, and the whole round stays bounded so the dispatcher ticker
+	// still services dispatch and outcome reconciliation.
+	scanCtx, scanCancel := context.WithTimeout(parent, cancellationScanBound)
+	defer scanCancel()
 	const batchSize = 16
 	var runs []platformruntime.Run
 	var err error
 	paged, hasCursor := d.repository.(interface {
 		ListPendingCancellationsAfter(context.Context, string, int) ([]platformruntime.Run, error)
 	})
-	if hasCursor {
-		runs, err = paged.ListPendingCancellationsAfter(ctx, d.cancellationCursor, batchSize)
+	headers, hasHeaders := d.repository.(interface {
+		ListPendingCancellationHeadersAfter(context.Context, string, int) ([]platformruntime.Run, error)
+		GetContext(context.Context, string) (platformruntime.Run, error)
+	})
+	if hasHeaders {
+		hasCursor = true
+		runs, err = headers.ListPendingCancellationHeadersAfter(scanCtx, d.cancellationCursor, batchSize)
+	} else if hasCursor {
+		runs, err = paged.ListPendingCancellationsAfter(scanCtx, d.cancellationCursor, batchSize)
 	} else {
 		runs, err = store.PendingCancellations(batchSize)
 	}
@@ -402,20 +458,48 @@ func (d *Dispatcher) reconcileCancellations(ctx context.Context) {
 		d.cancellationCursor = ""
 		return
 	}
+	roundCtx, roundCancel := context.WithTimeout(context.WithoutCancel(parent), cancellationRoundBound)
+	defer roundCancel()
 	for _, run := range runs {
-		if ctx.Err() != nil {
+		if roundCtx.Err() != nil || parent.Err() != nil {
 			return
 		}
-		// Advance only for a Run actually attempted. Unconfirmed historical
-		// effects stay durable, but cannot monopolize every bounded sweep.
-		// A deadline midway through a page must not skip its unvisited tail.
+		// A backed-off row was visited too: advance past it so another Run can
+		// proceed. A deadline still cannot skip an unvisited page tail.
 		if hasCursor {
 			d.cancellationCursor = run.ID
 		}
-		if err := d.confirmCancellation(ctx, run); err != nil {
-			telemetry.RecordExecutionReconciliationFailure("cancellation")
-			phase, code := stopDiagnostic(err)
-			log.Printf("execution cancellation pending run_id=%s phase=%s code=%s", run.ID, phase, code)
+		if d.recoveryHolds.Contains(run.ID) {
+			continue
 		}
+		if !d.cancellationDue(run, time.Now()) {
+			continue
+		}
+		func() {
+			itemCtx, itemCancel := context.WithTimeout(context.WithoutCancel(parent), cancellationItemBound)
+			defer itemCancel()
+			if hasHeaders {
+				// Only a due row pays for the full request; a concurrent terminal
+				// transition between the two reads is simply skipped this round.
+				full, err := headers.GetContext(itemCtx, run.ID)
+				if err != nil {
+					telemetry.RecordExecutionReconciliationFailure("cancellation")
+					log.Printf("execution cancellation reconciliation code=CANCEL_QUERY_FAILED")
+					return
+				}
+				if full.Status != platformruntime.StatusCancelling && full.Status != platformruntime.StatusRecovering {
+					return
+				}
+				run = full
+			}
+			if err := d.confirmCancellation(itemCtx, run); err != nil {
+				d.deferCancellation(run, time.Now())
+				telemetry.RecordExecutionReconciliationFailure("cancellation")
+				phase, code := stopDiagnostic(err)
+				log.Printf("execution cancellation pending run_id=%q phase=%s code=%s", run.ID, phase, code)
+			} else {
+				delete(d.cancellationRetries, run.ID)
+			}
+		}()
 	}
 }

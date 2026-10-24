@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -95,6 +97,96 @@ func TestEvaluationInvocationAuthorityRejectsForgedInputAndPolicy(t *testing.T) 
 	}
 	if evaluationInputHasPolicy(map[string]any{"policy_snapshot": map[string]any{"revision": 1}}, map[string]any{"revision": 2}) {
 		t.Fatal("different policy snapshot was accepted")
+	}
+}
+
+func TestFrozenEvaluationNumbersSurviveDurableExecutionBoundaries(t *testing.T) {
+	caseInput := json.RawMessage(`{"case_id":"numeric-source","input":{"evidence":{"facts_check":{"citation_coverage":1.0,"large_id":9007199254740993,"thresholds":[-0.0,1e+3]}}},"expected":{}}`)
+	var sample struct {
+		Input json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal(caseInput, &sample); err != nil {
+		t.Fatal(err)
+	}
+	raw := append(append([]byte(`{"input":`), sample.Input...), '}')
+	for boundary := 0; boundary < 5; boundary++ {
+		var request contract.ExecuteRequest
+		if err := contract.DecodeJSONPreservingNumbers(raw, &request); err != nil {
+			t.Fatal(err)
+		}
+		request.Input["policy_snapshot"] = map[string]any{"revision": 1}
+		if !evaluationCaseRequestMatches(caseInput, request.Input) {
+			t.Fatalf("unchanged source rejected at durable boundary %d", boundary)
+		}
+		var err error
+		raw, err = json.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	var lossy contract.ExecuteRequest
+	if json.Unmarshal(raw, &lossy) != nil || evaluationCaseRequestMatches(caseInput, lossy.Input) {
+		t.Fatal("lossy float64 reconstruction must remain rejected")
+	}
+	var changed contract.ExecuteRequest
+	if err := contract.DecodeJSONPreservingNumbers(raw, &changed); err != nil {
+		t.Fatal(err)
+	}
+	facts := changed.Input["evidence"].(map[string]any)["facts_check"].(map[string]any)
+	facts["citation_coverage"] = json.Number("0.0")
+	if evaluationCaseRequestMatches(caseInput, changed.Input) {
+		t.Fatal("actual source evidence substitution was accepted")
+	}
+}
+
+func TestFrozenEvaluationNativeNumericCorpus(t *testing.T) {
+	files := os.Getenv("EVALUATION_NUMBER_CORPUS_FILES")
+	if files == "" {
+		// This project's public fixture exercises exact numeric boundaries
+		// without importing either reference Agent's business corpus.
+		raw, err := json.Marshal([]string{filepath.Join("..", "..", "..", "contracts", "fixtures", "evaluation-numeric-public-v1.json")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = string(raw)
+	}
+	var paths []string
+	if json.Unmarshal([]byte(files), &paths) != nil || len(paths) == 0 {
+		t.Fatal("invalid frozen corpus configuration")
+	}
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var dataset struct {
+			Cases []json.RawMessage `json:"cases"`
+		}
+		if json.Unmarshal(raw, &dataset) != nil || len(dataset.Cases) != 60 {
+			t.Fatal("exact frozen 60-case dataset required")
+		}
+		for index, sample := range dataset.Cases {
+			var fields struct {
+				Input json.RawMessage `json:"input"`
+			}
+			if json.Unmarshal(sample, &fields) != nil {
+				t.Fatal("case input unavailable")
+			}
+			envelope := append(append([]byte(`{"input":`), fields.Input...), '}')
+			var request contract.ExecuteRequest
+			if contract.DecodeJSONPreservingNumbers(envelope, &request) != nil || !evaluationCaseRequestMatches(sample, request.Input) {
+				t.Fatalf("native case %d changed at durable decode", index)
+			}
+			forwarded, err := json.Marshal(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var restored contract.ExecuteRequest
+			if contract.DecodeJSONPreservingNumbers(forwarded, &restored) != nil || !evaluationCaseRequestMatches(sample, restored.Input) {
+				t.Fatalf("native case %d changed after forwarding", index)
+			}
+		}
+		t.Logf("preserved all %d frozen native cases", len(dataset.Cases))
 	}
 }
 

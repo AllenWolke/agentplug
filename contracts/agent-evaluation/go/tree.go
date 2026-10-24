@@ -1,6 +1,7 @@
 package agenteval
 
 import (
+	"encoding/json"
 	"math"
 	"sort"
 	"time"
@@ -9,9 +10,25 @@ import (
 // AggregateTree accepts only already authorized, direct Run projections. It
 // never sums parent latency or TTFT and never treats missing child cost as 0.
 func AggregateTree(root Trajectory, descendants []Trajectory, complete bool) Trajectory {
+	limits, validProfile := TrajectoryReadLimitsFor(root.EvidenceReadProfile)
+	if !validProfile {
+		limits, _ = TrajectoryReadLimitsFor("")
+		complete = false
+		root.Missing = append(root.Missing, "evidence_read_profile_invalid")
+	}
 	all := []Trajectory{root}
 	seen := map[string]bool{root.RunID: true}
 	for _, t := range descendants {
+		if t.EvidenceReadProfile != root.EvidenceReadProfile {
+			complete = false
+			root.Missing = append(root.Missing, "evidence_read_profile_mismatch")
+			continue
+		}
+		if t.ToolArgumentProjection != root.ToolArgumentProjection {
+			complete = false
+			root.Missing = append(root.Missing, "tool_argument_projection_mismatch")
+			continue
+		}
 		if t.RunID == "" || seen[t.RunID] {
 			continue
 		}
@@ -28,7 +45,7 @@ func AggregateTree(root Trajectory, descendants []Trajectory, complete bool) Tra
 		root.Coverage = map[string]bool{}
 	}
 	root.Coverage["run_tree"] = complete
-	for _, kind := range []string{"events", "tool", "usage"} {
+	for _, kind := range []string{"events", "tool", "usage", "model_timing", "native_stage_cache"} {
 		valid := complete
 		for _, t := range all {
 			if !t.Coverage[kind] {
@@ -46,9 +63,24 @@ func AggregateTree(root Trajectory, descendants []Trajectory, complete bool) Tra
 			break
 		}
 	}
-	if len(root.Events) > 10000 {
-		root.Events = root.Events[:10000]
+	kept, bytesRead := 0, 2
+	for _, event := range root.Events {
+		if kept >= limits.Events {
+			break
+		}
+		if limits.EventBytes > 0 {
+			encoded, err := json.Marshal(event)
+			if err != nil || bytesRead+len(encoded)+1 > limits.EventBytes {
+				break
+			}
+			bytesRead += len(encoded) + 1
+		}
+		kept++
+	}
+	if kept < len(root.Events) {
+		root.Events = root.Events[:kept]
 		root.Coverage["events"], root.Coverage["tool"] = false, false
+		root.Coverage["model_timing"], root.Coverage["native_stage_cache"] = false, false
 		root.Missing = append(root.Missing, "tree_events_truncated")
 	}
 	sort.SliceStable(root.Events, func(i, j int) bool {

@@ -119,7 +119,10 @@ func (s *SQLRouteStore) PinRootMachineAuthorityTx(ctx context.Context, tx *sql.T
 	// exact comparison rejects changes. Shared read fencing lets heartbeats
 	// coexist with child admission reading that same authority.
 	err = tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT root_run_id,root_installation_id,root_principal_type,root_principal_id,root_authorization_epoch,machine_principal_id,machine_run_epoch FROM platform_agent_delegation_root_authority WHERE root_run_id=? FOR SHARE`), stamp.RootRunID).Scan(&saved.RootRunID, &saved.RootInstallationID, &saved.RootPrincipalType, &saved.RootPrincipalID, &saved.RootAuthorizationEpoch, &saved.MachinePrincipalID, &saved.MachineRunEpoch)
-	if err != nil || saved != stamp {
+	if err != nil {
+		return err
+	}
+	if saved != stamp {
 		return ErrDenied
 	}
 	return nil

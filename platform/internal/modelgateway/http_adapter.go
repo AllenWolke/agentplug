@@ -56,12 +56,17 @@ type ProviderMetadata struct {
 }
 
 type ModelMetadata struct {
-	ID         string
-	VersionID  string
-	ProviderID string
-	Key        string
-	Status     string
-	Kind       string
+	ResponseSchemaDialect string
+	ContextCacheMode      string
+	ReasoningDialect      string
+	WireModel             string
+	SupportsJSON          bool
+	ID                    string
+	VersionID             string
+	ProviderID            string
+	Key                   string
+	Status                string
+	Kind                  string
 }
 
 type ProviderMetadataPort interface {
@@ -199,13 +204,16 @@ func (a *HTTPAdapter) Generate(ctx context.Context, scope sharedkernel.Scope, sn
 	if !snapshotMatches(snapshot, provider, model) || strings.TrimSpace(request.Model) != model.Key {
 		return GenerateResult{}, ErrModelUnavailable
 	}
+	if !snapshot.Model.AllowsContextCacheMode(model.ContextCacheMode) {
+		return GenerateResult{}, ErrModelUnavailable
+	}
 	if request.MaxTokens < 0 || snapshot.Model.MaxTokens > 0 && request.MaxTokens > snapshot.Model.MaxTokens {
 		return GenerateResult{}, ErrProviderResponse
 	}
 	if provider.TrustZone == trustExternal && !snapshot.Model.AllowExternal {
 		return GenerateResult{}, ErrUnsafeEndpoint
 	}
-	thinking, err := publishedThinkingMode(endpoint, snapshot.Model.ReasoningMode)
+	thinking, reasoningEffort, err := publishedWireReasoning(endpoint, model, snapshot.Model)
 	if err != nil {
 		return GenerateResult{}, err
 	}
@@ -223,15 +231,28 @@ func (a *HTTPAdapter) Generate(ctx context.Context, scope sharedkernel.Scope, sn
 	if err != nil {
 		return GenerateResult{}, err
 	}
+	wireModel := model.Key
+	if model.WireModel != "" {
+		wireModel = model.WireModel
+	}
+	responseFormat, err := responseFormat(request, model)
+	if err != nil {
+		return GenerateResult{}, err
+	}
+	if responseFormat != nil && responseFormat.Type == "json_schema" && model.ResponseSchemaDialect == ResponsesSchemaDialect {
+		return a.generateSchemaResponse(ctx, endpoint, secret, wireModel, model, snapshot.Model, request, messages, responseFormat)
+	}
 	body, err := json.Marshal(struct {
-		Model           string        `json:"model"`
-		Messages        []Message     `json:"messages"`
-		Temperature     float64       `json:"temperature"`
-		MaxTokens       int           `json:"max_tokens,omitempty"`
-		Thinking        *thinkingMode `json:"thinking,omitempty"`
-		ReasoningEffort string        `json:"reasoning_effort,omitempty"`
-		Tools           []wireTool    `json:"tools,omitempty"`
-	}{Model: model.Key, Messages: messages, Temperature: request.Temperature, MaxTokens: request.MaxTokens, Thinking: thinking, ReasoningEffort: snapshot.Model.ReasoningEffort, Tools: tools})
+		Model           string              `json:"model"`
+		Messages        []Message           `json:"messages"`
+		Temperature     float64             `json:"temperature"`
+		MaxTokens       int                 `json:"max_tokens,omitempty"`
+		Thinking        *thinkingMode       `json:"thinking,omitempty"`
+		EnableThinking  *bool               `json:"enable_thinking,omitempty"`
+		ReasoningEffort string              `json:"reasoning_effort,omitempty"`
+		Tools           []wireTool          `json:"tools,omitempty"`
+		ResponseFormat  *jsonResponseFormat `json:"response_format,omitempty"`
+	}{Model: wireModel, Messages: messages, Temperature: request.Temperature, MaxTokens: request.MaxTokens, Thinking: thinking, EnableThinking: qwenThinkingSwitch(model, snapshot.Model), ReasoningEffort: reasoningEffort, Tools: tools, ResponseFormat: responseFormat})
 	if err != nil {
 		return GenerateResult{}, ErrProviderResponse
 	}
@@ -255,6 +276,7 @@ func (a *HTTPAdapter) Generate(ctx context.Context, scope sharedkernel.Scope, sn
 			} `json:"message"`
 		} `json:"choices"`
 		Usage struct {
+			providerCacheUsage
 			PromptTokens     *int `json:"prompt_tokens"`
 			CompletionTokens *int `json:"completion_tokens"`
 		} `json:"usage"`
@@ -265,6 +287,18 @@ func (a *HTTPAdapter) Generate(ctx context.Context, scope sharedkernel.Scope, sn
 	}
 	choice := payload.Choices[0]
 	result := GenerateResult{Text: choice.Message.Content, InputTokens: *payload.Usage.PromptTokens, OutputTokens: *payload.Usage.CompletionTokens, Incomplete: choice.FinishReason == "length", FinishReason: choice.FinishReason}
+	result.ResponseSchema = schemaReceipt(request, model, responseFormat)
+	result.CacheUsage, err = payload.Usage.providerCacheUsage.normalize(result.InputTokens)
+	if err != nil {
+		telemetry.RecordModelContextCacheInvalid()
+		telemetry.RecordModelProviderResponseInvalid()
+		return GenerateResult{}, err
+	}
+	if result.CachedInputTokens == nil {
+		telemetry.RecordModelContextCache(0, 0, false)
+	} else {
+		telemetry.RecordModelContextCache(*result.CachedInputTokens, *result.UncachedInputTokens, true)
+	}
 	if len(choice.Message.ToolCalls) > 0 || choice.FinishReason == "tool_calls" {
 		if choice.FinishReason != "tool_calls" || len(choice.Message.ToolCalls) == 0 || validateToolCalls(snapshot.Tool, request.FunctionNames, choice.Message.ToolCalls) != nil || reusedResponseCallID(messages, choice.Message.ToolCalls) {
 			// Preserve authentic provider usage for settlement, but release neither
@@ -276,11 +310,21 @@ func (a *HTTPAdapter) Generate(ctx context.Context, scope sharedkernel.Scope, sn
 			result.ToolCalls = choice.Message.ToolCalls
 		}
 	}
+	if !result.Incomplete && !validSchemaResponse(request.ResponseSchema, result.Text) {
+		// Keep authentic billable usage and schema receipt. Invalid shape is a
+		// known incomplete result, never an unknown outcome or an automatic retry.
+		result.Text, result.Incomplete, result.FinishReason = "", true, "invalid_response_schema"
+	}
 	return result, nil
 }
 
 type thinkingMode struct {
 	Type string `json:"type"`
+}
+
+type jsonResponseFormat struct {
+	Type       string              `json:"type"`
+	JSONSchema *wireResponseSchema `json:"json_schema,omitempty"`
 }
 
 // Do not silently map an approved setting to an unsupported vendor dialect.
@@ -459,7 +503,7 @@ func (a *HTTPAdapter) do(ctx context.Context, endpoint string, secret, body []by
 	limited := io.LimitReader(response.Body, a.config.MaxResponseBytes+1)
 	data, err := io.ReadAll(limited)
 	if err != nil {
-		return nil, &ProviderFailure{Category: "body_read", StatusCode: response.StatusCode}
+		return nil, providerBodyReadFailure(ctx, err, response.StatusCode)
 	}
 	if int64(len(data)) > a.config.MaxResponseBytes {
 		return nil, ErrResponseTooLarge

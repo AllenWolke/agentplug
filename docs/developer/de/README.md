@@ -1,5 +1,7 @@
 # Einstieg für Entwickler
 
+Neue gemeinsame Funktionen, SDK 2.1, Beispielagenten und Kompatibilität: [Änderungsübersicht auf Englisch](../../releases/public-capabilities-2.1.en.md).
+
 [Deutsches README](../../../README_DE.md) · [简体中文](../zh/README.md) · [English](../en/README.md) · [日本語](../ja/README.md)
 
 Verstehen Sie die Zuständigkeiten, führen Sie Geschäftscode aus und liefern Sie ihn für Unternehmen, Abteilungen und Benutzer aus. Vertiefende Dokumente sind chinesisch und englisch; die folgenden Links sind ausdrücklich englisch.

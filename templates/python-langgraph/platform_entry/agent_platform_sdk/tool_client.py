@@ -97,7 +97,9 @@ async def _invoke_tool_once(
         context,
         {"name": name, "call_id": call_id, "payload": payload, "confirmed": confirmed},
     )
-    async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
+    from .capability_connections import connection_transport
+    async with httpx.AsyncClient(timeout=30, trust_env=False,
+                                 transport=connection_transport(_platform_base_url())) as client:
         response = await client.post(
             _platform_base_url() + "/internal/tool/invoke",
             content=body,

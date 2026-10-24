@@ -23,10 +23,14 @@ func (c *CapabilityClient) PrepareContext(ctx context.Context, messages []map[st
 // LoadCheckpoint retrieves state through the current signed execution, not
 // through a database connection. revision=0 selects the current checkpoint.
 func (c *CapabilityClient) LoadCheckpoint(ctx context.Context, namespace, key, schemaID string, revision uint64) (map[string]any, error) {
-	if revision > 64 {
+	if revision > c.checkpointRevisionLimit() {
 		return nil, &AppError{Code: "REQUEST_INVALID", Message: "checkpoint revision exceeds supported history"}
 	}
-	return c.Post(ctx, "/internal/state/checkpoint", map[string]any{"operation": "load", "namespace": namespace, "key": key, "schema_id": schemaID, "revision": revision})
+	result, err := c.postCheckpoint(ctx, map[string]any{"operation": "load", "namespace": namespace, "key": key, "schema_id": schemaID, "revision": revision})
+	if err != nil {
+		return nil, err
+	}
+	return c.rememberCheckpointCapacity(result)
 }
 
 // LoadRecoveryCheckpoint revalidates one public checkpoint reference through
@@ -37,7 +41,7 @@ func (c *CapabilityClient) LoadRecoveryCheckpoint(ctx context.Context, reference
 	if err != nil {
 		return nil, &AppError{Code: "REQUEST_INVALID", Message: "invalid recovery checkpoint reference"}
 	}
-	return c.Post(ctx, "/internal/state/checkpoint", map[string]any{"operation": "load", "reference": snapshot})
+	return c.postCheckpoint(ctx, map[string]any{"operation": "load", "reference": snapshot})
 }
 
 func cloneRecoveryCheckpointReference(reference map[string]any) (map[string]any, error) {
@@ -78,7 +82,7 @@ func cloneRecoveryCheckpointReference(reference map[string]any) (map[string]any,
 		return nil, ErrInvalidCapability
 	}
 	revisionValue, err := strconv.ParseUint(revision.String(), 10, 64)
-	if err != nil || revisionValue == 0 || revisionValue > 64 {
+	if err != nil || revisionValue == 0 || revisionValue > MaximumCheckpointRevisions {
 		return nil, ErrInvalidCapability
 	}
 	executionRevision, ok := snapshot["execution_revision"].(json.Number)
@@ -96,8 +100,8 @@ func cloneRecoveryCheckpointReference(reference map[string]any) (map[string]any,
 // platform owns TTL/quota, scope, audit and generation fencing. A conflict is
 // returned to the caller rather than silently retrying a different revision.
 func (c *CapabilityClient) SaveCheckpoint(ctx context.Context, namespace, key, schemaID, idempotencyKey string, expectedRevision uint64, value map[string]any) (map[string]any, error) {
-	if expectedRevision >= 64 || idempotencyKey == "" || value == nil {
+	if expectedRevision >= c.checkpointRevisionLimit() || idempotencyKey == "" || value == nil {
 		return nil, &AppError{Code: "REQUEST_INVALID", Message: "checkpoint CAS, operation key and object are required"}
 	}
-	return c.Post(ctx, "/internal/state/checkpoint", map[string]any{"operation": "save", "namespace": namespace, "key": key, "schema_id": schemaID, "idempotency_key": idempotencyKey, "expected_revision": expectedRevision, "value": value})
+	return c.postCheckpoint(ctx, map[string]any{"operation": "save", "namespace": namespace, "key": key, "schema_id": schemaID, "idempotency_key": idempotencyKey, "expected_revision": expectedRevision, "value": value})
 }

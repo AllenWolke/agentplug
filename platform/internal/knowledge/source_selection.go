@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/lexagent/platform/internal/sqlutil"
 )
 
 // SnapshotDocuments reads only requested current source heads, in one captured
@@ -28,15 +30,40 @@ func (p PostgresSource) SnapshotDocuments(ctx context.Context, scope ProjectionS
 	if err != nil {
 		return empty, err
 	}
+	if tx, joined, err := sqlutil.ContinuityTransaction(ctx, p.DB); joined {
+		if err != nil {
+			return empty, err
+		}
+		// The source writer locks this collection head before changing any
+		// document. Join the owner rather than acquiring another connection
+		// while it holds IAM continuity; never commit its transaction here.
+		return selectedSourceDocumentsTx(ctx, tx, scope, seen, raw, true)
+	}
 	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
+	result, err := selectedSourceDocumentsTx(ctx, tx, scope, seen, raw, false)
+	if err != nil {
+		return empty, err
+	}
+	if err := tx.Commit(); err != nil {
+		return empty, err
+	}
+	return result, nil
+}
+
+func selectedSourceDocumentsTx(ctx context.Context, tx *sql.Tx, scope ProjectionScope, seen map[string]bool, raw []byte, fenced bool) (SourceSnapshot, error) {
+	empty := SourceSnapshot{Documents: []SourceDocument{}}
 	result := empty
-	err = tx.QueryRowContext(ctx, `SELECT source_revision FROM platform_knowledge_source_head WHERE tenant_id=$1 AND department_id=$2 AND application_id=$3 AND knowledge_id=$4`, scope.args()...).Scan(&result.Revision)
+	query := `SELECT source_revision FROM platform_knowledge_source_head WHERE tenant_id=$1 AND department_id=$2 AND application_id=$3 AND knowledge_id=$4`
+	if fenced {
+		query += " FOR SHARE"
+	}
+	err := tx.QueryRowContext(ctx, query, scope.args()...).Scan(&result.Revision)
 	if errors.Is(err, sql.ErrNoRows) {
-		return empty, tx.Commit()
+		return empty, nil
 	}
 	if err != nil {
 		return empty, err
@@ -67,9 +94,6 @@ func (p PostgresSource) SnapshotDocuments(ctx context.Context, scope ProjectionS
 	}
 	if closeErr != nil {
 		return empty, closeErr
-	}
-	if err := tx.Commit(); err != nil {
-		return empty, err
 	}
 	return result, nil
 }

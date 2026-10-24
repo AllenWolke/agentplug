@@ -23,12 +23,28 @@ from document_assistant.business import (INPUT_SCHEMA, OUTPUT_SCHEMA, _digest, _
 PUBLISHED_PROMPT = "Answer from authorized documents."
 
 
-def envelope(private, *, operation="invoke", inputs=None, agent_id=AGENT_ID):
+@pytest.mark.asyncio
+async def test_historical_v2_schema_and_direct_default_are_preserved(wiring):
+    private, calls = wiring
+    request = envelope(private, schema="schema://example-python-documents/input/v2")
+    app = build_app(private.public_key().public_bytes_raw(), issuer="platform", platform_url="http://platform-fixture",
+                    transport=httpx.MockTransport(lambda r: platform_reply(r, request.context_token, calls)))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://agent") as client:
+        response = await client.post("/internal/agent-execution/v2/invoke", json=request.model_dump(), headers={"Authorization": "Bearer " + request.context_token})
+    assert response.status_code == 200, response.text
+    assert response.json()["output"]["schema"] == "schema://example-python-documents/output/v2"
+    assert "model_metadata" not in response.json()["output"]
+    assert calls.count("/internal/knowledge/answer") == 1
+    assert "/internal/model/generate" not in calls
+    assert calls.count("/internal/knowledge/references/authorize") >= 1
+
+
+def envelope(private, *, operation="invoke", inputs=None, agent_id=AGENT_ID, schema=INPUT_SCHEMA):
     policy = {key: "example-"+key for key in ("model_profile_id", "prompt_version_id", "tool_policy_id", "memory_policy_id", "knowledge_policy_id", "runtime_policy_id")}
     policy["content_hash"] = "a" * 64
     request = ExecuteRequest(protocol_version="agent-execution/v2", context_token="placeholder-context-token-with-32-bytes", operation=operation,
         scope=ScopeKey(tenant_id="demo", department_id="demo", application_id="demo", agent_instance_id="python-installation", installation_id="python-installation", agent_id=agent_id, agent_version_id="version-1", principal_type="user", principal_id="demo.python.user", session_id="session-1", run_id="run-1", authorization_epoch=1, trace_id="b"*32),
-        idempotency_key="document-request-1", input_schema=INPUT_SCHEMA,
+        idempotency_key="document-request-1", input_schema=schema,
         input={"question": "How do updates stay consistent?", **(inputs or {}), "policy_snapshot": policy})
     scope = request.scope
     claims = {"iss":"platform", "aud":"agent-runtime", "subject_type":scope.principal_type, "sub":scope.principal_id, "tenant_id":scope.tenant_id, "application_id":scope.application_id, "agent_instance_id":scope.agent_instance_id, "installation_id":scope.installation_id, "authorization_epoch":scope.authorization_epoch, "actions":[operation], "policy_snapshot_hash":policy["content_hash"], "body_hash":canonical_body_hash(request), "execution_revision":1, "lease_token_hash":"c"*64, "iat":int(time.time()), "exp":int(time.time())+240}
@@ -141,12 +157,15 @@ def platform_reply(request, token, calls, state=None):
                 data = {"checkpoint": {"revision": payload["expected_revision"] + 1}}
         else:
             raise AssertionError("unexpected checkpoint")
+    elif path == "/internal/knowledge/references/authorize":
+        assert payload["knowledge_scope"]=="python-documents"
+        data={"version":"knowledge-reference-authorization/v1","authorized":True,"reference_count":len(payload["references"]),"model_requests_sent":0}
     elif path == "/internal/knowledge/answer":
         assert payload["knowledge_scope"] == "python-documents" and payload["top_k"] == 3
         assert payload["skill_requests"] == [{"skill_id": "example.documents.guidance", "sections": ["citations"]}]
         assert payload["skill_bindings"] == {"example.documents.guidance": {"version_id": "1.0.0", "digest": "a" * 64}}
         text = "Index versions switch after complete writes."
-        data = {"text":text, "references":[{"clause_or_chunk_id":"doc-1#1", "kb_version":"v1"}], "citation_ids":["doc-1#1"], "evaluation_citations":[{"id":"doc-1#1", "revision":"v1", "content":text}], "evaluation_claims":[{"id":"answer-1", "text":text, "citation_ids":["doc-1#1"]}], "usage":{"input_tokens":10, "output_tokens":5}, "billing":{"cost_micros":15}}
+        data = {"text":text, "references":[{"clause_or_chunk_id":"doc-1#1", "kb_version":"v1", "source":"platform-knowledge", "provider_knowledge_base_id":"python-documents", "provider_document_id":"doc-1", "document_version":"v1"}], "citation_ids":["doc-1#1"], "evaluation_citations":[{"id":"doc-1#1", "revision":"v1", "content":text}], "evaluation_claims":[{"id":"answer-1", "text":text, "citation_ids":["doc-1#1"]}], "usage":{"input_tokens":10, "output_tokens":5}, "billing":{"cost_micros":15}}
     elif path == "/internal/memory/access":
         assert payload["namespace"] == "documents" and payload["key"] == "last-answer"
         data = {"value": None}

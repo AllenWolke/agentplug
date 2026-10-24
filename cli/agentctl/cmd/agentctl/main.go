@@ -250,12 +250,27 @@ func create(args []string, dryRun bool) (result, int) {
 		capabilities = inherited.Capabilities
 		schemas = inherited.Schemas
 	}
+	metadata := map[string]string{"language": *lang, "template_id": *template, "template_version": "1.0.0"}
+	if raw, readErr := os.ReadFile(filepath.Join(workTarget, "manifest.json")); readErr == nil {
+		var inherited struct {
+			Metadata map[string]string `json:"metadata"`
+		}
+		if json.Unmarshal(raw, &inherited) != nil {
+			return fail("create", "TEMPLATE_METADATA", "invalid template metadata"), 1
+		}
+		if version := inherited.Metadata["template_version"]; version != "" {
+			metadata["template_version"] = version
+		}
+		if version := inherited.Metadata["sdk_capabilities_version"]; version != "" {
+			metadata["sdk_capabilities_version"] = version
+		}
+	}
 	manifest := map[string]any{
 		"manifest_version": "agent-manifest/v1", "agent_id": slug(*name), "version": "0.1.0",
 		"execution_protocols": []string{"agent-execution/v2"}, "capabilities": capabilities,
 		"schemas":  schemas,
 		"runtime":  map[string]any{"transport": "http", "isolation": "container", "health_path": "/health/ready"},
-		"metadata": map[string]string{"language": *lang, "template_id": *template, "template_version": "1.0.0"},
+		"metadata": metadata,
 	}
 	if err := writeJSON(filepath.Join(workTarget, "manifest.json"), manifest); err != nil {
 		return fail("create", "CREATE_FAILED", err.Error()), 1
@@ -264,14 +279,14 @@ func create(args []string, dryRun bool) (result, int) {
 		"README.md":           "# " + *name + "\n\nBusiness-owned code belongs under domain/graph/prompts/eval. The platform owns IAM, run state, model and tool gateways.\n",
 		"schemas/input.json":  "{\"type\":\"object\",\"additionalProperties\":true}\n",
 		"schemas/output.json": "{\"type\":\"object\",\"additionalProperties\":true}\n",
-		"template.lock":       "{\n  \"template_id\": \"" + *template + "\",\n  \"template_version\": \"1.0.0\",\n  \"managed_paths\": [\"manifest.json\", \"platform_entry/\"],\n  \"business_paths\": [\"domain/\", \"graph/\", \"prompts/\", \"eval/\"]\n}\n",
+		"template.lock":       "{\n  \"template_id\": \"" + *template + "\",\n  \"template_version\": \"" + metadata["template_version"] + "\",\n  \"managed_paths\": [\"manifest.json\", \"platform_entry/\"],\n  \"business_paths\": [\"domain/\", \"graph/\", \"prompts/\", \"eval/\"]\n}\n",
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(workTarget, filepath.FromSlash(name)), []byte(content), 0644); err != nil {
 			return fail("create", "CREATE_FAILED", err.Error()), 1
 		}
 	}
-	ownershipLock, lockErr := agenttemplate.BuildOwnershipLock(workTarget, *template, "1.0.0")
+	ownershipLock, lockErr := agenttemplate.BuildOwnershipLock(workTarget, *template, metadata["template_version"])
 	if lockErr != nil {
 		return fail("create", "LOCK_BUILD_FAILED", lockErr.Error()), 1
 	}

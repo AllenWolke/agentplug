@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "schema://example-python-documents/output/v2",
+  "$id": "schema://example-python-documents/output/v3",
   "type": "object",
   "required": [
     "schema",
@@ -14,11 +14,12 @@
     "answer_cache_hit",
     "usage",
     "billing",
-    "collaborate"
+    "collaborate",
+    "model_metadata"
   ],
   "properties": {
     "schema": {
-      "const": "schema://example-python-documents/output/v2"
+      "const": "schema://example-python-documents/output/v3"
     },
     "question": {
       "type": "string"
@@ -91,35 +92,89 @@
     },
     "collaboration": {
       "type": "object",
-      "required": ["instruction_trust", "task_type", "children"],
+      "required": [
+        "instruction_trust",
+        "task_type",
+        "children"
+      ],
       "properties": {
-        "instruction_trust": {"const": "untrusted_data"},
-        "task_type": {"const": "operations.diagnosis"},
+        "instruction_trust": {
+          "const": "untrusted_data"
+        },
+        "task_type": {
+          "const": "operations.diagnosis"
+        },
         "children": {
           "type": "array",
           "minItems": 1,
           "maxItems": 1,
           "items": {
             "type": "object",
-            "required": ["child_key", "input_fingerprint", "output_digest", "output_schema", "service", "answer"],
+            "required": [
+              "child_key",
+              "input_fingerprint",
+              "output_digest",
+              "output_schema",
+              "service",
+              "answer"
+            ],
             "properties": {
-              "child_key": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-              "input_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-              "output_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-              "output_schema": {"const": "schema://example-go-operations/output/v2"},
-              "service": {"const": "python-documents"},
-              "answer": {"type": "string", "minLength": 1, "maxLength": 16384}
+              "child_key": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "input_fingerprint": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "output_digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "output_schema": {
+                "const": "schema://example-go-operations/output/v3"
+              },
+              "service": {
+                "const": "python-documents"
+              },
+              "answer": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16384
+              }
             }
           }
         }
       }
+    },
+    "model_metadata": {
+      "type": "object"
     }
   },
   "allOf": [
     {
-      "if": {"properties": {"collaborate": {"const": true}}, "required": ["collaborate"]},
-      "then": {"required": ["collaboration"]},
-      "else": {"not": {"required": ["collaboration"]}}
+      "if": {
+        "properties": {
+          "collaborate": {
+            "const": true
+          }
+        },
+        "required": [
+          "collaborate"
+        ]
+      },
+      "then": {
+        "required": [
+          "collaboration"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "collaboration"
+          ]
+        }
+      }
     }
   ]
 }

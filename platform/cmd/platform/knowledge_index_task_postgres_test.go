@@ -132,10 +132,20 @@ func TestPostgresIndexTaskCompositionUsesLiveIAMLeaseAndAudit(t *testing.T) {
 				if err != nil || pending.Status != "accepted" || pending.Result != nil || pending.Mode != "full" {
 					t.Fatal("query accepted index", err, pending)
 				}
+				recovered, err := control.QueryIndexReceipt(ctx, actor, scope, request.InstallationID, request.IdempotencyKey)
+				if err != nil || recovered.RunID != first.RunID || recovered.Request != request || recovered.Status != "accepted" || recovered.EmbeddingModelVersion == "" {
+					t.Fatal("read-only native index receipt", recovered, err)
+				}
+				if _, err := control.QueryIndexReceipt(ctx, actor, scope, request.InstallationID, request.IdempotencyKey+"-absent"); !errors.Is(err, knowledge.ErrIndexTaskNotFound) {
+					t.Fatal("unknown task receipt was inferred", err)
+				}
 				foreignApp := scope
 				foreignApp.ApplicationID = "other-application"
 				if _, err := control.QueryIndex(ctx, actor, foreignApp, first.RunID); !errors.Is(err, knowledge.ErrManagementDenied) {
 					t.Fatal("foreign workspace query", err)
+				}
+				if _, err := control.QueryIndexReceipt(ctx, actor, foreignApp, request.InstallationID, request.IdempotencyKey); !errors.Is(err, knowledge.ErrManagementDenied) {
+					t.Fatal("foreign workspace receipt lookup", err)
 				}
 				second, err := control.SubmitIndex(ctx, actor, scope, request)
 				if err != nil || !second.Replayed || second.RunID != first.RunID {
@@ -650,6 +660,9 @@ func TestPostgresIndexTaskCompositionUsesLiveIAMLeaseAndAudit(t *testing.T) {
 				}
 				if _, err := control.QueryIndex(ctx, actor, scope, first.RunID); !errors.Is(err, knowledge.ErrManagementDenied) {
 					t.Fatal("revoked manager read running index", err)
+				}
+				if _, err := control.QueryIndexReceipt(ctx, actor, scope, request.InstallationID, request.IdempotencyKey); !errors.Is(err, knowledge.ErrManagementDenied) {
+					t.Fatal("revoked manager read original receipt", err)
 				}
 				return
 			}

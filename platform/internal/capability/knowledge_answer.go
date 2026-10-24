@@ -26,7 +26,7 @@ func (m *Module) knowledgeAnswerResult(w http.ResponseWriter, r *http.Request, o
 		m.error(w, http.StatusForbidden, "KNOWLEDGE_ANSWER_EVIDENCE_DENIED", "complete currently authorized answer evidence is required", op.Context.TraceID)
 		return
 	}
-	if err := m.knowledgeModelCheck(r, op, r.Context())(r.Context(), "generate"); err != nil {
+	if err := m.knowledgeModelReceiptCheck(r, op, r.Context())(r.Context(), "generate", stringValue(result["answer_model_version"])); err != nil {
 		m.error(w, http.StatusForbidden, "CAPABILITY_DENIED", "current answer model authorization denied", op.Context.TraceID)
 		return
 	}

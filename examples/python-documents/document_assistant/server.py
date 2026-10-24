@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
 import json
 from pathlib import Path
@@ -9,6 +10,8 @@ from pathlib import Path
 import httpx
 
 from agent_platform_sdk.capability_client import CapabilityGatewayClient
+from agent_platform_sdk.capability_io import LimitedCapabilityClient
+from agent_platform_sdk.checkpoint_capacity import context_key
 from agent_platform_sdk.capability_context import CapabilityContext
 from agent_platform_sdk.fastapi_factory import create_fastapi_agent_app
 from agent_platform_sdk.execution_lifecycle import ExecutionLifecycle
@@ -20,7 +23,7 @@ from agent_platform_sdk.security import (ContextVerifier, ContextVerificationErr
     internal_token, internal_signing_secret, signed_internal_headers, validate_deployed_model_mode)
 
 from .business import (answer_document, validate_document_input, document_recovery_checkpoint_selector,
-    INPUT_SCHEMA, OUTPUT_SCHEMA)
+    INPUT_SCHEMA, OUTPUT_SCHEMA, document_output_schema)
 
 AGENT_ID = "example-python-documents"
 
@@ -51,7 +54,13 @@ def build_app(public_key: bytes, *, issuer: str = "platform-runtime-gateway", au
     def capability_client(request: ExecuteRequest):
         trusted = authorize(request, "Bearer " + request.context_token)
         context = CapabilityContext.from_verified(trusted)
-        return CapabilityGatewayClient(context, base_url=platform_url, transport=transport)
+        client=CapabilityGatewayClient(context,base_url=platform_url,transport=transport)
+        routes={path:("model" if "/model/" in path else "read" if "/knowledge/" in path or path.endswith("/receipt") else "persist",2,16) for path in ("/internal/model/generate","/internal/knowledge/search","/internal/knowledge/answer","/internal/tool/invoke","/internal/tool/receipt")}
+        binding = context_key(client)
+        if binding is None:
+            raise PermissionError("verified execution scope required")
+        run_key = hashlib.sha256(json.dumps(binding, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        return LimitedCapabilityClient.for_run(client,"document-assistant",run_key,routes)
 
     async def business(request: ExecuteRequest):
         return await answer_document(request, capability_client(request))
@@ -65,6 +74,9 @@ def build_app(public_key: bytes, *, issuer: str = "platform-runtime-gateway", au
     async def load_recovery_checkpoint(request: ExecuteRequest, reference: dict):
         return await capability_client(request).load_recovery_checkpoint(reference)
 
+    async def load_recovery_reference_page(request,reference_set,offset,limit):
+        return await capability_client(request)._post("/internal/state/checkpoint",{"operation":"load","reference_set":reference_set,"offset":offset,"limit":limit},10)
+
     event_authority = EventAuthorityClient(base_url=platform_url, transport=transport)
 
     async def authorize_events(request: EventRequest):
@@ -74,13 +86,13 @@ def build_app(public_key: bytes, *, issuer: str = "platform-runtime-gateway", au
     registry = ExecutionTaskRegistry()
     lifecycle = ExecutionLifecycle(store=MemoryRunStore(), registry=registry,
         business=business, authorize_current=authorize_current,
-        output_schema=OUTPUT_SCHEMA, validate_input=validate_document_input,
+        output_schema=OUTPUT_SCHEMA, output_schema_selector=document_output_schema, validate_input=validate_document_input,
         authorize_events=authorize_events, load_checkpoint=load_checkpoint,
-        load_recovery_checkpoint=load_recovery_checkpoint,
+        load_recovery_checkpoint=load_recovery_checkpoint, load_recovery_reference_page=load_recovery_reference_page,
         recovery_checkpoint_selector=document_recovery_checkpoint_selector)
 
     return create_fastapi_agent_app(
-        title="Document assistant", agent_id=AGENT_ID, version="0.2.9",
+        title="Document assistant", agent_id=AGENT_ID, version="0.3.0",
         capabilities=capabilities, authorize=authorize,
         invoke=lifecycle.invoke, run=lifecycle.run, resume=lifecycle.resume,
         replay_runtime_recovery=lifecycle.replay_runtime_recovery,

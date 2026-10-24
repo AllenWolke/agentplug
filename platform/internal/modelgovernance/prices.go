@@ -13,24 +13,26 @@ import (
 const priceStatusDraft = "draft"
 
 type priceHashPayload struct {
-	ModelVersionID    string     `json:"model_version_id"`
-	Currency          string     `json:"currency"`
-	InputMicrosPer1K  int64      `json:"input_micros_per_1k_tokens"`
-	OutputMicrosPer1K int64      `json:"output_micros_per_1k_tokens"`
-	EffectiveFrom     time.Time  `json:"effective_from"`
-	EffectiveUntil    *time.Time `json:"effective_until,omitempty"`
+	ModelVersionID         string     `json:"model_version_id"`
+	Currency               string     `json:"currency"`
+	InputMicrosPer1K       int64      `json:"input_micros_per_1k_tokens"`
+	OutputMicrosPer1K      int64      `json:"output_micros_per_1k_tokens"`
+	EffectiveFrom          time.Time  `json:"effective_from"`
+	EffectiveUntil         *time.Time `json:"effective_until,omitempty"`
+	CachedInputMicrosPer1K *int64     `json:"cached_input_micros_per_1k_tokens,omitempty"`
 }
 
 func normalizeCreatePriceRequest(in CreatePriceVersionRequest) (PriceVersion, error) {
 	row := PriceVersion{
-		ModelVersionID:    strings.TrimSpace(in.ModelVersionID),
-		Currency:          strings.ToUpper(strings.TrimSpace(in.Currency)),
-		InputMicrosPer1K:  in.InputMicrosPer1K,
-		OutputMicrosPer1K: in.OutputMicrosPer1K,
-		EffectiveFrom:     in.EffectiveFrom.UTC(),
-		EffectiveUntil:    in.EffectiveUntil,
-		Status:            priceStatusDraft,
-		Revision:          1,
+		ModelVersionID:         strings.TrimSpace(in.ModelVersionID),
+		Currency:               strings.ToUpper(strings.TrimSpace(in.Currency)),
+		InputMicrosPer1K:       in.InputMicrosPer1K,
+		CachedInputMicrosPer1K: cloneCachePrice(in.CachedInputMicrosPer1K),
+		OutputMicrosPer1K:      in.OutputMicrosPer1K,
+		EffectiveFrom:          in.EffectiveFrom.UTC(),
+		EffectiveUntil:         in.EffectiveUntil,
+		Status:                 priceStatusDraft,
+		Revision:               1,
 	}
 	if row.EffectiveUntil != nil {
 		until := row.EffectiveUntil.UTC()
@@ -65,15 +67,30 @@ func validatePriceFields(row *PriceVersion) error {
 		(row.EffectiveUntil != nil && !row.EffectiveUntil.After(row.EffectiveFrom)) {
 		return ErrInvalidRequest
 	}
+	if row.CachedInputMicrosPer1K != nil && (*row.CachedInputMicrosPer1K < 0 || *row.CachedInputMicrosPer1K > row.InputMicrosPer1K) {
+		return ErrInvalidRequest
+	}
 	return nil
 }
 
-const priceColumns = `id,model_version_id,currency,input_micros_per_1k_tokens,output_micros_per_1k_tokens,effective_from,effective_until,content_hash,status,revision,created_by,created_at,updated_at`
+func cloneCachePrice(rate *int64) *int64 {
+	if rate == nil {
+		return nil
+	}
+	value := *rate
+	return &value
+}
+
+const priceColumns = `id,model_version_id,currency,input_micros_per_1k_tokens,output_micros_per_1k_tokens,effective_from,effective_until,content_hash,status,revision,created_by,created_at,updated_at,cached_input_micros_per_1k_tokens`
 
 func scanPriceVersion(scanner interface{ Scan(...any) error }) (PriceVersion, error) {
 	var row PriceVersion
 	var effectiveUntil sql.NullTime
-	err := scanner.Scan(&row.ID, &row.ModelVersionID, &row.Currency, &row.InputMicrosPer1K, &row.OutputMicrosPer1K, &row.EffectiveFrom, &effectiveUntil, &row.ContentHash, &row.Status, &row.Revision, &row.CreatedBy, &row.CreatedAt, &row.UpdatedAt)
+	var cachedRate sql.NullInt64
+	err := scanner.Scan(&row.ID, &row.ModelVersionID, &row.Currency, &row.InputMicrosPer1K, &row.OutputMicrosPer1K, &row.EffectiveFrom, &effectiveUntil, &row.ContentHash, &row.Status, &row.Revision, &row.CreatedBy, &row.CreatedAt, &row.UpdatedAt, &cachedRate)
+	if cachedRate.Valid {
+		row.CachedInputMicrosPer1K = &cachedRate.Int64
+	}
 	if effectiveUntil.Valid {
 		row.EffectiveUntil = &effectiveUntil.Time
 	}
@@ -105,7 +122,8 @@ func assignPriceContentHash(row *PriceVersion) error {
 	payload := priceHashPayload{
 		ModelVersionID: row.ModelVersionID, Currency: row.Currency,
 		InputMicrosPer1K: row.InputMicrosPer1K, OutputMicrosPer1K: row.OutputMicrosPer1K,
-		EffectiveFrom: row.EffectiveFrom.UTC(), EffectiveUntil: row.EffectiveUntil,
+		CachedInputMicrosPer1K: row.CachedInputMicrosPer1K,
+		EffectiveFrom:          row.EffectiveFrom.UTC(), EffectiveUntil: row.EffectiveUntil,
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -175,6 +193,10 @@ func (m *Module) prices(w http.ResponseWriter, r *http.Request) {
 		}
 		if err = validatePriceRates(resolved.TrustZone, resolved.Kind, row.InputMicrosPer1K, row.OutputMicrosPer1K); err != nil {
 			m.storeError(w, err)
+			return
+		}
+		if row.CachedInputMicrosPer1K != nil && resolved.Kind != ModelKindChat {
+			m.storeError(w, ErrInvalidRequest)
 			return
 		}
 		row.ID, err = newID()

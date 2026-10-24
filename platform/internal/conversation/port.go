@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lexagent/platform/internal/contract"
+	"github.com/lexagent/platform/internal/policyasset"
 	"github.com/lexagent/platform/internal/sharedkernel"
 )
 
@@ -114,18 +115,21 @@ func (q Query) Normalize() (Query, error) {
 }
 
 type Summary struct {
-	ID             string          `json:"id"`
-	Kind           string          `json:"kind"`
-	AgentID        string          `json:"agent_id"`
-	AgentVersionID string          `json:"agent_version_id"`
-	InstallationID string          `json:"installation_id,omitempty"`
-	Title          string          `json:"title"`
-	Preview        string          `json:"preview"`
-	OwnerID        string          `json:"owner_id"`
-	Status         string          `json:"status"`
-	MessageCount   int             `json:"message_count"`
-	CanContinue    bool            `json:"can_continue"`
-	Permissions    map[string]bool `json:"permissions,omitempty"`
+	ID                     string          `json:"id"`
+	Kind                   string          `json:"kind"`
+	AgentID                string          `json:"agent_id"`
+	AgentVersionID         string          `json:"agent_version_id"`
+	InstallationID         string          `json:"installation_id,omitempty"`
+	Title                  string          `json:"title"`
+	Preview                string          `json:"preview"`
+	OwnerID                string          `json:"owner_id"`
+	Status                 string          `json:"status"`
+	MessageCount           int             `json:"message_count"`
+	CanContinue            bool            `json:"can_continue"`
+	Permissions            map[string]bool `json:"permissions,omitempty"`
+	RunProgress            *RunProgress    `json:"run_progress,omitempty"`
+	RunProgressUnavailable bool            `json:"run_progress_unavailable,omitempty"`
+	UpdatedAt              *time.Time      `json:"updated_at,omitempty"`
 }
 
 // Message is the platform-owned conversation message projection.  Agent
@@ -438,16 +442,17 @@ func (r StaticRuntimeBindingResolver) Resolve(_ context.Context, _ Scope, agentI
 }
 
 type RunStartRequest struct {
-	RunID              string          `json:"run_id"`
-	IdempotencyKey     string          `json:"idempotency_key"`
-	MessageID          string          `json:"message_id,omitempty"`
-	Fingerprint        string          `json:"fingerprint"`
-	AgentEndpoint      string          `json:"agent_endpoint"`
-	AgentInstanceID    string          `json:"agent_instance_id"`
-	InstallationID     string          `json:"installation_id"`
-	AuthorizationEpoch uint64          `json:"authorization_epoch"`
-	TraceID            string          `json:"trace_id"`
-	Request            json.RawMessage `json:"request"`
+	ModelSelection     policyasset.ModelSelection `json:"model_selection,omitempty"`
+	RunID              string                     `json:"run_id"`
+	IdempotencyKey     string                     `json:"idempotency_key"`
+	MessageID          string                     `json:"message_id,omitempty"`
+	Fingerprint        string                     `json:"fingerprint"`
+	AgentEndpoint      string                     `json:"agent_endpoint"`
+	AgentInstanceID    string                     `json:"agent_instance_id"`
+	InstallationID     string                     `json:"installation_id"`
+	AuthorizationEpoch uint64                     `json:"authorization_epoch"`
+	TraceID            string                     `json:"trace_id"`
+	Request            json.RawMessage            `json:"request"`
 }
 
 type Regeneration struct {

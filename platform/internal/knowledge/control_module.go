@@ -56,6 +56,7 @@ func (m *ControlModule) Handler() http.Handler {
 	mux.HandleFunc("GET /sources/{knowledge}", m.snapshot)
 	mux.HandleFunc("PUT /sources/{knowledge}/documents/{document}", m.change)
 	mux.HandleFunc("POST /indexes/{knowledge}/tasks", m.submitIndex)
+	mux.HandleFunc("GET /indexes/{knowledge}/tasks:receipt", m.queryIndexReceipt)
 	mux.HandleFunc("GET /indexes/{knowledge}/tasks/{run}", m.queryIndex)
 	mux.HandleFunc("POST /indexes/{knowledge}/tasks/{run}/cancel", m.cancelIndex)
 	return mux

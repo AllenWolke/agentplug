@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://agentplug/model-routing/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "execution_context_sha256", "simple_max_input_tokens", "complex_min_input_tokens", "simple_max_output_tokens", "max_estimated_micros", "candidates"],
+  "properties": {
+    "version": {"const": "model-routing/v1"},
+    "execution_context_sha256": {"$ref": "#/$defs/sha256"},
+    "simple_max_input_tokens": {"type": "integer", "minimum": 1, "maximum": 1048575},
+    "complex_min_input_tokens": {"type": "integer", "minimum": 2, "maximum": 1048576},
+    "simple_max_output_tokens": {"type": "integer", "minimum": 1, "maximum": 65536},
+    "max_estimated_micros": {"type": "integer", "minimum": 1},
+    "candidates": {"type": "array", "minItems": 2, "maxItems": 8, "items": {"$ref": "#/$defs/candidate"}},
+    "availability": {"$ref": "#/$defs/availability"}
+  },
+  "$defs": {
+    "availability": {"type": "object", "additionalProperties": false,
+      "required": ["version", "failure_threshold", "cooldown_seconds", "probe_seconds", "max_attempts"],
+      "properties": {
+        "version": {"enum": ["model-route-availability/v1", "model-route-availability/v2"]},
+        "failure_threshold": {"type": "integer", "minimum": 1, "maximum": 10},
+        "cooldown_seconds": {"type": "integer", "minimum": 5, "maximum": 300},
+        "probe_seconds": {"type": "integer", "minimum": 1, "maximum": 60},
+        "max_attempts": {"type": "integer", "minimum": 1, "maximum": 3},
+        "manual_fallback": {"type": "boolean"},
+        "unknown_outcome": {"enum": ["", "retain_and_continue"]},
+        "attempt_timeout_seconds": {"type": "integer", "minimum": 0, "maximum": 60}
+      },
+      "allOf": [{"if": {"properties": {"version": {"const": "model-route-availability/v1"}}},
+        "then": {"properties": {"manual_fallback": {"const": false}, "unknown_outcome": {"const": ""}, "attempt_timeout_seconds": {"const": 0}}},
+        "else": {"required": ["attempt_timeout_seconds"], "properties": {"attempt_timeout_seconds": {"minimum": 1}}}}]},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^:\\u0000\\r\\n]+$"},
+    "reasoning": {"type": "object", "additionalProperties": false, "properties": {
+      "mode": {"enum": ["", "enabled", "disabled"]},
+      "effort": {"enum": ["", "low", "high", "max"]}
+    }, "allOf": [{"if": {"properties": {"effort": {"enum": ["low", "high", "max"]}}, "required": ["effort"]},
+      "then": {"properties": {"mode": {"const": "enabled"}}, "required": ["mode"]}}]},
+    "candidate": {"type": "object", "additionalProperties": false,
+      "required": ["model_version_id", "price_version_id", "capability_sha256", "quality_evidence_id", "quality_evidence_sha256", "max_complexity"],
+      "properties": {
+        "model_version_id": {"$ref": "#/$defs/id"}, "price_version_id": {"$ref": "#/$defs/id"},
+        "capability_sha256": {"$ref": "#/$defs/sha256"}, "quality_evidence_id": {"$ref": "#/$defs/id"},
+        "quality_evidence_sha256": {"$ref": "#/$defs/sha256"}, "max_complexity": {"enum": ["simple", "medium", "complex"]},
+        "reasoning": {"$ref": "#/$defs/reasoning"}
+      }}
+  }
+}

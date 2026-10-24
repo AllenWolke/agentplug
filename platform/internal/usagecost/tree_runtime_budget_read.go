@@ -15,7 +15,13 @@ func (s *SQLRunTreeBudgetStore) ReadRuntimeBudgetTx(ctx context.Context, tx *sql
 	if s == nil || tx == nil || s.authority == nil || scope.ValidateTrusted() != nil {
 		return empty, ErrBudgetScopeMismatch
 	}
-	facts, err := s.authority.Facts(ctx, tx, scope, true)
+	var facts RunTreeBudgetFacts
+	var err error
+	if reader, ok := s.authority.(RunTreeBudgetReadAuthority); ok {
+		facts, err = reader.ReadFacts(ctx, tx, scope)
+	} else {
+		facts, err = s.authority.Facts(ctx, tx, scope, true)
+	}
 	if err != nil {
 		return empty, err
 	}

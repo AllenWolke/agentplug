@@ -9,6 +9,7 @@ import (
 
 	"github.com/lexagent/platform/internal/contract"
 	platformruntime "github.com/lexagent/platform/internal/runtime"
+	"github.com/lexagent/platform/internal/sharedkernel"
 )
 
 type recoveryStopReferenceReader interface {
@@ -22,6 +23,7 @@ type runtimeRecoveryCommand struct {
 	ConfirmationToken string                   `json:"confirmation_token,omitempty"`
 	GroupResume       *AgentGroupWaitReference `json:"group_resume,omitempty"`
 	BusinessReview    *CommittedBusinessReview `json:"business_review,omitempty"`
+	ToolResume        map[string]any           `json:"tool_resume,omitempty"`
 }
 
 // prepareRecoveryDispatch consumes only committed stop provenance. The original
@@ -55,6 +57,10 @@ func (d *Dispatcher) prepareRecoveryDispatchMode(ctx context.Context, running pl
 	}
 	policy, ok := request.Input["policy_snapshot"].(map[string]any)
 	if !ok || policy["content_hash"] != ref.PolicyHash {
+		return false, ErrStopEvidenceInvalid
+	}
+	paged := ref.Version == "runtime-recovery-stop/v2"
+	if paged && !usesPagedRecovery(running) {
 		return false, ErrStopEvidenceInvalid
 	}
 	var approved *ApprovedToolResume
@@ -101,9 +107,23 @@ func (d *Dispatcher) prepareRecoveryDispatchMode(ctx context.Context, running pl
 		}
 	}
 	needsConfirmation := false
+	approvedKey := ""
+	if paged && approved != nil {
+		_, key, err := sharedkernel.CheckpointIdentity(running.Scope, "harness", approved.Claims.PendingKey)
+		if err != nil {
+			return false, ErrStopEvidenceInvalid
+		}
+		approvedKey = key
+	}
 	for _, checkpoint := range ref.Checkpoints {
 		if !checkpoint.ExpiresAt.After(time.Now().UTC()) {
 			return false, ErrStopEvidenceInvalid
+		}
+		// Large graph recovery validates immutable metadata here, then checks
+		// each dynamically visited head through public State. Renewal must not
+		// reload thousands of payloads or block the execution lease heartbeat.
+		if paged && (approved == nil || checkpoint.StateKey != approvedKey) {
+			continue
 		}
 		value, err := checkpointReader(ctx, running.Scope, checkpoint)
 		if err != nil || value == nil {
@@ -139,6 +159,11 @@ func (d *Dispatcher) prepareRecoveryDispatchMode(ctx context.Context, running pl
 		}
 	}
 	command := runtimeRecoveryCommand{Version: "runtime-recovery/v1", OriginOperation: "invoke", Reference: ref, BusinessReview: businessReview}
+	if paged {
+		compact := *ref
+		compact.Checkpoints = nil
+		command.Version, command.Reference = "runtime-recovery/v2", &compact
+	}
 	if group != nil {
 		command.OriginOperation = group.OriginOperation
 		command.GroupResume = group
@@ -157,6 +182,21 @@ func (d *Dispatcher) prepareRecoveryDispatchMode(ctx context.Context, running pl
 			return false, ErrStopEvidenceInvalid
 		}
 		command.ConfirmationToken = token
+		// A graph adapter also needs the exact committed handoff, never only a
+		// bearer token. Opt-in publications retain this non-secret identity;
+		// legacy Harness dispatch envelopes keep their original contract.
+		if usesPagedRecovery(running) {
+			for _, cp := range ref.Checkpoints {
+				if cp.SchemaID != "schema://agentplug/langgraph-runtime/v1" {
+					continue
+				}
+				if resolved["handoff"] == nil || resolved["checkpoint"] == nil {
+					return false, ErrStopEvidenceInvalid
+				}
+				command.ToolResume = map[string]any{"version": "graph-tool-resume/v1", "handoff": resolved["handoff"], "checkpoint": resolved["checkpoint"]}
+				break
+			}
+		}
 	}
 	// Revocation/cancellation may have happened during the bounded State reads.
 	if ctx.Err() != nil || d.authorize(ctx, running.Scope) != nil ||

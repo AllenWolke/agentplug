@@ -121,14 +121,14 @@ func (s *SQLStore) ListAuthorized(ctx context.Context, scope Scope, query Query,
 	if err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT COUNT(*) FROM platform_conversation_session WHERE `+where), args...).Scan(&total); err != nil {
 		return Page{}, fmt.Errorf("count authorized history: %w", err)
 	}
-	rows, err := tx.QueryContext(ctx, sqlutil.Bind(`SELECT id,kind,agent_id,agent_version_id,installation_id,title,preview,owner_id,status,message_count,can_continue FROM platform_conversation_session WHERE `+where+` ORDER BY updated_at DESC,id DESC LIMIT ? OFFSET ?`), append(args, query.PageSize, (query.Page-1)*query.PageSize)...)
+	rows, err := tx.QueryContext(ctx, sqlutil.Bind(`SELECT id,kind,agent_id,agent_version_id,installation_id,title,preview,owner_id,status,message_count,can_continue,updated_at FROM platform_conversation_session WHERE `+where+` ORDER BY updated_at DESC,id DESC LIMIT ? OFFSET ?`), append(args, query.PageSize, (query.Page-1)*query.PageSize)...)
 	if err != nil {
 		return Page{}, err
 	}
 	items := []Summary{}
 	for rows.Next() {
 		var item Summary
-		if err := rows.Scan(&item.ID, &item.Kind, &item.AgentID, &item.AgentVersionID, &item.InstallationID, &item.Title, &item.Preview, &item.OwnerID, &item.Status, &item.MessageCount, &item.CanContinue); err != nil {
+		if err := rows.Scan(&item.ID, &item.Kind, &item.AgentID, &item.AgentVersionID, &item.InstallationID, &item.Title, &item.Preview, &item.OwnerID, &item.Status, &item.MessageCount, &item.CanContinue, &item.UpdatedAt); err != nil {
 			rows.Close()
 			return Page{}, err
 		}

@@ -21,10 +21,19 @@ type GovernedQueryModels interface {
 	Rerank(context.Context, sharedkernel.Scope, string, []HybridChunk) (QueryReranking, error)
 }
 
+// A bounded reranker can make several governed calls. Each call must pass the
+// existing current-document/version fence before any source body is sent.
+// Implementations without this optional seam retain their original behavior.
+type FencedQueryReranker interface {
+	RerankWithCheck(context.Context, sharedkernel.Scope, string, []HybridChunk, func() error) (QueryReranking, error)
+}
+
 type QueryStageReceipt struct {
 	ModelVersionID  string
 	PromptVersionID string
 	InvocationID    string
+	InvocationIDs   []string `json:",omitempty"`
+	ModelVersionIDs []string `json:",omitempty"`
 	CacheHit        bool
 }
 type QueryRewrite struct {
@@ -59,7 +68,30 @@ type QueryPipeline struct {
 }
 
 func validQueryReceipt(r QueryStageReceipt, prompt bool) bool {
-	return strings.TrimSpace(r.ModelVersionID) != "" && strings.TrimSpace(r.InvocationID) != "" && (!prompt || strings.TrimSpace(r.PromptVersionID) != "")
+	if strings.TrimSpace(r.ModelVersionID) == "" || strings.TrimSpace(r.InvocationID) == "" || prompt && strings.TrimSpace(r.PromptVersionID) == "" || len(r.InvocationIDs) > 100 {
+		return false
+	}
+	if len(r.InvocationIDs) > 0 && r.InvocationIDs[0] != r.InvocationID {
+		return false
+	}
+	if len(r.ModelVersionIDs) > 0 {
+		if len(r.ModelVersionIDs) != len(r.InvocationIDs) || r.ModelVersionIDs[0] != r.ModelVersionID {
+			return false
+		}
+		for _, version := range r.ModelVersionIDs {
+			if strings.TrimSpace(version) == "" {
+				return false
+			}
+		}
+	}
+	seen := map[string]bool{}
+	for _, id := range r.InvocationIDs {
+		if strings.TrimSpace(id) == "" || seen[id] {
+			return false
+		}
+		seen[id] = true
+	}
+	return true
 }
 
 func validatedRerankingScores(ranking QueryReranking, chunks []HybridChunk) (map[string]float64, error) {
@@ -169,7 +201,12 @@ func (p QueryPipeline) Search(ctx context.Context, scope sharedkernel.Scope, kno
 	}
 	// Copy the slice: a model implementation must not overwrite canonical SQL
 	// chunk bodies, versions or references through its argument.
-	ranking, err := p.Models.Rerank(ctx, scope, rewrite.Text, append([]HybridChunk(nil), projection.Chunks...))
+	var ranking QueryReranking
+	if bounded, ok := p.Models.(FencedQueryReranker); ok {
+		ranking, err = bounded.RerankWithCheck(ctx, scope, rewrite.Text, append([]HybridChunk(nil), projection.Chunks...), check)
+	} else {
+		ranking, err = p.Models.Rerank(ctx, scope, rewrite.Text, append([]HybridChunk(nil), projection.Chunks...))
+	}
 	if err != nil {
 		return empty, err
 	}

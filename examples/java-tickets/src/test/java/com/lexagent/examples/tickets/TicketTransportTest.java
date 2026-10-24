@@ -95,7 +95,7 @@ final class TicketTransportTest {
                     case "/internal/skill/load" -> skillDisclosure(input);
                     case "/internal/state/checkpoint" -> checkpoint(input, evidenceCheckpoint, harnessCheckpoint, harnessRevision);
                     case "/internal/memory/access", "/internal/prompt/resolve", "/internal/tool/invoke",
-                            "/internal/knowledge/search", "/internal/model/generate" -> fixture.post(path, input);
+                            "/internal/knowledge/search", "/internal/knowledge/references/authorize", "/internal/model/generate" -> fixture.post(path, input);
                     default -> throw new AssertionError("unexpected platform capability path");
                 };
                 byte[] response = JSON.writeValueAsBytes(Map.of("data", data));
@@ -115,8 +115,8 @@ final class TicketTransportTest {
         try {
             var result = post(agent.getAddress().getPort(), request);
             assertEquals(200, result.statusCode(), result.body() + " fixture=" + failure.get()); assertNull(failure.get());
-            assertEquals(6, fixture.paths.size());
-            assertEquals(TicketAssistant.OUTPUT_SCHEMA, JSON.readTree(result.body()).get("output").get("schema").asText());
+            assertEquals(8, fixture.paths.size());
+            assertEquals(TicketAssistant.OUTPUT_SCHEMA_V3, JSON.readTree(result.body()).get("output").get("schema").asText());
             new CapabilityClient(capabilityConfig, request).validateCurrentExecution();
             assertEquals(1, renewalRequests.get());
             var s = original.scope();
@@ -126,7 +126,7 @@ final class TicketTransportTest {
             var moved = new ExecutionContract.ExecuteRequest(original.protocolVersion(), "", foreign, original.operation(),
                     original.idempotencyKey(), original.inputSchema(), original.input());
             assertEquals(401, post(agent.getAddress().getPort(), sign(moved, pair)).statusCode());
-            assertEquals(6, fixture.paths.size());
+            assertEquals(8, fixture.paths.size());
         } finally { agent.stop(0); execution.stop(); platform.stop(0); }
     }
 

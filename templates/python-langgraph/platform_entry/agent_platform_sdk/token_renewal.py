@@ -50,6 +50,22 @@ async def renew_context_token(
     *,
     force: bool = False,
 ) -> None:
+    from .call_observation import observed_call
+    # This includes lock waiting and can skip HTTP if another renewal won.
+    # It is an observed renewal check, not a count of physical HTTP sends.
+    return await observed_call(context,"/internal/context/renew",
+        {"operation":"force" if force else "opportunistic"},
+        lambda:_renew_context_token(context,base_url,internal_token,transport,force=force))
+
+
+async def _renew_context_token(
+    context: Any,
+    base_url: str,
+    internal_token: str,
+    transport: httpx.AsyncBaseTransport | None = None,
+    *,
+    force: bool = False,
+) -> None:
     token = _token(context)
     claims = _claims(token)
     if force and (not claims.get("execution_revision") or not isinstance(claims.get("exp"), int)):
@@ -81,8 +97,9 @@ async def renew_context_token(
             request_target=httpx.URL(target).raw_path.decode("ascii"),
         )
         try:
+            from .capability_connections import connection_transport
             async with httpx.AsyncClient(
-                timeout=10, transport=transport, trust_env=False, follow_redirects=False
+                timeout=10, transport=connection_transport(base_url, transport), trust_env=False, follow_redirects=False
             ) as client:
                 response = await client.post(target, content=body, headers=headers)
             if response.status_code in {401, 403}:

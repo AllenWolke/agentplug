@@ -25,6 +25,7 @@ type operationsInput struct {
 	Service, Symptom, Observations string
 	NotifyMe, SandboxCheck         bool
 	Collaborate                    bool
+	Legacy                         bool
 	InputHash                      string
 }
 
@@ -35,7 +36,7 @@ type operationsFrozenEvidence struct {
 
 func parseOperationsInput(request agentplatform.ExecuteRequest) (operationsInput, error) {
 	invalid := func() (operationsInput, error) { return operationsInput{}, operationsRequestInvalid() }
-	if request.InputSchema != inputSchema {
+	if request.InputSchema != inputSchema && request.InputSchema != legacyInputSchema {
 		return invalid()
 	}
 	for key := range request.Input {
@@ -86,7 +87,7 @@ func parseOperationsInput(request agentplatform.ExecuteRequest) (operationsInput
 	// fingerprint so no resume can change the fixed collaboration plan.
 	rawInput, _ := json.Marshal([]any{service, symptom, observations, notifyMe, sandboxCheck, collaborate, request.IdempotencyKey})
 	digest := sha256.Sum256(rawInput)
-	return operationsInput{Service: service, Symptom: symptom, Observations: observations, NotifyMe: notifyMe,
+	return operationsInput{Legacy: request.InputSchema == legacyInputSchema, Service: service, Symptom: symptom, Observations: observations, NotifyMe: notifyMe,
 		SandboxCheck: sandboxCheck, Collaborate: collaborate, InputHash: hex.EncodeToString(digest[:])}, nil
 }
 

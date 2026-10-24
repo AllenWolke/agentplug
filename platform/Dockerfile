@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build the modular-monolith platform from the repository root.
 # 从仓库根目录构建模块化单体平台，保证 Docker/Linux 与本地模块布局一致。
-FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.10-bookworm AS build
 
 WORKDIR /src/platform
 # Use the official module proxy by default. Private/offline environments can

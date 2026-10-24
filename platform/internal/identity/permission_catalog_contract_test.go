@@ -62,7 +62,7 @@ func TestActionCatalogHasCompleteConservativeMetadata(t *testing.T) {
 			t.Fatal("sensitivity metadata disagrees", action)
 		}
 	}
-	if len(actions) != 45 {
+	if len(actions) != 46 {
 		t.Fatal("incomplete action catalog", len(actions))
 	}
 	for _, role := range BuiltinRoleDefinitions() {

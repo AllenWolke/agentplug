@@ -12,12 +12,16 @@ import (
 
 type countedProfileStore struct {
 	machineProfileStore
-	checks      map[ManagementScope]int
-	failedScope ManagementScope
+	checks       map[ManagementScope]int
+	failedScope  ManagementScope
+	retiredScope ManagementScope
 }
 
 func (s *countedProfileStore) ResolvePermission(ctx context.Context, kind PrincipalType, id string, q PermissionQuery) (PermissionDecision, error) {
 	s.checks[q.Scope]++
+	if q.Scope == s.retiredScope {
+		return PermissionDecision{}, ErrScopeMismatch
+	}
 	if q.Scope == s.failedScope {
 		return PermissionDecision{}, errors.New("fixture storage unavailable")
 	}
@@ -86,5 +90,14 @@ func TestAccessProfileChecksEachCompleteScopeOnceAndRechecksNextRequest(t *testi
 	store.failedScope = allowed
 	if w := call(); w.Code < 500 {
 		t.Fatal("scope storage failure did not fail closed", w.Code)
+	}
+	store.failedScope = ManagementScope{}
+	store.retiredScope = hidden[2]
+	w = call()
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &result) != nil || len(result.Assignments) != 600 {
+		t.Fatal("retired application hid valid facts or exposed retired facts", w.Code, w.Body.String())
+	}
+	if len(store.machine.Assignments) != 604 {
+		t.Fatal("profile projection modified historical assignment facts")
 	}
 }

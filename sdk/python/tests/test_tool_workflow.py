@@ -74,6 +74,52 @@ def context(req):
                            runtime_policy_id="frozen-policy")
 
 
+@pytest.mark.asyncio
+async def test_recovery_only_tool_does_not_create_or_dispatch_an_absent_operation():
+    client = Client()
+    with pytest.raises(GatewayError, match="TOOL_OPERATION_NOT_DISPATCHED"):
+        await run_tool_operation(client, "read.record", {"value": 1}, key="absent", recovery_only=True)
+    assert client.heads == {} and client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_recovery_only_tool_settles_original_lost_reply_and_never_sends_again():
+    client = Client()
+    async def read(name, payload, *, call_id, **kwargs):
+        client.calls.append((name, call_id, ""))
+        client.receipts[call_id] = {"data": {"saved": 1}, "observation": {
+            "version": "runtime-observation/v1", "tool_name": name, "call_id": call_id,
+            "status": "succeeded", "effect": "completed", "instruction_trust": "untrusted_data"}}
+        raise GatewayError("TOOL_RESULT_UNKNOWN", "controlled lost reply")
+    client.invoke_tool = read
+    with pytest.raises(GatewayError, match="TOOL_RESULT_UNKNOWN"):
+        await run_tool_operation(client, "read.record", {"value": 1}, key="original")
+    result = await run_tool_operation(client, "read.record", {"value": 1}, key="original", recovery_only=True)
+    assert result["data"] == {"saved": 1} and len(client.calls) == 1
+    assert await run_tool_operation(client, "read.record", {"value": 1}, key="original", recovery_only=True) == result
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_operation_identity_is_stable_while_arguments_are_bound_separately():
+    clients = [Client(), Client(), Client()]
+    clients[2]._context.task_id = "new-run"
+    for client, value in zip(clients, [1, 2, 1]):
+        async def lost(name, payload, *, call_id, _client=client, **kwargs):
+            _client.calls.append((name, call_id, ""))
+            raise GatewayError("TOOL_RESULT_UNKNOWN", "controlled lost reply")
+        client.invoke_tool = lost
+        with pytest.raises(GatewayError, match="TOOL_RESULT_UNKNOWN"):
+            await run_tool_operation(client, "write.record", {"value": value}, key="same-step")
+    assert clients[0].calls[0][1] == clients[1].calls[0][1]
+    assert clients[0].heads["same-step"]["value"]["input_hash"] != clients[1].heads["same-step"]["value"]["input_hash"]
+    assert clients[0].calls[0][1] != clients[2].calls[0][1]
+    # A saved plan cannot silently change the parameters for this same step.
+    with pytest.raises(DomainExecutionError):
+        await run_tool_operation(clients[0], "write.record", {"value": 2}, key="same-step")
+    assert len(clients[0].calls) == 1
+
+
 async def pause(registry, bridge, client, req, value=1):
     async def work():
         result = await run_tool_operation(client, "write.record", {"value": value}, key="write-1")

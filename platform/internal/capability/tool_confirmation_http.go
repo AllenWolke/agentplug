@@ -6,7 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -39,6 +41,16 @@ func (m *Module) SetToolApprovalControl(control *ToolApprovalControl) {
 	m.toolApprovalControl = control
 }
 func ToolApprovalDigest(claims ToolConfirmationClaims) string { return toolApprovalDigest(claims) }
+
+func (m *Module) toolApprovalUnavailable(w http.ResponseWriter, r *http.Request, err error, trace string) bool {
+	err = errors.Join(err, r.Context().Err())
+	if !budgetAdmissionDeferred(err) {
+		return false
+	}
+	log.Printf("tool approval check unfinished reason=%s", budgetAdmissionErrorType(err))
+	m.error(w, 503, "TOOL_APPROVAL_UNAVAILABLE", "approval outcome unavailable; reconcile the original command", trace)
+	return true
+}
 
 func (m *Module) toolApprovalHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
@@ -81,6 +93,9 @@ func (m *Module) toolApprovalHTTP(w http.ResponseWriter, r *http.Request) {
 		if control.ResumeReplay != nil {
 			receipt, replayed, err := control.ResumeReplay(r, input.Operation, input.Claims)
 			if err != nil || ctx.Err() != nil {
+				if m.toolApprovalUnavailable(w, r, err, "") {
+					return
+				}
 				m.error(w, 403, "TOOL_APPROVAL_DENIED", "current replay authorization denied", "")
 				return
 			}
@@ -111,6 +126,9 @@ func (m *Module) toolApprovalHTTP(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
+			if m.toolApprovalUnavailable(w, r, err, "") {
+				return
+			}
 			m.error(w, 403, "TOOL_APPROVAL_DENIED", "pending operation cannot be confirmed", "")
 			return
 		}
@@ -119,6 +137,9 @@ func (m *Module) toolApprovalHTTP(w http.ResponseWriter, r *http.Request) {
 	scope, policy, err := control.Resolve(r, input.Operation)
 	policyBytes, policyErr := hex.DecodeString(policy)
 	if err != nil || policyErr != nil || len(policyBytes) != 32 || scope.ValidateTrusted() != nil || scope.PrincipalType != "user" || scope.RunID != input.Operation.RunID || scope.PrincipalID != r.Header.Get("X-Principal-ID") || scope.TenantID != r.Header.Get("X-Tenant-ID") || scope.DepartmentID != r.Header.Get("X-Department-ID") || scope.ApplicationID != r.Header.Get("X-Application-ID") {
+		if m.toolApprovalUnavailable(w, r, err, "") {
+			return
+		}
 		m.error(w, 403, "TOOL_APPROVAL_DENIED", "current operation authorization denied", "")
 		return
 	}
@@ -175,6 +196,9 @@ func (m *Module) toolApprovalHTTP(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
+			if m.toolApprovalUnavailable(w, r, err, scope.TraceID) {
+				return
+			}
 			m.error(w, 403, "TOOL_APPROVAL_DENIED", "approved run continuation denied", scope.TraceID)
 			return
 		}
@@ -186,6 +210,9 @@ func (m *Module) toolApprovalHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		proof, expires, err := control.StepUp(r.Context(), r, scope, input.Operation, input.Action, toolApprovalDigest(c), input.CurrentPassword)
 		if err != nil {
+			if m.toolApprovalUnavailable(w, r, err, scope.TraceID) {
+				return
+			}
 			m.error(w, 403, "STEP_UP_FAILED", "fresh operation authentication denied", scope.TraceID)
 			return
 		}
@@ -197,12 +224,18 @@ func (m *Module) toolApprovalHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		token, err := control.Signer.Issue(r.Context(), scope, c, input.StepUpToken)
 		if err != nil {
+			if m.toolApprovalUnavailable(w, r, err, scope.TraceID) {
+				return
+			}
 			m.error(w, 403, "TOOL_APPROVAL_DENIED", "approval transaction denied", scope.TraceID)
 			return
 		}
 		m.ok(w, map[string]any{"confirmation_token": token, "approval_id": c.ApprovalID, "expires_at": time.Unix(c.ExpiresAt, 0)}, scope.TraceID)
 	case "revoke":
 		if err := control.Store.Revoke(r.Context(), scope, c, input.StepUpToken); err != nil {
+			if m.toolApprovalUnavailable(w, r, err, scope.TraceID) {
+				return
+			}
 			m.error(w, 403, "TOOL_APPROVAL_DENIED", "revocation transaction denied", scope.TraceID)
 			return
 		}

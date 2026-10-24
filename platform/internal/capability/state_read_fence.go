@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/lexagent/platform/internal/policyasset"
 	"github.com/lexagent/platform/internal/sharedkernel"
 	"github.com/lexagent/platform/internal/sqlutil"
 )
@@ -13,7 +14,7 @@ import (
 // control-plane commit. IAM and Run fences must be acquired before this port.
 // It never changes state or makes an expired checkpoint readable.
 func (s *SQLCheckpointStore) LockCheckpointTx(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope, namespace, key string, expected Checkpoint, requireHead bool) error {
-	if s == nil || tx == nil || expected.Revision == 0 || expected.Revision > 64 || expected.ExecutionRevision == 0 || !validStateSchema(expected.SchemaID) {
+	if s == nil || tx == nil || expected.Revision == 0 || expected.Revision > policyasset.MaximumCheckpointRevisions || expected.ExecutionRevision == 0 || !validStateSchema(expected.SchemaID) {
 		return ErrStateDenied
 	}
 	_, id, err := stateKeys(scope, namespace, key)

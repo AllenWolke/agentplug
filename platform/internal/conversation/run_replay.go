@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/lexagent/platform/internal/policyasset"
 	"github.com/lexagent/platform/internal/sharedkernel"
 )
 
@@ -51,4 +52,16 @@ func BusinessRequestHash(body []byte) (string, error) {
 // client fingerprint against the accepted command, including its old epoch.
 func RunCommandFingerprint(scope sharedkernel.Scope, key string, body []byte) (string, error) {
 	return runFingerprint(scope, key, body)
+}
+
+func RunCommandSelectionFingerprint(scope sharedkernel.Scope, key string, body []byte, selection policyasset.ModelSelection) (string, error) {
+	if selection.Validate() != nil {
+		return "", ErrInvalidQuery
+	}
+	base, err := runFingerprint(scope, key, body)
+	if err != nil || selection.EffectiveMode() == "manual" {
+		return base, err
+	}
+	digest := sha256.Sum256([]byte("run-model-selection/v1:" + selection.EffectiveMode() + ":" + base))
+	return hex.EncodeToString(digest[:]), nil
 }

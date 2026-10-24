@@ -34,7 +34,7 @@ func TestModelRecoveryEnvelopeExistsBeforeGenerate(t *testing.T) {
 			store.mu.Lock()
 			defer store.mu.Unlock()
 			record := store.records[capabilityScopeHash(capabilityContext())+"\x00prepared-observer"]
-			if record.Status != "reconcile" || record.Recovery == nil || !record.Recovery.SendDeadline.After(time.Now()) || len(budgets.reconciled) != 1 {
+			if record.Status != "reconcile" || record.Recovery == nil || record.Recovery.SendPhase != "dispatching" || !record.Recovery.SendDeadline.After(time.Now()) || len(budgets.reconciled) != 1 {
 				t.Fatal("generation sent before persisted retained intent")
 			}
 		}
@@ -68,17 +68,17 @@ func TestModelSendHoldFailureNeverInvokesProvider(t *testing.T) {
 	store.mu.Lock()
 	record := cloneInvocation(store.records[capabilityScopeHash(capabilityContext())+"\x00hold-fault"])
 	store.mu.Unlock()
-	if record.Recovery == nil || record.Recovery.Reservation.ReservationID == "" || record.Recovery.SendDeadline.IsZero() || record.Response != nil {
-		t.Fatal("pre-send recovery envelope missing")
+	if record.Status != "reconcile" || record.Recovery == nil || record.Recovery.Reservation.ReservationID == "" || record.Recovery.Decision == nil || record.Recovery.Decision.Outcome != "no_charge" || record.Response != nil || len(budgets.released) != 0 {
+		t.Fatal("persistent hold-store failure lost the original unsent proof or released without accounting")
 	}
 	m.reconcileBilling(context.Background())
 	if m.billingStats.Completed.Load() != 0 {
-		t.Fatal("active attempt prematurely resolved")
+		t.Fatal("already closed attempt was reconciled again")
 	}
 }
 
-// Reopen SQL after a prepared attempt with no result; never generate on recovery.
-// 持久化请求没有结果时重连数据库恢复，只转人工核对，禁止重跑模型。
+// Reopen SQL after a dispatched attempt with no result; never generate on recovery.
+// 已进入发送边界的请求没有结果时重连数据库恢复，只转核对，禁止重跑模型。
 func TestSQLPreparedModelSendSurvivesTTLAndReopen(t *testing.T) {
 	dsn := os.Getenv("PUBLIC_TEST_POSTGRES_MIGRATION_DSN")
 	if dsn == "" {
@@ -113,6 +113,9 @@ func TestSQLPreparedModelSendSurvivesTTLAndReopen(t *testing.T) {
 	}
 	m := &Module{modelStore: store, modelBudgets: budgets}
 	if err := m.prepareModelSend(ctx, scope, id, fp, reservation, now.Add(2*time.Second), prepared.AttemptToken); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BeginModelDispatch(ctx, scope, id, fp, prepared.AttemptToken); err != nil {
 		t.Fatal(err)
 	}
 	views, err := store.ListBillingManual(ctx)

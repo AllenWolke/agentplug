@@ -1,6 +1,6 @@
 # Build one of the python/javascript/shell targets, then pin its actual image ID.
 # The public project owns these images; upstream language images are base layers.
-FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm AS guard-build
+FROM --platform=$BUILDPLATFORM golang:1.26.10-bookworm AS guard-build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src

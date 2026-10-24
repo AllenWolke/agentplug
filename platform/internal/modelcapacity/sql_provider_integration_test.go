@@ -127,8 +127,12 @@ func TestSQLProviderPostgresIntegration(t *testing.T) {
 	}
 	provider.now = func() time.Time { return first.ExpiresAt.Add(time.Second) }
 	reaped, err := provider.ReapExpired(ctx, first.ExpiresAt.Add(time.Second), 10)
-	if err != nil || reaped != 1 {
+	if err != nil || reaped < 1 {
 		t.Fatalf("expired lease recovery: reaped=%d err=%v", reaped, err)
+	}
+	var expiredState string
+	if err = db.QueryRowContext(ctx, sqlutil.Bind(`SELECT status FROM platform_model_capacity_lease WHERE id=? AND fencing_token=?`), first.ID, first.FencingToken).Scan(&expiredState); err != nil || expiredState != "expired" {
+		t.Fatal("owned expired lease was not fenced", expiredState, err)
 	}
 	second, err := provider.AcquireCapacity(ctx, Request{Scope: capacityScope(), DeploymentID: deploymentID, Units: 1, Owner: "replacement-worker", RequestID: "replacement-request", TTL: time.Minute})
 	if err != nil {

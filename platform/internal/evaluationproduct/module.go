@@ -32,12 +32,14 @@ type Module struct {
 	modeAdmission    ModeAdmission
 	sourceAuthorizer SourceAuthorizer
 	cancellation     CancellationCoordinator
+	routingModels    RoutingCaseModelVerifier
 	cancelWorker     context.CancelFunc
 	cancelWG         sync.WaitGroup
 }
 
-func (m *Module) SetModeAdmission(port ModeAdmission)       { m.modeAdmission = port }
-func (m *Module) SetSourceAuthorizer(port SourceAuthorizer) { m.sourceAuthorizer = port }
+func (m *Module) SetModeAdmission(port ModeAdmission)                       { m.modeAdmission = port }
+func (m *Module) SetSourceAuthorizer(port SourceAuthorizer)                 { m.sourceAuthorizer = port }
+func (m *Module) SetRoutingCaseModelVerifier(port RoutingCaseModelVerifier) { m.routingModels = port }
 
 func NewModule(store Store, internalToken string, authorizer Authorizer, dispatcher Dispatcher) *Module {
 	return &Module{store: store, secret: strings.TrimSpace(internalToken), authorizer: authorizer, dispatcher: dispatcher}
@@ -104,6 +106,7 @@ func (m *Module) Handler() http.Handler {
 	for _, path := range []string{"/availability", "/agents", "/trajectories/", "/datasets", "/datasets/", "/suites", "/suites/", "/metrics", "/metrics/", "/runs", "/runs/", "/evidence", "/evidence/", "/reviews", "/feedback", "/feedback/", "/baselines", "/gates/evaluate"} {
 		mux.HandleFunc(path, m.serve)
 	}
+	mux.HandleFunc("/model-routing/qualifications:verify", m.serve)
 	return mux
 }
 
@@ -114,6 +117,10 @@ func (m *Module) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	path := strings.Trim(strings.TrimSpace(r.URL.Path), "/")
 	parts := strings.Split(path, "/")
+	if path == "model-routing/qualifications:verify" {
+		m.verifyRoutingQualification(w, r, actor)
+		return
+	}
 	if parts[0] == "feedback" {
 		m.feedback(w, r, actor, parts[1:])
 		return
@@ -1033,6 +1040,10 @@ func (m *Module) evaluateGate(w http.ResponseWriter, r *http.Request, actor Acto
 }
 
 func evaluateEvidence(data EvidenceData, minimum *float64, now time.Time) GateDecision {
+	return evaluateEvidenceMaxAge(data, minimum, now, 24*time.Hour)
+}
+
+func evaluateEvidenceMaxAge(data EvidenceData, minimum *float64, now time.Time, maxAge time.Duration) GateDecision {
 	failures := []string{}
 	if data.Status != "succeeded" && data.Status != "completed" {
 		failures = append(failures, "run_not_succeeded")
@@ -1049,10 +1060,19 @@ func evaluateEvidence(data EvidenceData, minimum *float64, now time.Time) GateDe
 	if len(data.CaseResultIDs) != data.SampleCount {
 		failures = append(failures, "case_evidence_incomplete")
 	}
-	if data.CitationGrounding != "passed" || data.DomainGrounding != "passed" {
+	if data.MeasurementProtocol != "" && data.MeasurementProtocol != IndependentVerdictProtocol {
+		failures = append(failures, "unknown_measurement_protocol")
+	}
+	if data.MeasurementProtocol == IndependentVerdictProtocol && data.SourceType != "imported_redacted" {
+		failures = append(failures, "untrusted_independent_review_source")
+	}
+	// Source-bound independent review measures business grounding as ratios.
+	// Its own judgement document is not a business answer to ground. Preserve
+	// those legacy fields as unknown rather than falsely marking them passed.
+	if data.MeasurementProtocol != IndependentVerdictProtocol && (data.CitationGrounding != "passed" || data.DomainGrounding != "passed") {
 		failures = append(failures, "grounding_unverified")
 	}
-	if !validSHA256(data.ReportHash) || !validSHA256(data.SuiteSnapshotHash) || !validSHA256(data.DatasetContentHash) || data.ProducedAt.IsZero() || data.ProducedAt.After(now) || now.Sub(data.ProducedAt) > 24*time.Hour {
+	if maxAge < 24*time.Hour || maxAge > 7*24*time.Hour || !validSHA256(data.ReportHash) || !validSHA256(data.SuiteSnapshotHash) || !validSHA256(data.DatasetContentHash) || data.ProducedAt.IsZero() || data.ProducedAt.After(now) || now.Sub(data.ProducedAt) > maxAge {
 		failures = append(failures, "evidence_missing_stale_or_future")
 	}
 	if len(data.Metrics) > 100 {

@@ -587,8 +587,8 @@ func TestCapabilityModelGenerationResolvesApprovedVersionBeforeGatewayAndReplays
 	if second.Code != http.StatusOK || second.Body.String() != first.Body.String() || gateway.calls != 1 {
 		t.Fatalf("idempotent replay called provider again: status=%d calls=%d body=%s", second.Code, gateway.calls, second.Body.String())
 	}
-	if accessCalls != 2 {
-		t.Fatalf("authorization must run on each replay, calls=%d", accessCalls)
+	if accessCalls != 4 {
+		t.Fatalf("authorization must run at admission and before result disclosure for the first call and replay, calls=%d", accessCalls)
 	}
 }
 

@@ -71,8 +71,7 @@ class ServerConfig:
     # Required when the matching capability is advertised. / 声明对应能力时必填。
     invoke: InvokeHandler | None = None
     run: RunHandler | None = None
-    # Pure input validation only: no I/O, state mutation or business effects.
-    # Runs after trusted verification and before invoke/run admission.
+    # Pure validation follows verification and precedes business admission.
     validate_input: Callable[[TrustedContext], None] | None = None
 
     def advertised(self) -> dict[str, bool]:
@@ -216,8 +215,6 @@ class ExecutionServer:
                             code="INVALID_REQUEST", message="business input is invalid", retryable=False)))
                     return
                 except Exception:
-                    # Unexpected validator failures are not proof of a known
-                    # rejection; preserve conservative transport semantics.
                     self._write_error(handler, 500, "INPUT_VALIDATOR_FAILED", "input validation unavailable")
                     return
             if operation == "invoke":

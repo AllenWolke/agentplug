@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-var secretText = regexp.MustCompile(`(?i)(bearer\s+[a-z0-9._~+/=-]+|sk-[a-z0-9_-]{12,}|(?:api[_-]?key|password|secret|token)\s*[:=]\s*[^\s,;"']+)`)
+var secretText = regexp.MustCompile(`(?i)(bearer\s+[a-z0-9._~+/=-]+|\bsk-[a-z0-9_-]{12,}|(?:api[_-]?key|password|secret|token)\s*[:=]\s*[^\s,;"']+)`)
 
 // Sanitize is defense in depth, not a claim that arbitrary text contains no PII.
 // Public reports never include raw outputs; protected trajectory output retains

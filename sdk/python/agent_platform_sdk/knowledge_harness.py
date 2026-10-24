@@ -16,7 +16,7 @@ def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
-async def run_knowledge_harness(client, query, scope, *, key, top_k=3, cache_mode="use", skill_requests=None, timeout=310):
+async def run_knowledge_harness(client, query, scope, *, key, top_k=3, cache_mode="use", skill_requests=None, timeout=310, as_of="", source_ids=None):
     """Pin approved Skill dependencies and persist the provider-send boundary.
 
     First entry uses the normal public pipeline. Every recovery/finished replay
@@ -44,7 +44,16 @@ async def run_knowledge_harness(client, query, scope, *, key, top_k=3, cache_mod
                 or len(set(request.get("sections", []))) != len(request.get("sections", []))):
             raise GatewayError("HARNESS_SKILL_REJECTED", "invalid pinned knowledge skill selection")
         ids.append(request["skill_id"])
-    digest = hashlib.sha256(_json([query, scope, top_k, cache_mode, requests]).encode()).hexdigest()
+    from datetime import date
+    if as_of:
+        try:
+            if not isinstance(as_of,str) or date.fromisoformat(as_of).isoformat()!=as_of: raise ValueError()
+        except (ValueError,TypeError): raise GatewayError("REQUEST_INVALID","invalid knowledge date") from None
+    if source_ids is not None and (not isinstance(source_ids,list) or not 1<=len(source_ids)<=16 or any(not _skill_identifier(v) for v in source_ids) or len(set(source_ids))!=len(source_ids)):
+        raise GatewayError("REQUEST_INVALID","invalid knowledge sources")
+    identity=[query, scope, top_k, cache_mode, requests]
+    if as_of or source_ids is not None: identity.append({"as_of":as_of,"source_ids":source_ids})
+    digest = hashlib.sha256(_json(identity).encode()).hexdigest()
     parent = getattr(client._context, "task_id", "")
     if not parent:
         raise GatewayError("HARNESS_STATE_REJECTED", "verified run required")
@@ -84,9 +93,13 @@ async def run_knowledge_harness(client, query, scope, *, key, top_k=3, cache_mod
     if not recovering:
         # Persist before provider-capable RAG dispatch. Lost save replies stop.
         await save()
-    result = await client.answer_knowledge(query, scope, top_k=top_k, cache_mode=cache_mode,
+    extra = {"as_of":as_of,"source_ids":source_ids} if as_of or source_ids is not None else {}
+    result = await client.answer_knowledge(query, scope, top_k=top_k, cache_mode=cache_mode, **extra,
         skill_requests=requests, skill_bindings=state["skill_bindings"],
         recovery_only=recovering, timeout=timeout)
+    if recovering and (not isinstance(result, dict) or result.get("recovery_only") is not True
+                       or type(result.get("model_requests_sent")) is not int or result["model_requests_sent"] != 0):
+        raise GatewayError("KNOWLEDGE_RECONCILIATION_REQUIRED", "read-only knowledge receipt required")
     if (not isinstance(result, dict) or not isinstance(result.get("text"), str) or not result["text"].strip()
             or len(result["text"].encode()) > 32768 or not isinstance(result.get("references"), list) or not result["references"]
             or not isinstance(result.get("citation_ids"), list) or not result["citation_ids"]):

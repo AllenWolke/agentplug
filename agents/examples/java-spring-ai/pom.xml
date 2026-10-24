@@ -5,13 +5,13 @@
   <parent>
     <groupId>com.lexagent</groupId>
     <artifactId>agent-platform-java</artifactId>
-    <version>2.0.0</version>
+    <version>2.1.0</version>
     <relativePath>../../../sdk/java/pom.xml</relativePath>
   </parent>
   <artifactId>example-java-spring-ai-agent</artifactId>
   <properties><maven.compiler.release>21</maven.compiler.release></properties>
   <dependencies>
-    <dependency><groupId>com.lexagent</groupId><artifactId>agent-platform-sdk</artifactId><version>2.0.0</version></dependency>
+    <dependency><groupId>com.lexagent</groupId><artifactId>agent-platform-sdk</artifactId><version>2.1.0</version></dependency>
     <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId><version>2.18.11</version></dependency>
   </dependencies>
   <build><plugins><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.4.2</version><configuration><archive><manifest><mainClass>com.lexagent.example.AgentServer</mainClass></manifest></archive></configuration></plugin></plugins></build>

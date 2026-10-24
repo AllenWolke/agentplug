@@ -23,9 +23,35 @@ type transactionConnector struct{ tx *sql.Tx }
 func (c transactionConnector) Connect(context.Context) (driver.Conn, error) {
 	return transactionConnection{c.tx}, nil
 }
-func (transactionConnector) Driver() driver.Driver { return transactionDriver{} }
+func (c transactionConnector) Driver() driver.Driver { return transactionDriver{tx: c.tx} }
 
-type transactionDriver struct{}
+type transactionDriver struct{ tx *sql.Tx }
+
+// SchemaWriter excludes transaction completion. A schema repository can join
+// the migration owner's transaction without committing it or opening a nested
+// transaction; standalone publication retains its own atomic transaction.
+type SchemaWriter interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func WithSchemaTransaction(ctx context.Context, db *sql.DB, apply func(SchemaWriter) error) error {
+	if db == nil || apply == nil {
+		return errors.New("schema database and callback required")
+	}
+	if borrowed, ok := db.Driver().(transactionDriver); ok {
+		return apply(borrowed.tx)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := apply(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
 func (transactionDriver) Open(string) (driver.Conn, error) {
 	return nil, errors.New("transaction connector required")

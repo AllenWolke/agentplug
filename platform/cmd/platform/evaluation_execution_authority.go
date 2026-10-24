@@ -21,6 +21,7 @@ import (
 	"github.com/lexagent/platform/internal/identity"
 	"github.com/lexagent/platform/internal/policyasset"
 	"github.com/lexagent/platform/internal/sharedkernel"
+	"github.com/lexagent/platform/internal/sqlutil"
 )
 
 // evaluationExecutionAuthority is the narrow bridge between the persisted
@@ -197,11 +198,17 @@ func (a evaluationExecutionAuthority) authorize(ctx context.Context, scope share
 	// Pin both the creator's and the exact installed workload's current run
 	// grants/epochs under IAM read continuity. The workload credential and
 	// binding are independently resolved against this exact installation.
-	tx, err := a.route.runs.DB().BeginTx(ctx, nil)
+	tx, borrowed, err := sqlutil.ContinuityTransaction(ctx, a.route.runs.DB())
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	if !borrowed {
+		tx, err = a.route.runs.DB().BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+	}
 	txReader, ok := a.products.(evaluationProductTxReader)
 	if !ok {
 		return agentcoordination.ErrDenied
@@ -229,11 +236,14 @@ func (a evaluationExecutionAuthority) authorize(ctx context.Context, scope share
 	if err != nil || machineEpoch == 0 {
 		return agentcoordination.ErrDenied
 	}
+	if borrowed {
+		return nil
+	}
 	return tx.Commit()
 }
 
 func (a evaluationExecutionAuthority) verifyJudgeSource(ctx context.Context, scope sharedkernel.Scope, input map[string]any) error {
-	if input["version"] != "agent-eval-judge-input/v1" {
+	if !agenteval.IsJudgeInputVersion(input["version"]) {
 		return nil
 	}
 	copy := make(map[string]any, len(input))

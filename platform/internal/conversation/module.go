@@ -16,6 +16,7 @@ import (
 
 	"github.com/lexagent/platform/internal/bootstrap"
 	"github.com/lexagent/platform/internal/contract"
+	"github.com/lexagent/platform/internal/policyasset"
 	"github.com/lexagent/platform/internal/sharedkernel"
 )
 
@@ -25,19 +26,21 @@ import (
 // Module 暴露会话产品边界；这里保持窄认证边界，未来可替换为平台 IAM Adapter，
 // 不改变 Store 与领域契约。
 type Module struct {
-	store          Store
-	internalToken  string
-	allowManaged   bool
-	starter        RunStarter
-	replay         RunReplayResolver
-	binding        RuntimeBindingResolver
-	policy         RunPolicyResolver
-	signer         ContextTokenSigner
-	principalRoles func(context.Context, Scope) ([]string, error)
-	access         AccessControl
-	erasureEnabled bool
-	erasureCancel  context.CancelFunc
-	erasureDone    chan struct{}
+	store           Store
+	internalToken   string
+	allowManaged    bool
+	starter         RunStarter
+	replay          RunReplayResolver
+	progress        RunProgressResolver
+	binding         RuntimeBindingResolver
+	policy          RunPolicyResolver
+	modelSelections policyasset.ModelSelectionStore
+	signer          ContextTokenSigner
+	principalRoles  func(context.Context, Scope) ([]string, error)
+	access          AccessControl
+	erasureEnabled  bool
+	erasureCancel   context.CancelFunc
+	erasureDone     chan struct{}
 }
 
 func NewModule(store Store, internalToken string, allowManaged bool) *Module {
@@ -60,6 +63,10 @@ func (m *Module) SetRuntimeBindingResolver(resolver RuntimeBindingResolver) { m.
 // for browser-created runs. / SetRunPolicyResolver 注入浏览器 Run 所需的权威
 // 不可变策略快照解析器。
 func (m *Module) SetRunPolicyResolver(resolver RunPolicyResolver) { m.policy = resolver }
+
+func (m *Module) SetModelSelectionStore(store policyasset.ModelSelectionStore) {
+	m.modelSelections = store
+}
 
 // SetContextTokenSigner enables the browser-to-runtime command adapter. A
 // missing signer keeps the module usable for machine callers that already send
@@ -388,6 +395,14 @@ func (m *Module) session(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		item = items[0]
+		if m.progress != nil {
+			item.RunProgress, err = m.progress.ResolveRunProgress(r.Context(), scope, item)
+			if err != nil {
+				// Preserve authorized history during an execution read outage.
+				item.RunProgress = nil
+				item.RunProgressUnavailable = true
+			}
+		}
 		m.writeJSON(w, http.StatusOK, item)
 		return
 	}
@@ -406,13 +421,14 @@ func (m *Module) session(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var request RunStartRequest
-		if err := decode(r, &request); err != nil || strings.TrimSpace(request.RunID) == "" || strings.TrimSpace(request.IdempotencyKey) == "" {
+		if err := decode(r, &request); err != nil || strings.TrimSpace(request.RunID) == "" || strings.TrimSpace(request.IdempotencyKey) == "" || request.ModelSelection.Validate() != nil {
 			m.writeError(w, http.StatusBadRequest, "INVALID_REQUEST")
 			return
 		}
 		if len(request.Request) == 0 {
 			request.Request = json.RawMessage(`{}`)
 		}
+		routingTaskInput := append(json.RawMessage(nil), request.Request...)
 		// Check the current resource grant before loading or comparing an
 		// accepted command, so revoked callers cannot probe its business input.
 		if _, err := m.authorizeSession(r.Context(), scope, id, "run"); err != nil {
@@ -528,7 +544,7 @@ func (m *Module) session(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		fingerprint, fingerprintErr := runFingerprint(runScope, request.IdempotencyKey, request.Request)
+		fingerprint, fingerprintErr := RunCommandSelectionFingerprint(runScope, request.IdempotencyKey, request.Request, request.ModelSelection)
 		if fingerprintErr != nil {
 			m.writeError(w, http.StatusBadRequest, "INVALID_REQUEST")
 			return
@@ -586,6 +602,36 @@ func (m *Module) session(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		var runID string
+		// The preference is platform-owned durable metadata; business input and the
+		// signed execution v2 wire contract remain compatible with existing Agents.
+		if request.ModelSelection.EffectiveMode() == "automatic" && (isV2Envelope || m.modelSelections == nil || m.policy == nil) {
+			m.writeError(w, http.StatusConflict, "MODEL_ROUTING_UNAVAILABLE")
+			return
+		}
+		if m.modelSelections != nil && !isV2Envelope && m.policy != nil {
+			var published policyasset.ModelPolicy
+			policy, valid := input["policy_snapshot"].(map[string]any)
+			raw, marshalErr := json.Marshal(policy["model"])
+			policyHash, hashOK := policy["content_hash"].(string)
+			if !valid || !hashOK || marshalErr != nil || json.Unmarshal(raw, &published) != nil ||
+				(request.ModelSelection.EffectiveMode() == "automatic" && (published.Routing == nil || published.ValidateRouting() != nil)) {
+				m.writeError(w, http.StatusConflict, "MODEL_ROUTING_UNAVAILABLE")
+				return
+			}
+			binding := policyasset.ModelSelectionBinding{Selection: request.ModelSelection, PolicySHA256: policyHash, CommandFingerprint: request.Fingerprint}
+			if binding.Selection.EffectiveMode() == "automatic" {
+				var taskErr error
+				binding, taskErr = policyasset.BindRoutingTask(binding, routingTaskInput, *published.Routing)
+				if taskErr != nil {
+					m.writeError(w, http.StatusBadRequest, "INVALID_ROUTING_TASK")
+					return
+				}
+			}
+			if err := m.modelSelections.BindModelSelection(r.Context(), runScope, binding); err != nil {
+				m.writeError(w, http.StatusConflict, "MODEL_SELECTION_BINDING_FAILED")
+				return
+			}
+		}
 		if starter, ok := m.starter.(RunMessageStarter); ok {
 			runID, err = starter.StartRunWithMessage(r.Context(), runScope, request.RunID, request.IdempotencyKey, request.Fingerprint, request.AgentEndpoint, request.Request, request.MessageID)
 		} else {

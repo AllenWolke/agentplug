@@ -14,6 +14,8 @@ import (
 
 // Lease generations fence old HTTP workers without relying on process locks.
 // 租约代际隔离旧HTTP执行者，不依赖单进程锁实现并发安全。
+// Fence is ordered only within ScopeHash+CallID. Owner/Token identify this
+// attempt; neither belongs in the stable remote ToolOperationIdentity.
 type ToolExecutionLease struct {
 	ScopeHash   string
 	CallID      string
@@ -35,6 +37,13 @@ func receiptQueryFromContext(ctx context.Context, scope, id, fp string) (*ToolRe
 	} // Direct low-level fixtures do not submit business commands.
 	if q.CallID != id || q.Fingerprint != fp || q.Name == "" || ToolReceiptScopeHash(q.Scope) != scope {
 		return nil, ErrToolInvocationConflict
+	}
+	if q.RemoteContract != nil {
+		if q.RemoteContract.Validate() != nil {
+			return nil, ErrToolInvocationConflict
+		}
+		contract := *q.RemoteContract
+		q.RemoteContract = &contract
 	}
 	return &q, nil
 }

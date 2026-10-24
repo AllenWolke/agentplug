@@ -15,6 +15,7 @@ import (
 	"github.com/lexagent/platform/internal/policyasset"
 	platformruntime "github.com/lexagent/platform/internal/runtime"
 	"github.com/lexagent/platform/internal/sharedkernel"
+	"github.com/lexagent/platform/internal/sqlutil"
 	"github.com/lexagent/platform/internal/usagecost"
 )
 
@@ -130,6 +131,14 @@ func budgetRunPolicy(ctx context.Context, tx *sql.Tx, run execution.BudgetRunFac
 }
 
 func (a runTreeBudgetAuthority) Facts(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope, admission bool) (usagecost.RunTreeBudgetFacts, error) {
+	return a.facts(ctx, tx, scope, admission, false)
+}
+
+func (a runTreeBudgetAuthority) ReadFacts(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope) (usagecost.RunTreeBudgetFacts, error) {
+	return a.facts(ctx, tx, scope, true, true)
+}
+
+func (a runTreeBudgetAuthority) facts(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope, admission, sharedRead bool) (usagecost.RunTreeBudgetFacts, error) {
 	empty := usagecost.RunTreeBudgetFacts{}
 	if tx == nil || a.route.runs == nil || a.route.identity == nil || scope.ValidateTrusted() != nil {
 		return empty, usagecost.ErrBudgetScopeMismatch
@@ -139,8 +148,15 @@ func (a runTreeBudgetAuthority) Facts(ctx context.Context, tx *sql.Tx, scope sha
 	// that waits on ancestor share locks this transaction already holds.
 	ctx = withEpochMemo(ctx, tx)
 	ctx = withBudgetAncestryTransaction(ctx, tx)
+	ctx = sqlutil.WithContinuityTransaction(ctx, a.route.runs.DB(), tx)
 	ctx = capability.WithSQLSkillTransaction(ctx, a.route.runs.DB(), tx, scope)
 	evaluationRoot := a.evaluation != nil && evaluationBudgetCandidate(ctx, a.route.runs, scope)
+	// Evaluation's product-parent lock protocol has a separate provenance
+	// boundary. Retain its established exclusive path until that protocol also
+	// supplies a shared read contract; never silently bypass its parent fence.
+	if evaluationRoot {
+		sharedRead = false
+	}
 	if admission && !evaluationRoot {
 		if err := a.route.identity.AcquirePermissionReadContinuity(ctx, tx); err != nil {
 			return empty, budgetLockOrMismatch(err)
@@ -169,9 +185,17 @@ func (a runTreeBudgetAuthority) Facts(ctx context.Context, tx *sql.Tx, scope sha
 		return empty, err
 	}
 	if admission {
-		// Acquire the actor fence before shared metadata reads: concurrent calls
-		// must not both take SHARE and then attempt an UPDATE lock upgrade.
+		// Select the execution fence before reading actor metadata. A model
+		// reservation reads Run/Session but writes separate budget/invocation
+		// rows, whose own exclusive locks serialize money and send admission.
+		// Sharing this execution fence prevents its SQL accounting transaction
+		// from blocking independent checkpoint writers on the same actor.
+		// Only the private model admission binding can select this path;
+		// coordination/effect admission and Evaluation keep their old protocol.
 		lease, currentPolicy, err := capability.ModelBudgetExecutionAuthority(ctx, scope)
+		if err == nil && !evaluationRoot {
+			sharedRead = true
+		}
 		if ancestryLockWait(err) {
 			return empty, err
 		}
@@ -187,13 +211,18 @@ func (a runTreeBudgetAuthority) Facts(ctx context.Context, tx *sql.Tx, scope sha
 		if err != nil {
 			return empty, usagecost.ErrBudgetScopeMismatch
 		}
-		if err = a.route.runs.CheckCapabilityLeaseTx(ctx, tx, scope, lease); err != nil {
+		if sharedRead {
+			err = a.route.runs.CheckCapabilityReadLeaseTx(ctx, tx, scope, lease)
+		} else {
+			err = a.route.runs.CheckCapabilityLeaseTx(ctx, tx, scope, lease)
+		}
+		if err != nil {
 			return empty, budgetLockOrMismatch(err)
 		}
 		boundPolicy = currentPolicy
 	}
 	if run.Scope.RunID == "" {
-		if admission {
+		if admission && !sharedRead {
 			run, err = a.route.runs.BudgetRunForUpdateTx(ctx, tx, scope.RunID)
 		} else {
 			run, err = a.route.runs.BudgetRunTx(ctx, tx, scope.RunID)
@@ -224,11 +253,11 @@ func (a runTreeBudgetAuthority) Facts(ctx context.Context, tx *sql.Tx, scope sha
 		if boundPolicy.Hash != policy.Hash || run.Scope != scope || run.Status != platformruntime.StatusRunning {
 			return empty, usagecost.ErrBudgetScopeMismatch
 		}
-		snapshot, err := a.route.identity.PermissionSnapshot(ctx, identity.PrincipalType(scope.PrincipalType), scope.PrincipalID)
+		facts, err := a.route.identity.PrincipalPolicyFactsTx(ctx, tx, identity.PrincipalType(scope.PrincipalType), scope.PrincipalID)
 		if err != nil {
 			return empty, budgetLockOrMismatch(err)
 		}
-		if snapshot.Mode != "v2" {
+		if facts.Mode != "v2" {
 			return empty, usagecost.ErrBudgetScopeMismatch
 		}
 	}
@@ -245,8 +274,9 @@ func (a runTreeBudgetAuthority) Facts(ctx context.Context, tx *sql.Tx, scope sha
 		if proofErr != nil {
 			return empty, budgetLockOrMismatch(proofErr)
 		}
-		// CheckCapabilityLeaseTx already holds this actor FOR UPDATE. Sharing
-		// that row again deadlocks the reconciler waiting on the same child.
+		// The lease guard already holds this actor in the current transaction.
+		// The proof must reuse that fence rather than open another transaction
+		// whose locks could wait on this transaction's own actor.
 		if err := a.route.checkDelegationAuthorityProofForLiveActorTx(ctx, tx, proof, scope.RunID); err != nil {
 			return empty, budgetLockOrMismatch(err)
 		}
@@ -319,3 +349,4 @@ func (a runTreeBudgetAuthority) VerifyOutcome(ctx context.Context, tx *sql.Tx, s
 }
 
 var _ usagecost.RunTreeBudgetAuthority = runTreeBudgetAuthority{}
+var _ usagecost.RunTreeBudgetReadAuthority = runTreeBudgetAuthority{}

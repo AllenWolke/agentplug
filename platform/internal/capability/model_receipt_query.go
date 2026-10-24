@@ -99,21 +99,15 @@ func (m *Module) modelReceiptAuthorized(w http.ResponseWriter, r *http.Request, 
 		}
 		op.Policy.Model = selected
 	}
-	var input struct {
-		Texts              []string                     `json:"texts"`
-		EmbeddingPurpose   string                       `json:"input_purpose,omitempty"`
-		Messages           []modelgateway.Message       `json:"messages"`
-		FunctionNames      []string                     `json:"function_names"`
-		SkillBindings      map[string]SkillModelBinding `json:"skill_bindings"`
-		PromptTemplateHash string                       `json:"prompt_template_hash"`
-		IdempotencyKey     string                       `json:"idempotency_key"`
-		Temperature        float64                      `json:"temperature"`
-		MaxTokens          int                          `json:"max_tokens"`
-	}
+	var input modelGenerateInput
 	decoder := json.NewDecoder(bytes.NewReader(op.Input))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&input) != nil || decoder.Decode(new(any)) != io.EOF || !embedding && (len(input.Messages) == 0 || len(input.Texts) != 0) || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 255 || input.MaxTokens < 0 || input.Temperature < 0 || input.Temperature > 2 {
 		m.error(w, 400, "INVALID_REQUEST", "exact generation input required", op.Context.TraceID)
+		return
+	}
+	if input.DeadlineMS < 0 || input.DeadlineMS > (1<<53)-1 || embedding && input.DeadlineMS != 0 {
+		m.error(w, 400, "INVALID_REQUEST", "invalid model deadline", op.Context.TraceID)
 		return
 	}
 	if input.EmbeddingPurpose != "" && (!embedding || (input.EmbeddingPurpose != "query" && input.EmbeddingPurpose != "document")) {
@@ -121,7 +115,7 @@ func (m *Module) modelReceiptAuthorized(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	if embedding {
-		if len(input.Messages) != 0 || len(input.Texts) < 1 || len(input.Texts) > 128 || len(input.FunctionNames) != 0 || len(input.SkillBindings) != 0 {
+		if len(input.Messages) != 0 || len(input.Texts) < 1 || len(input.Texts) > 128 || len(input.FunctionNames) != 0 || len(input.SkillBindings) != 0 || input.RequireJSON {
 			m.error(w, 400, "INVALID_REQUEST", "exact bounded embedding input required", op.Context.TraceID)
 			return
 		}
@@ -148,12 +142,45 @@ func (m *Module) modelReceiptAuthorized(w http.ResponseWriter, r *http.Request, 
 		m.error(w, 403, "PROMPT_VERSION_DENIED", "published prompt required", op.Context.TraceID)
 		return
 	}
+	var schemaErr error
+	input.ResponseSchema, input.ResponseSchemaMode, schemaErr = modelgateway.NormalizeResponseSchema(input.ResponseSchema, input.ResponseSchemaMode, input.RequireJSON, input.FunctionNames)
+	if schemaErr != nil || embedding && len(input.ResponseSchema) > 0 {
+		m.error(w, 400, "INVALID_RESPONSE_SCHEMA", "bounded generation schema required", op.Context.TraceID)
+		return
+	}
 	if input.MaxTokens == 0 {
 		input.MaxTokens = op.Policy.Model.MaxTokens
 	}
-	if op.Policy.Model.MaxTokens > 0 && input.MaxTokens > op.Policy.Model.MaxTokens || !embedding && (modelgateway.ValidateFunctionRequest(op.Policy.Tool, input.FunctionNames, input.Messages) != nil || validateModelContextLimit(op.Policy.Model, input.Messages, op.Policy.Tool, input.FunctionNames) != nil) {
+	wireMessages, _, contextErr := m.invocationContext(op, input.Messages, embedding)
+	if contextErr != nil || op.Policy.Model.MaxTokens > 0 && input.MaxTokens > op.Policy.Model.MaxTokens || !embedding && (modelgateway.ValidateFunctionRequest(op.Policy.Tool, input.FunctionNames, input.Messages) != nil || ValidateModelContextWithResponseSchema(op.Policy.Model, wireMessages, op.Policy.Tool, input.FunctionNames, input.RequireJSON, input.ResponseSchema, input.ResponseSchemaMode) != nil) {
 		m.error(w, 403, "MODEL_POLICY_DENIED", "generation policy denied", op.Context.TraceID)
 		return
+	}
+	logicalReceiptKey := input.IdempotencyKey
+	if !embedding {
+		ctx, selected, err := m.readModelRouteAttempt(r.Context(), op, input)
+		if err != nil {
+			status, code := modelRouteError(err)
+			m.error(w, status, code, "model attempt history lookup denied", op.Context.TraceID)
+			return
+		}
+		r, input = r.WithContext(ctx), selected
+	}
+	var routed bool
+	if !embedding {
+		route, automatic, routeErr := m.resolveInvocationRoute(r.Context(), &op, input.IdempotencyKey,
+			routeInput(input),
+			input.Temperature, input.PromptTemplateHash, input.SkillBindings, true)
+		if routeErr != nil {
+			status, code := modelRouteError(routeErr)
+			m.error(w, status, code, "original model route lookup denied", op.Context.TraceID)
+			return
+		}
+		if automatic && route == nil {
+			m.currentResult(w, r, op, map[string]any{"version": "model-receipt/v1", "idempotency_key": logicalReceiptKey, "status": "not_found", "receipt": nil})
+			return
+		}
+		routed = route != nil
 	}
 	checkModel := func() bool {
 		if m.modelAccess == nil {
@@ -166,7 +193,7 @@ func (m *Module) modelReceiptAuthorized(w http.ResponseWriter, r *http.Request, 
 		}
 		return err == nil && selection.ModelVersionID == op.Policy.Model.ModelVersionID && selection.ProviderID != "" && selection.ProviderKey != "" && selection.ModelID != "" && selection.ModelKey != "" && sameModelSelection(provider, op.Policy.Model.Model, selection) && (selection.TrustZone != modelgovernance.TrustExternal || op.Policy.Model.AllowExternal)
 	}
-	if !checkModel() {
+	if !checkModel() || !embedding && m.checkContextCacheModel(r.Context(), op) != nil {
 		m.error(w, 403, "MODEL_ACCESS_DENIED", "current model approval denied", op.Context.TraceID)
 		return
 	}
@@ -175,6 +202,11 @@ func (m *Module) modelReceiptAuthorized(w http.ResponseWriter, r *http.Request, 
 		m.error(w, 400, "INVALID_REQUEST", "invalid generation input", op.Context.TraceID)
 		return
 	}
+	if input.RequireJSON {
+		fingerprint = modelPurposeFingerprint(fingerprint, "json_object")
+	}
+	fingerprint = modelResponseSchemaFingerprint(fingerprint, input.ResponseSchema, input.ResponseSchemaMode)
+	fingerprint = modelDeadlineFingerprint(fingerprint, input.DeadlineMS)
 	if embedding {
 		// Match the original encoding command; query/document receipts cannot cross.
 		// 恢复必须匹配原编码用途，不能交叉读取查询和文档向量回执。
@@ -185,7 +217,11 @@ func (m *Module) modelReceiptAuthorized(w http.ResponseWriter, r *http.Request, 
 		m.error(w, 503, "MODEL_RECEIPT_UNAVAILABLE", "receipt lookup unavailable", op.Context.TraceID)
 		return
 	}
-	record, found, err := store.LookupModelInvocation(r.Context(), capabilityScopeHash(op.Context), input.IdempotencyKey)
+	scopeHash := capabilityScopeHash(op.Context)
+	if routed {
+		scopeHash = modelSelectionScopeHash(scopeFromHarness(op.Context))
+	}
+	record, found, err := store.LookupModelInvocation(r.Context(), scopeHash, input.IdempotencyKey)
 	if err != nil {
 		m.error(w, 503, "MODEL_RECEIPT_UNAVAILABLE", "receipt lookup failed", op.Context.TraceID)
 		return
@@ -201,6 +237,14 @@ func (m *Module) modelReceiptAuthorized(w http.ResponseWriter, r *http.Request, 
 		switch status {
 		case "completed":
 			receipt = record.Response
+			if state, ok := r.Context().Value(modelExecutionReceiptKey{}).(ModelRouteExecution); ok && state.Status == "completed" {
+				last := state.Steps[len(state.Steps)-1]
+				if last.KeySHA256 != modelRouteHash(input.IdempotencyKey) || last.Fingerprint != fingerprint || last.OutcomeSHA256 != modelRouteHash(receipt) {
+					m.error(w, 409, "MODEL_IDEMPOTENCY_CONFLICT", "selected model receipt changed", op.Context.TraceID)
+					return
+				}
+				receipt["route_execution"] = modelRouteExecutionReceipt(state)
+			}
 		case "running", "failed", "reconcile":
 		default:
 			m.error(w, 502, "MODEL_RECEIPT_INVALID", "unknown ledger status", op.Context.TraceID)
@@ -218,5 +262,5 @@ func (m *Module) modelReceiptAuthorized(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
-	m.currentResult(w, r, op, map[string]any{"version": "model-receipt/v1", "idempotency_key": input.IdempotencyKey, "status": status, "receipt": receipt})
+	m.currentResult(w, r, op, map[string]any{"version": "model-receipt/v1", "idempotency_key": logicalReceiptKey, "status": status, "receipt": receipt})
 }

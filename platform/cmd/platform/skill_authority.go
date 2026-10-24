@@ -64,10 +64,10 @@ func (a skillAuthority) AcquireTransactionFence(ctx context.Context, tx *sql.Tx,
 	if a.identity == nil || a.runs == nil || tx == nil {
 		return capability.ErrSkillDenied
 	}
-	if err := a.identity.AcquirePermissionReadContinuity(ctx, tx); err != nil {
-		return skillLockOrDenied(err)
-	}
 	if b, ok := ctx.Value(skillBrowserKey{}).(skillBrowserSession); ok {
+		if err := a.identity.AcquirePermissionReadContinuity(ctx, tx); err != nil {
+			return skillLockOrDenied(err)
+		}
 		if b.Scope != scope || scope.PrincipalType != "user" || a.identity.ValidateBrowserSession(ctx, b.SessionScope, b.Session, b.Revision) != nil || a.identity.ValidateApplicationScope(ctx, scope.TenantID, scope.DepartmentID, scope.ApplicationID) != nil {
 			return capability.ErrSkillDenied
 		}
@@ -77,7 +77,13 @@ func (a skillAuthority) AcquireTransactionFence(ctx context.Context, tx *sql.Tx,
 	if err != nil {
 		return skillLockOrDenied(err)
 	}
-	if err := a.runs.CheckCapabilityLeaseTx(ctx, tx, scope, lease); err != nil {
+	if err := a.identity.AcquirePermissionReadContinuity(ctx, tx); err != nil {
+		return skillLockOrDenied(err)
+	}
+	// Runtime Skill validation reads execution facts and writes registry/audit
+	// rows only. Never upgrade a model/checkpoint owner's shared execution
+	// fence; the Skill namespace lock serializes its own registry transitions.
+	if err := a.runs.CheckCapabilityReadLeaseTx(ctx, tx, scope, lease); err != nil {
 		return skillLockOrDenied(err)
 	}
 	return nil
@@ -121,7 +127,7 @@ func (a skillAuthority) Authorize(ctx context.Context, tx *sql.Tx, action string
 	if err != nil {
 		return skillLockOrDenied(err)
 	}
-	if err := a.runs.CheckCapabilityLeaseTx(ctx, tx, scope, lease); err != nil {
+	if err := a.runs.CheckCapabilityReadLeaseTx(ctx, tx, scope, lease); err != nil {
 		return skillLockOrDenied(err)
 	}
 	snapshot, err := a.identity.PermissionSnapshot(ctx, identity.PrincipalType(scope.PrincipalType), scope.PrincipalID)

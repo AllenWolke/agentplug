@@ -20,11 +20,11 @@ func TestEpochMemoIsScopedToItsAuthorizationTransaction(t *testing.T) {
 	if firstMemo == nil {
 		t.Fatal("authorization transaction memo was not installed")
 	}
-	firstMemo.hits["principal/action"] = 7
+	firstMemo.hits["principal/action"] = epochMemoEntry{epoch: 7}
 	if got := withEpochMemo(firstContext, firstTx); got != firstContext {
 		t.Fatal("same transaction replaced its memo")
 	}
-	if epoch, ok := epochMemoFor(firstContext, firstTx).hits["principal/action"]; !ok || epoch != 7 {
+	if entry, ok := epochMemoFor(firstContext, firstTx).hits["principal/action"]; !ok || entry.epoch != 7 {
 		t.Fatal("same-transaction permission epoch was not retained")
 	}
 	if epochMemoFor(firstContext, secondTx) != nil {
@@ -108,6 +108,12 @@ func TestDelegatedAncestryLockWaitIsNotRewrittenAsDenial(t *testing.T) {
 }
 
 func TestBudgetLockOrMismatchKeepsAncestorLockWait(t *testing.T) {
+	for _, state := range []string{"40001", "40P01"} {
+		original := &pgconn.PgError{Code: state}
+		if err := budgetLockOrMismatch(original); !errors.Is(err, original) {
+			t.Fatalf("transaction abort was rewritten as denial: %v", err)
+		}
+	}
 	if err := budgetLockOrMismatch(context.DeadlineExceeded); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("deadline was rewritten: %v", err)
 	}

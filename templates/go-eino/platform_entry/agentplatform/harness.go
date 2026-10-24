@@ -9,11 +9,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 )
 
 const HarnessStateSchema = "schema://agentplug/harness-loop/v1"
+const ExtendedHarnessStateSchema = "schema://agentplug/harness-loop/v2"
 
 type HarnessOptions struct {
+	ExtensionID             string
+	DeadlineMS              int64
+	ActionValidator         func(map[string]any, map[string]any) bool
+	ProgressEvaluator       func(map[string]any, map[string]any) (map[string]any, error)
 	Key                     string
 	MaxRounds, MaxToolCalls int
 	// Delivered by the human control plane for the currently pending operation.
@@ -30,12 +36,16 @@ type HarnessOperation struct {
 }
 
 type HarnessResult struct {
-	Status  string            `json:"status"`
-	Pending *HarnessOperation `json:"pending,omitempty"`
-	Output  map[string]any    `json:"output,omitempty"`
+	Execution map[string]any    `json:"execution,omitempty"`
+	Status    string            `json:"status"`
+	Pending   *HarnessOperation `json:"pending,omitempty"`
+	Output    map[string]any    `json:"output,omitempty"`
 }
 
 type harnessState struct {
+	ExtensionID         string                         `json:"extension_id,omitempty"`
+	Observations        []map[string]any               `json:"observations,omitempty"`
+	ModelReceipts       []map[string]any               `json:"model_receipts,omitempty"`
 	Version             string                         `json:"version"`
 	InputHash           string                         `json:"input_hash"`
 	Phase               string                         `json:"phase"`
@@ -95,7 +105,10 @@ func harnessBudgetExhausted(result map[string]any) (bool, error) {
 
 func harnessBudgetOutput(previous map[string]any, reason string) map[string]any {
 	output := map[string]any{"completion_status": "incomplete", "finish_reason": reason}
-	for _, key := range []string{"text", "model", "usage", "billing", "run_budget", "prompt_template_hash"} {
+	// The preserved field set is the cross-language canonical set: Python and
+	// Java harness keep routing/model attribution on budget-terminated outputs,
+	// so a Go run cannot lose billing attribution at the same boundary.
+	for _, key := range []string{"text", "model", "usage", "billing", "run_budget", "prompt_template_hash", "routing", "route_execution", "context_cache", "response_schema", "model_version_id", "provider_id", "model_id", "step_id"} {
 		if value, exists := previous[key]; exists {
 			output[key] = value
 		}
@@ -114,6 +127,14 @@ func isHarnessBudgetDenial(err error) bool {
 func runHarness(ctx context.Context, port harnessPort, input map[string]any, o HarnessOptions) (HarnessResult, error) {
 	if o.Key == "" || o.MaxRounds < 1 || o.MaxRounds > 8 || o.MaxToolCalls < 1 || o.MaxToolCalls > 16 || len(o.ConfirmationToken) > 8192 {
 		return HarnessResult{}, harnessError("HARNESS_CONFIG_INVALID")
+	}
+	extended := o.ExtensionID != "" || o.DeadlineMS != 0 || o.ActionValidator != nil || o.ProgressEvaluator != nil
+	namespace, stateSchema := "harness", HarnessStateSchema
+	if extended {
+		if !regexp.MustCompile(`^[A-Za-z0-9_.:/-]{1,128}$`).MatchString(o.ExtensionID) || o.DeadlineMS < 0 || o.DeadlineMS > 1<<53-1 {
+			return HarnessResult{}, harnessError("HARNESS_CONFIG_INVALID")
+		}
+		namespace, stateSchema = "harness-v2", ExtendedHarnessStateSchema
 	}
 	encoded, err := json.Marshal(input)
 	if err != nil {
@@ -140,6 +161,16 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 	delete(current, "skill_requests") // SDK orchestration metadata is not a model parameter.
 	delete(current, "skill_bindings") // Only verified disclosures can supply these dependencies.
 	bound, _ := json.Marshal([]any{input, o.MaxRounds, o.MaxToolCalls})
+	if extended {
+		var deadline any
+		if o.DeadlineMS != 0 {
+			deadline = o.DeadlineMS
+		}
+		bound, err = publicJSON([]any{input, o.MaxRounds, o.MaxToolCalls, o.ExtensionID, o.ActionValidator != nil, o.ProgressEvaluator != nil, deadline})
+		if err != nil {
+			return HarnessResult{}, err
+		}
+	}
 	digest := sha256.Sum256(bound)
 	inputHash := hex.EncodeToString(digest[:])
 	policy, err := loadHarnessPublishedPolicy(ctx, port)
@@ -149,17 +180,27 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 	effectiveMaxRounds := min(o.MaxRounds, policy.Limits.MaxRounds)
 	effectiveMaxToolCalls := min(o.MaxToolCalls, policy.Limits.MaxToolCalls)
 	s := newHarnessState(inputHash, initial, policy)
+	if extended {
+		s.Version = "harness-loop/v2"
+		s.ExtensionID = o.ExtensionID
+		s.Observations = []map[string]any{}
+		s.ModelReceipts = []map[string]any{}
+	}
+	if o.DeadlineMS != 0 {
+		s.LoopDeadlineMS = min(s.LoopDeadlineMS, o.DeadlineMS)
+	}
+	delete(current, "deadline_ms")
 	loadCtx, loadCancel := harnessReadOnlyContext(ctx)
-	loaded, err := port.LoadCheckpoint(loadCtx, "harness", o.Key, HarnessStateSchema, 0)
+	loaded, err := port.LoadCheckpoint(loadCtx, namespace, o.Key, stateSchema, 0)
 	loadCancel()
 	if err != nil {
 		return HarnessResult{}, err
 	}
-	if err := ValidateRuntimeRecoveryCheckpoint(ctx, "harness", o.Key, HarnessStateSchema, loaded); err != nil {
+	if err := ValidateRuntimeRecoveryCheckpoint(ctx, namespace, o.Key, stateSchema, loaded); err != nil {
 		return HarnessResult{}, harnessError("HARNESS_STATE_REJECTED")
 	}
 	if loaded["checkpoint"] == nil {
-		if err := AuthorizeRuntimeRecoveryStart(ctx, "harness", o.Key, HarnessStateSchema, s.InputHash); err != nil {
+		if err := AuthorizeRuntimeRecoveryStart(ctx, namespace, o.Key, stateSchema, s.InputHash); err != nil {
 			return HarnessResult{}, harnessError("HARNESS_STATE_REJECTED")
 		}
 	}
@@ -201,6 +242,12 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 			}
 		}
 	}
+	if extended && (s.ExtensionID != o.ExtensionID || len(s.Observations) > 16 || len(s.ModelReceipts) > 8 || s.Observations == nil || s.ModelReceipts == nil) {
+		return HarnessResult{}, harnessError("HARNESS_STATE_REJECTED")
+	}
+	if o.DeadlineMS != 0 && s.LoopDeadlineMS > o.DeadlineMS {
+		return HarnessResult{}, harnessError("HARNESS_STATE_REJECTED")
+	}
 	if s.Round < 0 || s.Round > 8 || s.ToolCount < 0 || s.ToolCount > 16 || len(s.Pending) > 16 || len(s.Pending)+s.ToolCount > 16 || len(s.Messages) == 0 {
 		return HarnessResult{}, harnessError("HARNESS_STATE_REJECTED")
 	}
@@ -237,7 +284,10 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 		if dec.Decode(&value) != nil {
 			return harnessError("HARNESS_STATE_REJECTED")
 		}
-		result, err := port.SaveCheckpoint(saveCtx, "harness", o.Key, HarnessStateSchema, fmt.Sprintf("loop-%d", revision+1), revision, value)
+		if extended {
+			value["observations"], value["model_receipts"] = s.Observations, s.ModelReceipts
+		}
+		result, err := port.SaveCheckpoint(saveCtx, namespace, o.Key, stateSchema, fmt.Sprintf("loop-%d", revision+1), revision, value)
 		if err != nil {
 			return err
 		}
@@ -268,6 +318,9 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 		s.LoopPolicyHash = policy.Hash
 		s.LoopLimits = policy.Limits
 		s.LoopDeadlineMS = policy.newLoopDeadlineMS()
+		if o.DeadlineMS != 0 {
+			s.LoopDeadlineMS = min(s.LoopDeadlineMS, o.DeadlineMS)
+		}
 		if s.ToolRepeats == nil {
 			s.ToolRepeats = map[string]int{}
 		}
@@ -426,14 +479,14 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 			if completion, ok := port.(interface {
 				CompleteRuntimeRecoveryStep(context.Context, string, string, string) error
 			}); ok {
-				if err := completion.CompleteRuntimeRecoveryStep(ctx, "harness", o.Key, HarnessStateSchema); err != nil {
+				if err := completion.CompleteRuntimeRecoveryStep(ctx, namespace, o.Key, stateSchema); err != nil {
 					return HarnessResult{}, err
 				}
 			}
 			if s.Output["completion_status"] == "incomplete" {
-				return HarnessResult{Status: "incomplete", Output: s.Output}, nil
+				return extendedHarnessResult(s, "incomplete", extended), nil
 			}
-			return HarnessResult{Status: "completed", Output: s.Output}, nil
+			return extendedHarnessResult(s, "completed", extended), nil
 		case "model", "model_dispatch":
 			recovering := s.Phase == "model_dispatch"
 			if revision >= 62 {
@@ -473,6 +526,9 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 				s.PromptHash, s.ContextSourceHash = promptHash, sourceHash
 				current["messages"], current["idempotency_key"] = messages, functionStepKey(key, s.Round, "model")
 				current["prompt_template_hash"] = promptHash
+				if extended {
+					current["deadline_ms"] = s.LoopDeadlineMS
+				}
 				if len(s.SkillBindings) > 0 {
 					current["skill_bindings"] = s.SkillBindings
 				}
@@ -561,6 +617,13 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 				}
 				continue
 			}
+			if extended {
+				receiptCopy, copyError := publicClone(result)
+				if copyError != nil {
+					return HarnessResult{}, copyError
+				}
+				s.ModelReceipts = append(s.ModelReceipts, map[string]any{"idempotency_key": s.ModelRequest["idempotency_key"], "receipt": receiptCopy})
+			}
 			s.ModelRequest = nil
 			calls, _ := result["tool_calls"].([]any)
 			exhausted, err := harnessBudgetExhausted(result)
@@ -615,6 +678,19 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 				seen[id] = true
 				s.Pending = append(s.Pending, HarnessOperation{Name: tool, CallID: functionStepKey(key, s.Round, id), Payload: payload, ModelCallID: id})
 			}
+			if o.ActionValidator != nil {
+				for _, operation := range s.Pending {
+					candidate, _ := publicClone(map[string]any{"name": operation.Name, "call_id": operation.CallID, "payload": operation.Payload, "model_call_id": operation.ModelCallID})
+					view, _ := publicClone(map[string]any{"round": s.Round, "tool_count": s.ToolCount, "observations": s.Observations})
+					if !o.ActionValidator(candidate, view) {
+						s.Phase, s.Pending, s.Output = "done", nil, harnessLimitOutput(result, "action_rejected")
+						if err := saveTerminal(); err != nil {
+							return HarnessResult{}, err
+						}
+						return HarnessResult{}, harnessError("HARNESS_ACTION_REJECTED")
+					}
+				}
+			}
 			s.Messages = append(s.Messages, map[string]any{"role": "assistant", "content": result["text"], "tool_calls": calls})
 			s.Phase = "tool"
 			if err := save(); err != nil {
@@ -629,6 +705,16 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 				return HarnessResult{}, harnessError("HARNESS_STATE_REJECTED")
 			}
 			operation := s.Pending[0]
+			if !recovering && o.ActionValidator != nil {
+				candidate, copyError := publicClone(map[string]any{"name": operation.Name, "call_id": operation.CallID, "payload": operation.Payload, "model_call_id": operation.ModelCallID})
+				if copyError != nil {
+					return HarnessResult{}, copyError
+				}
+				view, _ := publicClone(map[string]any{"round": s.Round, "tool_count": s.ToolCount, "observations": s.Observations})
+				if !o.ActionValidator(candidate, view) {
+					return HarnessResult{}, harnessError("HARNESS_ACTION_REJECTED")
+				}
+			}
 			if s.Phase == "approval_required" && o.ConfirmationToken == "" {
 				return HarnessResult{Status: "approval_required", Pending: &operation}, nil
 			}
@@ -757,6 +843,13 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 			if err != nil {
 				return HarnessResult{}, err
 			}
+			if extended {
+				observation, copyError := publicClone(value)
+				if copyError != nil {
+					return HarnessResult{}, copyError
+				}
+				s.Observations = append(s.Observations, map[string]any{"operation": operation, "observation": observation})
+			}
 			s.Messages = append(s.Messages, map[string]any{"role": "tool", "tool_call_id": operation.ModelCallID, "content": string(body)})
 			s.ToolCount++
 			if s.RepeatCountedCallID == operation.CallID {
@@ -767,6 +860,24 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 			if len(s.Pending) == 0 {
 				s.Round++
 				s.Phase = "model"
+			}
+			if o.ProgressEvaluator != nil {
+				observation, _ := publicClone(value)
+				view, _ := publicClone(map[string]any{"round": s.Round, "tool_count": s.ToolCount, "observations": s.Observations})
+				outcome, progressError := o.ProgressEvaluator(observation, view)
+				if progressError != nil {
+					return HarnessResult{}, progressError
+				}
+				if outcome != nil {
+					if outcome["completion_status"] != "completed" && outcome["completion_status"] != "incomplete" {
+						return HarnessResult{}, harnessError("HARNESS_PROGRESS_REJECTED")
+					}
+					s.Output, err = publicClone(outcome)
+					if err != nil {
+						return HarnessResult{}, err
+					}
+					s.Phase, s.Pending = "done", nil
+				}
 			}
 			if policy.remaining(s.LoopDeadlineMS) <= 0 {
 				if policy.Limits.LimitBehavior == "error" {
@@ -787,4 +898,12 @@ func runHarness(ctx context.Context, port harnessPort, input map[string]any, o H
 			return HarnessResult{}, harnessError("HARNESS_STATE_REJECTED")
 		}
 	}
+}
+
+func extendedHarnessResult(state harnessState, status string, extended bool) HarnessResult {
+	result := HarnessResult{Status: status, Output: state.Output}
+	if extended {
+		result.Execution = map[string]any{"version": "harness-execution/v2", "extension_id": state.ExtensionID, "deadline_ms": state.LoopDeadlineMS, "decision_count": len(state.ModelReceipts), "tool_count": state.ToolCount, "model_receipts": state.ModelReceipts, "observations": state.Observations}
+	}
+	return result
 }

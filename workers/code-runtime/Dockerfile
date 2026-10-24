@@ -1,6 +1,6 @@
 ARG CODE_RUNTIME_DOCKER_CLI_IMAGE
 
-FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.10-bookworm AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src

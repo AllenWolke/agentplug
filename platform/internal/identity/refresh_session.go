@@ -16,6 +16,8 @@ const RefreshSessionLifetime = 7 * 24 * time.Hour
 
 var ErrRefreshSessionRejected = errors.New("refresh session rejected")
 
+var errRefreshExclusiveRequired = errors.New("refresh changes authentication scope and requires exclusive continuity")
+
 type RefreshSessionResult struct {
 	SessionID            string        `json:"session_id"`
 	AuthenticationMethod string        `json:"authentication_method"`
@@ -66,16 +68,24 @@ CREATE INDEX IF NOT EXISTS idx_refresh_oidc_key ON platform_identity_refresh_oid
 // Lock the current authentication facts before creating or rotating a family.
 // Refresh renews authentication; it never grants new business permissions.
 func loadRefreshIdentity(ctx context.Context, tx *sql.Tx, id string, scope EnrollmentScope, revision uint64) (LocalIdentity, error) {
+	return loadRefreshIdentityLocked(ctx, tx, id, scope, revision, true)
+}
+
+func loadRefreshIdentityLocked(ctx context.Context, tx *sql.Tx, id string, scope EnrollmentScope, revision uint64, exclusive bool) (LocalIdentity, error) {
 	var identity LocalIdentity
 	var encoded string
 	var credentialActive, principalActive bool
+	lock := " FOR SHARE"
+	if exclusive {
+		lock = " FOR UPDATE"
+	}
 	err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT c.principal_id,c.tenant_id,c.department_id,c.application_id,c.display_name,c.auth_revision,c.active,p.roles_json,p.active
 		FROM platform_identity_local_credential c
 		JOIN platform_identity_principal p ON p.principal_type='user' AND p.id=c.principal_id AND p.tenant_id=c.tenant_id
 		JOIN platform_identity_tenant t ON t.id=c.tenant_id AND t.status='active'
 		JOIN platform_identity_department d ON d.id=c.department_id AND d.tenant_id=c.tenant_id AND d.status='active'
 		JOIN platform_identity_application a ON a.id=c.application_id AND a.tenant_id=c.tenant_id AND a.department_id=c.department_id AND a.status='active'
-		WHERE c.principal_id=? AND c.tenant_id=? FOR UPDATE`), id, scope.TenantID).
+		WHERE c.principal_id=? AND c.tenant_id=?`+lock), id, scope.TenantID).
 		Scan(&identity.PrincipalID, &identity.TenantID, &identity.DepartmentID, &identity.ApplicationID, &identity.DisplayName, &identity.AuthRevision, &credentialActive, &encoded, &principalActive)
 	if errors.Is(err, sql.ErrNoRows) {
 		return identity, ErrRefreshSessionRejected
@@ -147,6 +157,18 @@ func (s *SQLStore) SwitchRefreshWorkspace(ctx context.Context, token, subject st
 }
 
 func (s *SQLStore) rotateRefreshWorkspace(ctx context.Context, token, subject string, expectedRevision uint64, target *EnrollmentScope) (RefreshSessionResult, error) {
+	// Ordinary rotation changes only this family's single-use token. It must
+	// not wait for unrelated protected business commits holding IAM shared.
+	// Replay revocation and workspace changes still need the exclusive fence.
+	// Never upgrade a held shared lock: roll back and reread all facts first.
+	result, err := s.rotateRefreshWorkspaceAttempt(ctx, token, subject, expectedRevision, target, target != nil)
+	if errors.Is(err, errRefreshExclusiveRequired) {
+		return s.rotateRefreshWorkspaceAttempt(ctx, token, subject, expectedRevision, target, true)
+	}
+	return result, err
+}
+
+func (s *SQLStore) rotateRefreshWorkspaceAttempt(ctx context.Context, token, subject string, expectedRevision uint64, target *EnrollmentScope, exclusive bool) (RefreshSessionResult, error) {
 	if s == nil || s.db == nil || !validRefreshToken(token) {
 		return RefreshSessionResult{}, ErrRefreshSessionRejected
 	}
@@ -170,14 +192,19 @@ func (s *SQLStore) rotateRefreshWorkspace(ctx context.Context, token, subject st
 		return RefreshSessionResult{}, err
 	}
 	defer tx.Rollback()
-	if err := lockPermissionContinuity(ctx, tx); err != nil {
+	if exclusive {
+		err = lockPermissionContinuity(ctx, tx)
+	} else {
+		err = s.AcquirePermissionReadContinuity(ctx, tx)
+	}
+	if err != nil {
 		return RefreshSessionResult{}, err
 	}
 	var identity LocalIdentity
 	if bindingKey == "" {
-		identity, err = loadRefreshIdentity(ctx, tx, id, scope, revision)
+		identity, err = loadRefreshIdentityLocked(ctx, tx, id, scope, revision, exclusive)
 	} else {
-		identity, err = loadOIDCRefreshIdentity(ctx, tx, bindingKey, revision)
+		identity, err = loadOIDCRefreshIdentityLocked(ctx, tx, bindingKey, revision, exclusive)
 	}
 	if err != nil {
 		return RefreshSessionResult{}, err
@@ -195,6 +222,9 @@ func (s *SQLStore) rotateRefreshWorkspace(ctx context.Context, token, subject st
 		return RefreshSessionResult{}, ErrRefreshSessionRejected
 	}
 	if used {
+		if !exclusive {
+			return RefreshSessionResult{}, errRefreshExclusiveRequired
+		}
 		if _, err := tx.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_identity_refresh_family SET revoked=TRUE WHERE id=?`), family); err != nil {
 			return RefreshSessionResult{}, err
 		}
@@ -217,6 +247,9 @@ func (s *SQLStore) rotateRefreshWorkspace(ctx context.Context, token, subject st
 				return RefreshSessionResult{}, err
 			}
 			// Lost membership removes workspace use, without destroying authentication.
+			if !exclusive {
+				return RefreshSessionResult{}, errRefreshExclusiveRequired
+			}
 			scope = EnrollmentScope{TenantID: identity.TenantID, DepartmentID: identity.DepartmentID, ApplicationID: identity.ApplicationID}
 		}
 	}
@@ -298,16 +331,24 @@ func revokeOIDCRefreshSessions(ctx context.Context, tx *sql.Tx, key string) erro
 }
 
 func loadOIDCRefreshIdentity(ctx context.Context, tx *sql.Tx, key string, revision uint64) (LocalIdentity, error) {
+	return loadOIDCRefreshIdentityLocked(ctx, tx, key, revision, true)
+}
+
+func loadOIDCRefreshIdentityLocked(ctx context.Context, tx *sql.Tx, key string, revision uint64, exclusive bool) (LocalIdentity, error) {
 	var identity LocalIdentity
 	var roles string
 	var active bool
 	var status string
+	lock := " FOR SHARE"
+	if exclusive {
+		lock = " FOR UPDATE"
+	}
 	err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT b.principal_id,b.tenant_id,b.department_id,b.application_id,b.revision,b.status,p.active,p.roles_json
 		FROM platform_identity_oidc_binding b JOIN platform_identity_principal p ON p.principal_type='user' AND p.id=b.principal_id AND p.tenant_id=b.tenant_id
 		JOIN platform_identity_tenant t ON t.id=b.tenant_id AND t.status='active'
 		JOIN platform_identity_department d ON d.id=b.department_id AND d.tenant_id=b.tenant_id AND d.status='active'
 		JOIN platform_identity_application a ON a.id=b.application_id AND a.department_id=b.department_id AND a.tenant_id=b.tenant_id AND a.status='active'
-		WHERE b.identity_key=? FOR UPDATE`), key).Scan(&identity.PrincipalID, &identity.TenantID, &identity.DepartmentID, &identity.ApplicationID, &identity.AuthRevision, &status, &active, &roles)
+		WHERE b.identity_key=?`+lock), key).Scan(&identity.PrincipalID, &identity.TenantID, &identity.DepartmentID, &identity.ApplicationID, &identity.AuthRevision, &status, &active, &roles)
 	if errors.Is(err, sql.ErrNoRows) {
 		return identity, ErrRefreshSessionRejected
 	}

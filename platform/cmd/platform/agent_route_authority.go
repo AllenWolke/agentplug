@@ -46,8 +46,8 @@ func (a agentRouteAuthority) Parent(ctx context.Context, tx *sql.Tx, scope share
 	if a.runs.CheckCapabilityLeaseTx(ctx, tx, scope, lease) != nil {
 		return denied(agentcoordination.RouteReasonParentLease)
 	}
-	snapshot, err := a.identity.PermissionSnapshot(ctx, identity.PrincipalType(scope.PrincipalType), scope.PrincipalID)
-	if err != nil || snapshot.Mode != "v2" {
+	policyFacts, err := a.identity.PrincipalPolicyFactsTx(ctx, tx, identity.PrincipalType(scope.PrincipalType), scope.PrincipalID)
+	if err != nil || policyFacts.Mode != "v2" {
 		return denied(agentcoordination.RouteReasonParentPermissionMode)
 	}
 	if a.resources.AuthorizeCapabilityResource(ctx, scope, capability.CapabilityResourceAccess{Action: "agent.delegate", ResourceType: "agent_installation", ResourceID: scope.InstallationID}) != nil {

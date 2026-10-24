@@ -201,6 +201,7 @@ func MetricsHandler() http.Handler {
 		output.WriteString("# HELP agent_model_provider_response_invalid_total Invalid model payloads after successful HTTP responses.\n")
 		output.WriteString("# TYPE agent_model_provider_response_invalid_total counter\n")
 		fmt.Fprintf(&output, "agent_model_provider_response_invalid_total %d\n", modelProviderResponseInvalid.Load())
+		writeContextCacheMetrics(&output)
 		output.WriteString("# HELP agent_model_provider_connect_retries_total Bounded retries before a model connection is acquired.\n")
 		output.WriteString("# TYPE agent_model_provider_connect_retries_total counter\n")
 		fmt.Fprintf(&output, "agent_model_provider_connect_retries_total %d\n", modelProviderConnectRetries.Load())

@@ -1,0 +1,50 @@
+{
+  "manifest_version": "agent-manifest/v1",
+  "agent_id": "example-java-tickets",
+  "version": "0.2.7",
+  "execution_protocols": [
+    "agent-execution/v2"
+  ],
+  "capabilities": [
+    "invoke",
+    "run",
+    "resume",
+    "cancel",
+    "events"
+  ],
+  "schemas": {
+    "input": "schema://example-java-tickets/input/v2",
+    "output": "schema://example-java-tickets/output/v2",
+    "event": "schema://agent-platform/event/v1",
+    "checkpoint": "schema://agent-platform/checkpoint/v1"
+  },
+  "runtime": {
+    "transport": "http",
+    "isolation": "container",
+    "health_path": "/health/ready",
+    "run_store": "memory-dev-only(L2/L3 forbidden)"
+  },
+  "metadata": {
+    "sdk": "sdk/java",
+    "business": "ticket-response-drafting; optional separately approved current-caller notification, read-only sandbox analysis, and fixed documents.answer support request",
+    "durability": "process-local-L1",
+    "public_capabilities": [
+      "prompt.resolve",
+      "tool.invoke:runtime.inspect",
+      "knowledge.search:java-tickets",
+      "model.generate",
+      "memory.read",
+      "memory.write",
+      "state.checkpoint",
+      "context.prepare",
+      "model.receipt",
+      "skill.load:example.tickets.guidance",
+      "tool.invoke:notify.self",
+      "tool.invoke:code.javascript"
+    ],
+    "harness": "harness-loop/v1; pinned evidence/Skill; inspect and optional notify_self/sandbox_javascript functions; notification and Code execution require independent approval; optional collaborate uses a fixed single-child documents.answer AgentGroup with current authority and durable gather recovery; child output is bounded untrusted support and is not fed into the ticket Harness; process-local execution transport remains L1; source not deployed or accepted",
+    "route_task_types": [
+      "tickets.draft"
+    ]
+  }
+}

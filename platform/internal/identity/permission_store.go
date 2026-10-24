@@ -29,22 +29,26 @@ type permissionReader interface {
 }
 
 type AuthorizationChangeCommand struct {
-	Preset              *PresetSelection     `json:"preset,omitempty"`
-	AgentUse            *AgentUseSelection   `json:"agent_use,omitempty"`
-	SubjectType         PrincipalType        `json:"subject_type"`
-	SubjectID           string               `json:"subject_id"`
-	ExpectedRevision    uint64               `json:"expected_revision"`
-	IdempotencyKey      string               `json:"idempotency_key"`
-	Reason              string               `json:"reason"`
-	Bindings            []RoleBinding        `json:"role_bindings,omitempty"`
-	Grants              []Grant              `json:"resource_grants,omitempty"`
-	Memberships         []MembershipMutation `json:"memberships,omitempty"`
-	Assignments         []TaskAssignment     `json:"task_assignments,omitempty"`
-	RevokeAssignmentIDs []string             `json:"revoke_assignment_ids,omitempty"`
-	RevokeBindingIDs    []string             `json:"revoke_binding_ids,omitempty"`
-	RevokeGrantIDs      []string             `json:"revoke_grant_ids,omitempty"`
-	PlanDigest          string               `json:"plan_digest,omitempty"`
-	PlanExpiresAt       time.Time            `json:"plan_expires_at,omitempty"`
+	Purpose             string                    `json:"purpose,omitempty"`
+	DepartmentRemoval   *ManagementScope          `json:"department_removal,omitempty"`
+	RevokePackageUse    bool                      `json:"revoke_package_use,omitempty"`
+	AgentSelection      *DepartmentAgentSelection `json:"agent_selection,omitempty"`
+	Preset              *PresetSelection          `json:"preset,omitempty"`
+	AgentUse            *AgentUseSelection        `json:"agent_use,omitempty"`
+	SubjectType         PrincipalType             `json:"subject_type"`
+	SubjectID           string                    `json:"subject_id"`
+	ExpectedRevision    uint64                    `json:"expected_revision"`
+	IdempotencyKey      string                    `json:"idempotency_key"`
+	Reason              string                    `json:"reason"`
+	Bindings            []RoleBinding             `json:"role_bindings,omitempty"`
+	Grants              []Grant                   `json:"resource_grants,omitempty"`
+	Memberships         []MembershipMutation      `json:"memberships,omitempty"`
+	Assignments         []TaskAssignment          `json:"task_assignments,omitempty"`
+	RevokeAssignmentIDs []string                  `json:"revoke_assignment_ids,omitempty"`
+	RevokeBindingIDs    []string                  `json:"revoke_binding_ids,omitempty"`
+	RevokeGrantIDs      []string                  `json:"revoke_grant_ids,omitempty"`
+	PlanDigest          string                    `json:"plan_digest,omitempty"`
+	PlanExpiresAt       time.Time                 `json:"plan_expires_at,omitempty"`
 }
 
 type AuthorizationChangePlan struct {
@@ -88,6 +92,16 @@ func (s *SQLStore) PermissionSnapshot(ctx context.Context, kind PrincipalType, i
 	if s == nil || s.db == nil {
 		return PermissionSnapshot{}, errors.New("identity database is required")
 	}
+	ctx = s.withPermissionDecode(ctx)
+	if tx, joined, err := sqlutil.ContinuityTransaction(ctx, s.db); joined {
+		if err != nil {
+			return PermissionSnapshot{}, err
+		}
+		if err := s.AcquirePermissionReadContinuity(ctx, tx); err != nil {
+			return PermissionSnapshot{}, err
+		}
+		return loadPermissionSnapshot(ctx, tx, kind, id)
+	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return PermissionSnapshot{}, err
@@ -104,119 +118,12 @@ func (s *SQLStore) PermissionSnapshot(ctx context.Context, kind PrincipalType, i
 }
 
 func loadPermissionSnapshot(ctx context.Context, reader permissionReader, kind PrincipalType, id string) (PermissionSnapshot, error) {
-	s := PermissionSnapshot{Mode: "legacy", Memberships: []Membership{}, Bindings: []RoleBinding{}, Roles: []RoleDefinition{}, Grants: []Grant{}, Delegations: []Delegation{}}
-	var roles, groups string
-	err := reader.QueryRowContext(ctx, sqlutil.Bind(`SELECT id,principal_type,tenant_id,roles_json,groups_json,active,revision FROM platform_identity_principal WHERE principal_type=? AND id=?`), kind, id).Scan(&s.Principal.ID, &s.Principal.Type, &s.Principal.TenantID, &roles, &groups, &s.Principal.IsActive, &s.Principal.Revision)
-	if errors.Is(err, sql.ErrNoRows) {
-		return s, ErrPrincipalNotFound
-	}
+	s, err := loadPermissionSnapshotFacts(ctx, reader, kind, id, true)
 	if err != nil {
 		return s, err
 	}
-	if json.Unmarshal([]byte(roles), &s.Principal.Roles) != nil || json.Unmarshal([]byte(groups), &s.Principal.Groups) != nil {
-		return s, ErrInvalidResource
-	}
-	err = reader.QueryRowContext(ctx, sqlutil.Bind(`SELECT policy_mode FROM platform_identity_policy_migration WHERE principal_type=? AND subject_id=?`), kind, id).Scan(&s.Mode)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := loadReferencedAgentPackages(ctx, reader, &s); err != nil {
 		return s, err
-	}
-	if s.Mode != "legacy" && s.Mode != "shadow" && s.Mode != "v2" {
-		return s, ErrInvalidResource
-	}
-	for _, load := range []struct {
-		query  string
-		args   []any
-		decode func([]byte) error
-	}{
-		{`SELECT payload FROM platform_identity_role_definition ORDER BY role_code,role_version`, nil, func(raw []byte) error {
-			var v RoleDefinition
-			if err := json.Unmarshal(raw, &v); err != nil {
-				return err
-			}
-			s.Roles = append(s.Roles, v)
-			return nil
-		}},
-		{`SELECT payload FROM platform_identity_membership WHERE subject_id=? ORDER BY id`, []any{id}, func(raw []byte) error {
-			var v Membership
-			if err := json.Unmarshal(raw, &v); err != nil {
-				return err
-			}
-			s.Memberships = append(s.Memberships, v)
-			return nil
-		}},
-		{`SELECT payload FROM platform_identity_role_binding WHERE subject_id=? ORDER BY id`, []any{id}, func(raw []byte) error {
-			var v RoleBinding
-			if err := json.Unmarshal(raw, &v); err != nil {
-				return err
-			}
-			s.Bindings = append(s.Bindings, v)
-			return nil
-		}},
-		{`SELECT payload FROM platform_identity_delegation WHERE subject_id=? ORDER BY id`, []any{id}, func(raw []byte) error {
-			var v Delegation
-			if err := json.Unmarshal(raw, &v); err != nil {
-				return err
-			}
-			s.Delegations = append(s.Delegations, v)
-			return nil
-		}},
-	} {
-		rows, err := reader.QueryContext(ctx, sqlutil.Bind(load.query), load.args...)
-		if err != nil {
-			return s, err
-		}
-		for rows.Next() {
-			var raw []byte
-			if err := rows.Scan(&raw); err != nil {
-				rows.Close()
-				return s, err
-			}
-			if err := load.decode(raw); err != nil {
-				rows.Close()
-				return s, err
-			}
-		}
-		err = rows.Err()
-		closeErr := rows.Close()
-		if err != nil {
-			return s, err
-		}
-		if closeErr != nil {
-			return s, closeErr
-		}
-	}
-	rows, err := reader.QueryContext(ctx, sqlutil.Bind(`SELECT id,tenant_id,department_id,application_id,agent_instance_id,subject_type,subject_id,action,effect,status,revision,permission_json FROM platform_identity_grant WHERE subject_type=? AND subject_id=? ORDER BY id`), kind, id)
-	if err != nil {
-		return s, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var g Grant
-		var raw []byte
-		if err := rows.Scan(&g.ID, &g.TenantID, &g.DepartmentID, &g.ApplicationID, &g.AgentInstanceID, &g.SubjectType, &g.SubjectID, &g.Action, &g.Effect, &g.Status, &g.Revision, &raw); err != nil {
-			return s, err
-		}
-		if raw != nil {
-			var metadata Grant
-			if err := json.Unmarshal(raw, &metadata); err != nil {
-				return s, err
-			}
-			g.Validity, g.ResourceType, g.ResourceID, g.DataScope, g.SourceID, g.PresetCode, g.PresetVersion, g.DelegationID = metadata.Validity, metadata.ResourceType, metadata.ResourceID, metadata.DataScope, metadata.SourceID, metadata.PresetCode, metadata.PresetVersion, metadata.DelegationID
-			g.DepartmentAgentActionVersion = metadata.DepartmentAgentActionVersion
-		}
-		s.Grants = append(s.Grants, g)
-	}
-	if err := rows.Err(); err != nil {
-		return s, err
-	}
-	if err := rows.Close(); err != nil {
-		return s, err
-	}
-	if kind == PrincipalUser {
-		s.Assignments, err = loadTaskAssignments(ctx, reader, id)
-	}
-	if err == nil {
-		s.DepartmentAgentPolicies, err = loadDepartmentAgentPolicies(ctx, reader, s)
 	}
 	return s, err
 }
@@ -255,6 +162,13 @@ func (s *SQLStore) planAuthorizationChangeTarget(ctx context.Context, tx *sql.Tx
 	command = copied
 	originalCommand := command
 	command.Assignments = append([]TaskAssignment(nil), command.Assignments...)
+	if command.AgentSelection != nil {
+		bindings, grants, err := expandDepartmentAgentSelection(command)
+		if err != nil {
+			return AuthorizationChangePlan{}, err
+		}
+		command.Bindings, command.Grants = bindings, grants
+	}
 	if command.Preset != nil {
 		if len(command.Bindings) != 0 || len(command.Grants) != 0 {
 			return AuthorizationChangePlan{}, ErrInvalidResource
@@ -287,7 +201,12 @@ func (s *SQLStore) planAuthorizationChangeTarget(ctx context.Context, tx *sql.Tx
 		return AuthorizationChangePlan{}, ErrInvalidResource
 	}
 	count := len(command.Bindings) + len(command.Grants) + len(command.RevokeBindingIDs) + len(command.RevokeGrantIDs) + len(command.Memberships) + len(command.Assignments) + len(command.RevokeAssignmentIDs)
-	if count == 0 || count > 128 {
+	if count == 0 || count > func() int {
+		if command.Purpose == departmentAgentAccessPurpose && command.RevokePackageUse {
+			return maximumDepartmentAgentFacts
+		}
+		return 128
+	}() {
 		return AuthorizationChangePlan{}, ErrInvalidResource
 	}
 	owner, err := loadPermissionSnapshot(ctx, tx, PrincipalUser, actor.PrincipalID)
@@ -310,7 +229,39 @@ func (s *SQLStore) planAuthorizationChangeTarget(ctx context.Context, tx *sql.Tx
 	if target.Mode != "v2" || !target.Principal.IsActive || target.Principal.Revision != command.ExpectedRevision {
 		return AuthorizationChangePlan{}, ErrIdentityConflict
 	}
+	if err := authorizeSelfAuthorizationChange(actor, command, target); err != nil {
+		return AuthorizationChangePlan{}, err
+	}
 	now := s.clock().UTC()
+	if err := validateDepartmentRemoval(owner, target, actor, originalCommand, now); err != nil {
+		return AuthorizationChangePlan{}, err
+	}
+	departmentAccess, err := validateDepartmentAgentChange(owner, target, actor, originalCommand, now)
+	if err != nil {
+		return AuthorizationChangePlan{}, err
+	}
+	if departmentAccess {
+		if err := validateExpandedDepartmentAgentPreset(originalCommand, command); err != nil {
+			return AuthorizationChangePlan{}, err
+		}
+		if originalCommand.AgentSelection != nil && originalCommand.AgentSelection.IncludeDependencies {
+			if err := s.expandApprovedDepartmentAgentUse(ctx, tx, actor, originalCommand, &command, now); err != nil {
+				return AuthorizationChangePlan{}, err
+			}
+		}
+		for _, selection := range departmentAgentPresetSelections(originalCommand) {
+			for _, id := range selection.ResourceIDs {
+				reason, err := s.explanationRunBlockReason(ctx, target.Principal, PermissionQuery{Action: "run", Scope: selection.Scope, ResourceID: id})
+				if err != nil {
+					return AuthorizationChangePlan{}, err
+				}
+				if reason != "" {
+					return AuthorizationChangePlan{}, ErrInvalidResource
+				}
+			}
+		}
+	}
+
 	if !deadline.After(now) || deadline.After(now.Add(5*time.Minute)) {
 		return AuthorizationChangePlan{}, ErrPermissionPlanStale
 	}
@@ -392,6 +343,9 @@ func (s *SQLStore) planAuthorizationChangeTarget(ctx context.Context, tx *sql.Tx
 		return nil
 	}
 	authorize := func(scope ManagementScope, role, action, resource string, data DataScope, validity Validity) (string, error) {
+		if departmentAccess {
+			return "", nil
+		}
 		decision, err := EvaluatePermission(owner, PermissionQuery{Action: "authorization.change", Scope: scope, Now: now})
 		if err != nil {
 			return "", err
@@ -446,7 +400,7 @@ func (s *SQLStore) planAuthorizationChangeTarget(ctx context.Context, tx *sql.Tx
 	}
 	for i := range command.Bindings {
 		b := &command.Bindings[i]
-		if command.Preset == nil && (b.PresetCode != "" || b.PresetVersion != 0) {
+		if command.Preset == nil && command.AgentSelection == nil && (b.PresetCode != "" || b.PresetVersion != 0) {
 			return AuthorizationChangePlan{}, ErrInvalidResource
 		}
 		if b.ID == "" || seen[b.ID] || b.SubjectID != command.SubjectID || command.SubjectType != PrincipalUser || b.RoleVersion == 0 || b.SourceID == "" || protectedAdministratorBinding(*b) || b.Status != "active" || b.Revision != 1 || b.Validity.Validate() != nil {
@@ -467,7 +421,7 @@ func (s *SQLStore) planAuthorizationChangeTarget(ctx context.Context, tx *sql.Tx
 		}
 		// Old delegations enumerate role codes, not versions. They must not
 		// silently acquire the new department administration capability.
-		if b.RoleCode == "department_admin" && b.RoleVersion == 2 {
+		if b.RoleCode == "department_admin" && (b.RoleVersion == 2 || b.RoleVersion == 3) {
 			appointment, err := EvaluatePermission(owner, PermissionQuery{Action: "administrator.appoint", Scope: ManagementScope{Type: "global"}, Now: now})
 			if err != nil {
 				return AuthorizationChangePlan{}, err
@@ -484,7 +438,10 @@ func (s *SQLStore) planAuthorizationChangeTarget(ctx context.Context, tx *sql.Tx
 	}
 	for i := range command.Grants {
 		g := &command.Grants[i]
-		if command.Preset == nil && (g.PresetCode != "" || g.PresetVersion != 0) {
+		if hasAgentPackageStamp(*g) && !(departmentAccess && originalCommand.AgentSelection != nil && originalCommand.AgentSelection.IncludeDependencies) {
+			return AuthorizationChangePlan{}, ErrInvalidResource
+		}
+		if command.Preset == nil && command.AgentSelection == nil && (g.PresetCode != "" || g.PresetVersion != 0) {
 			return AuthorizationChangePlan{}, ErrInvalidResource
 		}
 		if g.ID == "" || seen[g.ID] || g.SubjectID != command.SubjectID || g.SubjectType != command.SubjectType || g.SourceID == "" || g.DataScope.Validate() != nil || g.Validity.Validate() != nil || g.Revision != 1 || g.Status != "active" || g.Effect != "allow" && g.Effect != "deny" {
@@ -840,6 +797,7 @@ func (s *SQLStore) SetPermissionResourceResolver(resolver AgentInstallationResol
 // ResolvePermission verifies the organization facts before using the pure
 // evaluator. Other modules consume this port rather than querying IAM tables.
 func (s *SQLStore) ResolvePermission(ctx context.Context, kind PrincipalType, id string, query PermissionQuery) (PermissionDecision, error) {
+	ctx = s.withPermissionDecode(ctx)
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return PermissionDecision{}, err
@@ -853,9 +811,21 @@ func (s *SQLStore) ResolvePermission(ctx context.Context, kind PrincipalType, id
 		return PermissionDecision{}, err
 	}
 	query.Now = s.clock().UTC()
+	if err := s.bindAgentPackagePublishedVersion(ctx, snapshot, &query); err != nil {
+		return PermissionDecision{}, err
+	}
 	decision, err := EvaluatePermission(snapshot, query)
 	if err != nil {
 		return decision, err
+	}
+	if query.Action == "department.agent_access.manage" {
+		decision.Allowed, err = canManageDepartmentAgentAccess(snapshot, query.Scope, query.Now)
+		if err != nil {
+			return PermissionDecision{}, err
+		}
+		if decision.Allowed {
+			decision.Reason = "SCOPED_AGENT_ADMIN"
+		}
 	}
 	return decision, tx.Commit()
 }

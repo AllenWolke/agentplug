@@ -1,0 +1,15 @@
+{
+  "schema": "agentplug-workflow-recovery-conformance/v1",
+  "step": {"id": "answer", "payload": {"query": "same"}, "depends_on": [], "required_slots": ["answer"]},
+  "cases": [
+    {"name": "normal", "sends": 1, "recoveries": 0, "status": "completed"},
+    {"name": "duplicate", "sends": 1, "recoveries": 0, "status": "completed"},
+    {"name": "parameter_conflict", "sends": 1, "recoveries": 0, "error": "STEP_STATE_REJECTED"},
+    {"name": "revoked", "sends": 0, "recoveries": 0, "error": "CAPABILITY_DENIED"},
+    {"name": "timeout", "sends": 0, "recoveries": 0, "status": "incomplete", "finish_reason": "elapsed_limit"},
+    {"name": "budget_exhausted", "sends": 0, "recoveries": 0, "error": "STEP_CALL_LIMIT_EXCEEDED"},
+    {"name": "lost_tool_reply", "sends": 1, "recoveries": 1, "status": "completed"},
+    {"name": "readonly_pending", "sends": 1, "recoveries": 0, "status": "incomplete"},
+    {"name": "cancelled_before_dispatch", "sends": 0, "recoveries": 0, "error": "CANCELLED"}
+  ]
+}

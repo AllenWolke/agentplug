@@ -42,6 +42,15 @@ type evaluationAgentInvoker struct {
 }
 
 func (a evaluationAgentInvoker) InvokeEvaluationCase(ctx context.Context, request evaluationproduct.InvocationRequest) (result evaluationproduct.InvocationResult, returnErr error) {
+	return a.invokeEvaluationCase(ctx, request, false)
+}
+
+func (a evaluationAgentInvoker) AuthorizeEvaluationCaseReuse(ctx context.Context, request evaluationproduct.InvocationRequest) error {
+	_, err := a.invokeEvaluationCase(ctx, request, true)
+	return err
+}
+
+func (a evaluationAgentInvoker) invokeEvaluationCase(ctx context.Context, request evaluationproduct.InvocationRequest, authorizationOnly bool) (result evaluationproduct.InvocationResult, returnErr error) {
 	stage := "validate_request"
 	defer func() {
 		if returnErr != nil {
@@ -139,7 +148,7 @@ func (a evaluationAgentInvoker) InvokeEvaluationCase(ctx context.Context, reques
 	if _, forged := agentInput["policy_snapshot"]; forged {
 		return evaluationproduct.InvocationResult{}, errors.New("evaluation case cannot supply its own policy snapshot")
 	}
-	if agentInput["version"] == "agent-eval-judge-input/v1" {
+	if agenteval.IsJudgeInputVersion(agentInput["version"]) {
 		var input agenteval.JudgeInput
 		if json.Unmarshal(request.Input, &input) != nil {
 			return result, evaluationproduct.ErrInvalid
@@ -151,6 +160,11 @@ func (a evaluationAgentInvoker) InvokeEvaluationCase(ctx context.Context, reques
 		if e = a.sources.AuthorizeSources(ctx, evaluationproduct.Actor{Scope: request.Scope, PrincipalType: "user", PrincipalID: principal.ID}, []agenteval.SourceReference{ref}); e != nil {
 			return result, e
 		}
+	}
+	if authorizationOnly {
+		// Same live principal, installation, policy and source checks as a
+		// normal evaluation invocation; no signing, dispatch or model call.
+		return evaluationproduct.InvocationResult{}, nil
 	}
 	agentInput["policy_snapshot"] = policyInput
 	envelope := contract.ExecuteRequest{
@@ -191,7 +205,8 @@ func (a evaluationAgentInvoker) InvokeEvaluationCase(ctx context.Context, reques
 		mode = "synthetic"
 	}
 	return evaluationproduct.InvocationResult{
-		Output: output, ProviderMode: mode,
+		ExecutionRunID: targetScope.RunID,
+		Output:         output, ProviderMode: mode,
 		// Grounding is established by the published independent metrics, never
 		// by a remote Agent's self-reported "grounding" output fields.
 		CitationGrounding: "unknown",

@@ -120,8 +120,7 @@ func (a evaluationExecutionAuthority) VerifyBudgetTx(ctx context.Context, tx *sq
 		request.Scope.DelegationDepth != 0 {
 		return deny()
 	}
-	fingerprint, err := contract.CanonicalExecuteBodyHash(request)
-	if err != nil || fingerprint != runFacts.RequestFingerprint {
+	if !evaluationAccountingFingerprintMatches(request, runFacts.RequestFingerprint, admission, runFacts.Status) {
 		return deny()
 	}
 	if !evaluationCreatorMatches(parent.resource, scope) || parent.resource.ID != scope.ParentRunID || parent.lease.IdempotencyKey == "" {

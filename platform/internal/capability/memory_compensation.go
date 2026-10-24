@@ -33,7 +33,7 @@ CREATE TRIGGER platform_memory_effect_stamp_trigger BEFORE UPDATE ON platform_me
 }
 
 type memoryCancellation struct {
-	ledger compensation.LocalEffectRecorder
+	ledger compensation.LocalEffects
 	root   func(context.Context, *sql.Tx, sharedkernel.Scope) (sharedkernel.Scope, error)
 	bind   func(context.Context, *sql.Tx, sharedkernel.Scope) context.Context
 }
@@ -63,7 +63,7 @@ type memoryBeforeImage struct {
 	Stamp     string          `json:"stamp,omitempty"`
 }
 
-func (s *SQLMemoryStore) SetCancellationCompensation(ledger compensation.LocalEffectRecorder, root func(context.Context, *sql.Tx, sharedkernel.Scope) (sharedkernel.Scope, error)) error {
+func (s *SQLMemoryStore) SetCancellationCompensation(ledger compensation.LocalEffects, root func(context.Context, *sql.Tx, sharedkernel.Scope) (sharedkernel.Scope, error)) error {
 	if s == nil || ledger == nil || root == nil || s.cancellation != nil {
 		return compensation.ErrInvalid
 	}
@@ -75,7 +75,7 @@ func (s *SQLMemoryStore) MemoryCompensationRegistration() (compensation.Registra
 	if s == nil || s.cancellation == nil {
 		return compensation.Registration{}, compensation.ErrUnavailable
 	}
-	port, err := s.cancellation.ledger.Port(memoryCompensationProvider, memoryCompensationVersion, s)
+	port, err := s.cancellation.ledger.BindOwner(memoryCompensationProvider, memoryCompensationVersion, s)
 	return compensation.Registration{Provider: memoryCompensationProvider, Version: memoryCompensationVersion, Timeout: 3 * time.Second, Port: port}, err
 }
 

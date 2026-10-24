@@ -54,16 +54,26 @@ services:
       PLATFORM_RUN_EXECUTOR: ${PLATFORM_RUN_EXECUTOR:-platform}
       PLATFORM_RUN_WORKERS: ${PLATFORM_RUN_WORKERS:-4}
       PLATFORM_RUN_TREE_BUDGET_ENABLED: ${PLATFORM_RUN_TREE_BUDGET_ENABLED:-true}
+      PLATFORM_CANCELLATION_COMPENSATION_ENABLED: ${PLATFORM_CANCELLATION_COMPENSATION_ENABLED:-false}
+      PLATFORM_AUTOMATIC_RECOVERY_HOLD_FILE: ${PLATFORM_AUTOMATIC_RECOVERY_HOLD_FILE:-}
+      PLATFORM_AUTOMATIC_RECOVERY_HOLD_SHA256: ${PLATFORM_AUTOMATIC_RECOVERY_HOLD_SHA256:-}
       PLATFORM_LEGACY_MODEL_ACCOUNTING_RESERVATIONS: ${PLATFORM_LEGACY_MODEL_ACCOUNTING_RESERVATIONS:-}
       PLATFORM_CHILD_RUN_WORKERS: ${PLATFORM_CHILD_RUN_WORKERS:-4}
       # Provider endpoint references must resolve through this operator-owned
       # allowlist. Credentials are mounted read-only outside the image/build context.
       # Provider EndpointRef 只能通过运维维护的映射解析；密钥目录只读挂载且不进入镜像。
       PLATFORM_MODEL_ENDPOINTS_JSON: ${PLATFORM_MODEL_ENDPOINTS_JSON:-}
+      PLATFORM_MODEL_DNS_OVER_HTTPS_HOSTS_JSON: ${PLATFORM_MODEL_DNS_OVER_HTTPS_HOSTS_JSON:-}
       PLATFORM_MODEL_SECRET_ROOT: /run/secrets/model-providers
       # Operator-owned MCP bindings; disabled when no file is selected.
       PLATFORM_MCP_BINDINGS_FILE: ${PLATFORM_MCP_BINDINGS_FILE:-}
       PLATFORM_CAPABILITY_URL: http://platform-app:8081
+      # Optional independent external knowledge service. All empty keeps the
+      # existing PostgreSQL knowledge provider; no interview-project defaults.
+      RAG_BASE_URL: ${PLATFORM_EXTERNAL_KNOWLEDGE_URL:-}
+      RAG_API_KEY: ${PLATFORM_EXTERNAL_KNOWLEDGE_API_KEY:-}
+      RAG_API_KEY_FILE: ${PLATFORM_EXTERNAL_KNOWLEDGE_API_KEY_FILE:-}
+      RAG_KB_IDS: ${PLATFORM_EXTERNAL_KNOWLEDGE_BASE_IDS:-}
       # Platform-owned PostgreSQL knowledge connection; vector projection uses pgvector.
       KNOWLEDGE_DATABASE_DSN: ${KNOWLEDGE_DATABASE_DSN:-}
       PLATFORM_INDEX_WORKLOAD_SECRET_ROOT: /run/secrets/agent-workloads
@@ -78,6 +88,10 @@ services:
       - internal_token
       - internal_signing_secret
     volumes:
+      - type: bind
+        source: ${PLATFORM_RUNTIME_CONTROL_DIR:-./.local-secrets/runtime-control}
+        target: /run/secrets/runtime-control
+        read_only: true
       - type: bind
         source: ${PLATFORM_MCP_BINDINGS_DIR:-./deploy/mcp}
         target: /etc/platform/mcp

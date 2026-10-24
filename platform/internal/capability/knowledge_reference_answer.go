@@ -74,8 +74,13 @@ func answerKnowledgeReferences(ctx context.Context, query knowledgeQuery, result
 		} `json:"billing"`
 	}
 	raw, err := json.Marshal(response)
-	if err != nil || json.Unmarshal(raw, &receipts) != nil || receipts.Version != query.Policy.Model.ModelVersionID || receipts.Invocation == "" || receipts.Usage.Input == nil || receipts.Usage.Output == nil || *receipts.Usage.Input < 0 || *receipts.Usage.Output < 0 || receipts.Billing.Cost == nil || *receipts.Billing.Cost < 0 || receipts.Billing.Price == "" || receipts.Billing.Currency == "" {
+	if err != nil || json.Unmarshal(raw, &receipts) != nil || !KnowledgeModelVersionAllowed(query.Policy, receipts.Version, false, query.ModelReceiptCheck != nil) || receipts.Invocation == "" || receipts.Usage.Input == nil || receipts.Usage.Output == nil || *receipts.Usage.Input < 0 || *receipts.Usage.Output < 0 || receipts.Billing.Cost == nil || *receipts.Billing.Cost < 0 || receipts.Billing.Price == "" || receipts.Billing.Currency == "" {
 		return nil, invalid
+	}
+	if query.ModelReceiptCheck != nil {
+		if err := query.ModelReceiptCheck(ctx, "generate", receipts.Version); err != nil {
+			return nil, err
+		}
 	}
 	if err := query.ModelCheck(ctx, "generate"); err != nil {
 		return nil, err

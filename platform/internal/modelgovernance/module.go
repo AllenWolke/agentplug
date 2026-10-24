@@ -266,6 +266,10 @@ func (m *Module) model(w http.ResponseWriter, r *http.Request) {
 		m.error(w, http.StatusNotFound, "NOT_FOUND", "resource not found")
 		return
 	}
+	if len(parts) == 4 && parts[1] == "versions" && parts[3] == "routing-metadata" {
+		m.routingMetadataReceipt(w, r, parts[0], parts[2])
+		return
+	}
 	if len(parts) == 2 && parts[1] == "versions" {
 		switch r.Method {
 		case http.MethodGet:

@@ -19,9 +19,13 @@ type RecoveryCheckpointReference struct {
 
 const MaxRecoveryCheckpoints = 128
 
+// Absolute wire/storage bound. State admission still applies the pinned
+// MemoryPolicy's capacity (64 for legacy policies).
+const MaxCheckpointRevisions uint64 = 4096
+
 func (r RecoveryCheckpointReference) Validate(stoppedRevision uint64) error {
 	if !handoffDigest.MatchString(r.StateKey) || !handoffDigest.MatchString(r.ContentHash) ||
-		r.Revision == 0 || r.Revision > 64 || r.ExecutionRevision == 0 || r.ExecutionRevision > stoppedRevision ||
+		r.Revision == 0 || r.Revision > MaxCheckpointRevisions || r.ExecutionRevision == 0 || r.ExecutionRevision > stoppedRevision ||
 		len(r.SchemaID) <= len("schema://") || len(r.SchemaID) > 256 || !strings.HasPrefix(r.SchemaID, "schema://") ||
 		strings.ContainsAny(r.SchemaID, "\x00\r\n\t* ") || r.ExpiresAt.IsZero() {
 		return fmt.Errorf("%w: recovery checkpoint reference", ErrSchemaValidation)

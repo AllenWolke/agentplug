@@ -30,8 +30,10 @@ type Authority interface {
 }
 
 type SQLStore struct {
-	db        *sql.DB
-	authority Authority
+	db                      *sql.DB
+	authority               Authority
+	recoveryHolds           sharedkernel.RecoveryHolds
+	recoveryHoldsConfigured bool
 }
 
 func NewSQLStore(db *sql.DB, authority Authority) (*SQLStore, error) {
@@ -381,6 +383,9 @@ func (s *SQLStore) lockJob(ctx context.Context, tx *sql.Tx, scope sharedkernel.S
 }
 
 func (s *SQLStore) Claim(ctx context.Context, scope sharedkernel.Scope, owner string, ttl time.Duration) (Lease, bool, error) {
+	if s.recoveryHolds.Contains(scope.RunID) {
+		return Lease{}, false, sharedkernel.ErrAutomaticRecoveryHeld
+	}
 	if ctx == nil || scope.ValidateTrusted() != nil || !token(owner, 64) || ttl < time.Second || ttl > 2*time.Minute {
 		return Lease{}, false, ErrInvalid
 	}
@@ -614,6 +619,17 @@ func (s *SQLStore) FinalizeTx(ctx context.Context, tx *sql.Tx, scope sharedkerne
 	if phase != "compensating" || proof == nil {
 		return ErrPending
 	}
+	// Guard and job locks above remain the finalization fence. A pending step
+	// cannot finalize the root: avoid locking/decoding every historical receipt
+	// again after each inverse. Once none remain, the complete validation below
+	// still checks all bindings, receipts and the original stop proof atomically.
+	var pending bool
+	if err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT EXISTS(SELECT 1 FROM platform_compensation_step x JOIN platform_cancellation_effect e ON e.step_id=x.step_id WHERE e.root_run_id=? AND x.phase NOT IN ('compensated','no_effect'))`), scope.RunID).Scan(&pending); err != nil {
+		return err
+	}
+	if pending {
+		return ErrPending
+	}
 	rows, err := tx.QueryContext(ctx, sqlutil.Bind(`SELECT x.step_id,x.run_id,x.spec_json,x.spec_digest,x.phase,x.receipt_json,e.spec_digest FROM platform_compensation_step x JOIN platform_cancellation_effect e ON e.step_id=x.step_id WHERE e.root_run_id=? ORDER BY x.ordinal FOR UPDATE OF x`), scope.RunID)
 	if err != nil {
 		return err
@@ -656,6 +672,9 @@ func (s *SQLStore) FinalizeTx(ctx context.Context, tx *sql.Tx, scope sharedkerne
 // TryFinalize owns only the final local transaction. It never executes an
 // inverse operation; confirmed business receipts survive a failed commit.
 func (s *SQLStore) TryFinalize(ctx context.Context, scope sharedkernel.Scope) error {
+	if s.recoveryHolds.Contains(scope.RunID) {
+		return sharedkernel.ErrAutomaticRecoveryHeld
+	}
 	if ctx == nil || scope.ValidateTrusted() != nil {
 		return ErrInvalid
 	}
@@ -752,9 +771,10 @@ func (s *SQLStore) ListPending(ctx context.Context, limit int) ([]sharedkernel.S
 	}
 	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`WITH picked AS (
 SELECT root_run_id FROM platform_cancellation_operation WHERE phase='compensating'
+AND root_run_id NOT IN (SELECT jsonb_array_elements_text(?::jsonb))
 ORDER BY updated_at,root_run_id LIMIT ? FOR UPDATE SKIP LOCKED)
 UPDATE platform_cancellation_operation j SET updated_at=clock_timestamp() FROM picked p
-WHERE j.root_run_id=p.root_run_id AND j.phase='compensating' RETURNING j.scope_json,j.scope_digest`), limit)
+WHERE j.root_run_id=p.root_run_id AND j.phase='compensating' RETURNING j.scope_json,j.scope_digest`), s.recoveryHolds.RunIDsJSON(), limit)
 	if err != nil {
 		return nil, err
 	}

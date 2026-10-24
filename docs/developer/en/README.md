@@ -4,6 +4,8 @@ For a complete first delivery, follow the [empty-platform to ordinary-user walkt
 
 [Project](../../../README_EN.md) · [简体中文](../zh/README.md) · [日本語](../ja/README.md) · [Deutsch](../de/README.md)
 
+Start with the [shared capabilities, SDK 2.1 and example agent release notes](../../releases/public-capabilities-2.1.en.md) for new APIs, example changes, configuration and historical compatibility.
+
 Understand the platform/agent boundary, run a business project, then deliver it to actual users. Follow the stages in order; optional services can wait.
 
 | Stage | Guide | Completion criterion |

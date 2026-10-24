@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/lexagent/platform/internal/sqlutil"
 )
 
 func TestPostgresSourceSelectedCurrentSnapshot(t *testing.T) {
@@ -47,5 +49,43 @@ func TestPostgresSourceSelectedCurrentSnapshot(t *testing.T) {
 		if _, err := source.SnapshotDocuments(ctx, scope, invalid); !errors.Is(err, ErrInvalidProjection) {
 			t.Fatal("invalid selection accepted", err)
 		}
+	}
+}
+
+func TestPostgresSourceSelectionJoinsOnlyExactLiveTransaction(t *testing.T) {
+	source, scope, other := sourceFixture(t)
+	ctx := context.Background()
+	if _, err := source.Change(ctx, scope, sourceCommand("doc", "create", 0, 0)); err != nil {
+		t.Fatal(err)
+	}
+	source.DB.SetMaxOpenConns(1)
+	tx, err := source.DB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	bound := sqlutil.WithContinuityTransaction(ctx, source.DB, tx)
+	beforeWaits := source.DB.Stats().WaitCount
+	got, err := source.SnapshotDocuments(bound, scope, []string{"doc"})
+	if err != nil || len(got.Documents) != 1 || source.DB.Stats().WaitCount != beforeWaits {
+		t.Fatal("joined source opened another connection", got, err)
+	}
+	var one int
+	if err = tx.QueryRowContext(ctx, "SELECT 1").Scan(&one); err != nil || one != 1 {
+		t.Fatal("source committed caller transaction", err)
+	}
+	foreign := sqlutil.WithContinuityTransaction(ctx, other, tx)
+	if _, err := source.SnapshotDocuments(foreign, scope, []string{"doc"}); err == nil {
+		t.Fatal("foreign transaction database was accepted")
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := source.SnapshotDocuments(bound, scope, []string{"doc"}); err == nil {
+		t.Fatal("rolled back transaction started a new source read")
+	}
+	got, err = source.SnapshotDocuments(ctx, scope, []string{"doc"})
+	if err != nil || len(got.Documents) != 1 {
+		t.Fatal("ordinary source read failed after owner rollback", got, err)
 	}
 }

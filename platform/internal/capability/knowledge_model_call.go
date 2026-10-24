@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -28,7 +29,27 @@ type knowledgeRecoveryOnlyKey struct{}
 // reservation: a reused result consumes no new model tokens.
 type KnowledgeModelCheck func(context.Context, string) error
 
-func (m *Module) knowledgeModelCheck(parent *http.Request, original envelope, lifetime context.Context) KnowledgeModelCheck {
+// Nested governed stages re-run the current capability fence, which must be
+// able to reauthenticate the retained workload credential. Cancellation and
+// deadlines stay bound to the stage lifetime; only the request-scoped authority
+// values the fence re-verifies cross into the nested request.
+func stageRequestContext(stage, parent context.Context) context.Context {
+	if parent == nil {
+		return stage
+	}
+	if proof, ok := parent.Value(workloadCredentialKey{}).(workloadCredentialProof); ok {
+		stage = context.WithValue(stage, workloadCredentialKey{}, proof)
+	}
+	if bindings, ok := parent.Value(skillModelBindingsKey{}).(map[string]SkillModelBinding); ok && len(bindings) > 0 {
+		stage = context.WithValue(stage, skillModelBindingsKey{}, bindings)
+	}
+	if recoveryOnly, ok := parent.Value(knowledgeRecoveryOnlyKey{}).(bool); ok && recoveryOnly {
+		stage = context.WithValue(stage, knowledgeRecoveryOnlyKey{}, true)
+	}
+	return stage
+}
+
+func (m *Module) knowledgeModelVersionCheck(parent *http.Request, original envelope, lifetime context.Context, version string) KnowledgeModelCheck {
 	return func(ctx context.Context, operation string) error {
 		if err := lifetime.Err(); err != nil {
 			return err
@@ -40,10 +61,15 @@ func (m *Module) knowledgeModelCheck(parent *http.Request, original envelope, li
 			return &KnowledgeModelError{Status: 503, Code: "MODEL_GOVERNANCE_UNAVAILABLE"}
 		}
 		op := original
+		binding, routed, bindingErr := m.knowledgeRoutingBinding(ctx, original)
+		if bindingErr != nil {
+			return bindingErr
+		}
 		path := "/internal/model/generate"
 		switch operation {
 		case "generate":
 		case "embed":
+			routed = false
 			path = "/internal/model/embed"
 			selected, err := op.Policy.Model.ForEmbedding()
 			if err != nil {
@@ -56,23 +82,40 @@ func (m *Module) knowledgeModelCheck(parent *http.Request, original envelope, li
 		default:
 			return &KnowledgeModelError{Status: 400, Code: "INVALID_MODEL_OPERATION"}
 		}
+		if !routed && version != "" && version != op.Policy.Model.ModelVersionID {
+			return &KnowledgeModelError{Status: 403, Code: "MODEL_SELECTION_MISMATCH"}
+		}
 		stageCtx, cancel := context.WithCancel(lifetime)
 		defer cancel()
 		stop := context.AfterFunc(ctx, cancel)
 		defer stop()
-		r := parent.Clone(stageCtx)
+		r := parent.Clone(stageRequestContext(stageCtx, parent.Context()))
 		copiedURL := *parent.URL
 		r.URL = &copiedURL
 		r.URL.Path, r.URL.RawPath, r.URL.RawQuery, r.URL.Fragment = path, "", "", ""
 		r.RequestURI = path
 		var err error
 		op.ResourceAccess, err = resourceAccessForRoute(path, op)
-		if err != nil || m.checkCurrentCapability(r, op) != nil {
-			return &KnowledgeModelError{Status: 403, Code: "CAPABILITY_DENIED"}
+		if err != nil {
+			return &KnowledgeModelError{Status: 403, Code: "CAPABILITY_DENIED", DiagnosticCode: "RESOURCE_INPUT"}
+		}
+		if err := m.checkCurrentCapability(r, op); err != nil {
+			status, code := capabilityCheckFailure(err)
+			return &KnowledgeModelError{Status: status, Code: code, DiagnosticCode: capabilityFailureDiagnostic(err)}
 		}
 		c := op.Context
 		scope := sharedkernel.Scope{TenantID: c.TenantID, DepartmentID: c.DepartmentID, ApplicationID: c.ApplicationID, AgentInstanceID: c.AgentInstanceID, AgentID: c.AgentID, PrincipalID: c.ActorID, PrincipalType: c.PrincipalType, InstallationID: c.InstallationID, AgentVersionID: c.AgentVersionID, SessionID: c.SessionID, RunID: c.TaskID, ParentRunID: c.ParentRunID, AuthorizationEpoch: c.AuthorizationEpoch, TraceID: c.TraceID}
-		selected, err := m.modelAccess.ResolveModel(stageCtx, scope, op.Policy.Model.ModelVersionID)
+		var selected modelgateway.Selection
+		if routed && version != "" {
+			selected, err = m.knowledgeRoutedModel(stageCtx, original, version, binding)
+			if err == nil {
+				op.Policy.Model.ModelVersionID = version
+				op.Policy.Model.Provider = selected.ProviderKey
+				op.Policy.Model.Model = selected.ModelKey
+			}
+		} else {
+			selected, err = m.modelAccess.ResolveModel(stageCtx, scope, op.Policy.Model.ModelVersionID)
+		}
 		if err != nil {
 			if errors.Is(err, modelgovernance.ErrModelAccessDenied) || errors.Is(err, modelgovernance.ErrNotFound) || errors.Is(err, modelgovernance.ErrForbidden) {
 				return &KnowledgeModelError{Status: 403, Code: "MODEL_ACCESS_DENIED"}
@@ -88,16 +131,18 @@ func (m *Module) knowledgeModelCheck(parent *http.Request, original envelope, li
 		if err := stageCtx.Err(); err != nil {
 			return err
 		}
-		if m.checkCurrentCapability(r, op) != nil {
-			return &KnowledgeModelError{Status: 403, Code: "CAPABILITY_DENIED"}
+		if err := m.checkCurrentCapability(r, op); err != nil {
+			status, code := capabilityCheckFailure(err)
+			return &KnowledgeModelError{Status: status, Code: code, DiagnosticCode: capabilityFailureDiagnostic(err)}
 		}
 		return nil
 	}
 }
 
 type KnowledgeModelError struct {
-	Status int
-	Code   string
+	Status         int
+	Code           string
+	DiagnosticCode string `json:"-"`
 }
 
 func (e *KnowledgeModelError) Error() string {
@@ -105,9 +150,10 @@ func (e *KnowledgeModelError) Error() string {
 }
 
 type modelCallResponse struct {
-	header http.Header
-	status int
-	body   bytes.Buffer
+	diagnostic string
+	header     http.Header
+	status     int
+	body       bytes.Buffer
 }
 
 func (w *modelCallResponse) Header() http.Header { return w.header }
@@ -148,7 +194,21 @@ func knowledgeModelCommandKey(original envelope, path string, fingerprint []byte
 }
 
 func (m *Module) knowledgeModelCall(parent *http.Request, original envelope, lifetime context.Context) KnowledgeModelCall {
-	return func(ctx context.Context, operation string, input map[string]any) (map[string]any, error) {
+	return func(ctx context.Context, operation string, input map[string]any) (returned map[string]any, returnedErr error) {
+		defer func() {
+			var modelError *KnowledgeModelError
+			if !errors.As(returnedErr, &modelError) {
+				return
+			}
+			kind := "invalid"
+			if operation == "generate" || operation == "embed" {
+				kind = operation
+			}
+			// Admission and current-authority failures occur before a provider
+			// span exists. Record only a bounded public code, never payload/body.
+			log.Printf("knowledge model stage stopped run_id=%q operation=%s status=%d code=%s",
+				original.Context.TaskID, kind, modelError.Status, knowledgeModelDiagnosticCode(modelError.Code))
+		}()
 		if lifetime.Err() != nil {
 			return nil, lifetime.Err()
 		}
@@ -218,7 +278,7 @@ func (m *Module) knowledgeModelCall(parent *http.Request, original envelope, lif
 		defer cancel()
 		stop := context.AfterFunc(ctx, cancel)
 		defer stop()
-		r := parent.Clone(stageCtx)
+		r := parent.Clone(stageRequestContext(stageCtx, parent.Context()))
 		copiedURL := *parent.URL
 		r.URL = &copiedURL
 		r.URL.Path = path
@@ -267,4 +327,16 @@ func (m *Module) knowledgeModelCall(parent *http.Request, original envelope, lif
 		result.Data["invocation_id"] = fmt.Sprintf("%x", sha256.Sum256([]byte(capabilityScopeHash(original.Context)+":"+detached["idempotency_key"].(string))))
 		return result.Data, nil
 	}
+}
+
+func knowledgeModelDiagnosticCode(code string) string {
+	if len(code) == 0 || len(code) > 96 || code[0] < 'A' || code[0] > 'Z' {
+		return "INTERNAL_CODE_REDACTED"
+	}
+	for _, character := range code {
+		if !(character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || character == '_') {
+			return "INTERNAL_CODE_REDACTED"
+		}
+	}
+	return code
 }

@@ -23,6 +23,12 @@ func knowledgeIndexWorkerFailureCode(err error) string {
 	// publish known protocol codes; provider messages and SQL stay private.
 	var modelErr *capability.KnowledgeModelError
 	if errors.As(err, &modelErr) {
+		if modelErr.Code == "CAPABILITY_DENIED" {
+			switch modelErr.DiagnosticCode {
+			case "SIGNED_EXECUTION", "SIGNED_POLICY", "RUN_AUTHORITY", "RESOURCE_AUTHORITY", "WORKLOAD_PROOF", "CONTEXT_SIGNATURE", "CONTEXT_ISSUER", "CONTEXT_AUDIENCE", "CONTEXT_EXPIRED", "CONTEXT_HEADER", "CONTEXT_EPOCH", "CURRENT_POLICY", "RESOURCE_INPUT", "ADMISSION_UNKNOWN":
+				return "INDEX_TASK_CAPABILITY_DENIED_" + modelErr.DiagnosticCode
+			}
+		}
 		switch modelErr.Code {
 		case "TASK_MODEL_CONTEXT_DENIED", "CAPABILITY_DENIED", "POLICY_DENIED", "WORKLOAD_AUTHENTICATION_DENIED", "MODEL_ACCESS_DENIED", "MODEL_SELECTION_MISMATCH", "MODEL_GOVERNANCE_UNAVAILABLE", "EXTERNAL_MODEL_DENIED", "INVALID_REQUEST", "UNAUTHENTICATED", "INVALID_SIGNATURE":
 			return "INDEX_TASK_" + modelErr.Code

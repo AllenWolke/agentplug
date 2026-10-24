@@ -16,7 +16,7 @@ import (
 )
 
 func TestSignedKnowledgeAnswerRejectsWholeAnswerWhenEvidenceOrModelIsDenied(t *testing.T) {
-	for _, mode := range []string{"allowed", "evidence-revoked", "partial-denied-evidence", "model-revoked", "unknown-citation"} {
+	for _, mode := range []string{"allowed", "evidence-revoked", "partial-denied-evidence", "model-revoked", "unknown-citation", "missing-model-version"} {
 		t.Run(mode, func(t *testing.T) {
 			public, private, _ := ed25519.GenerateKey(rand.Reader)
 			resolver := governedInvocationResolver()
@@ -43,7 +43,11 @@ func TestSignedKnowledgeAnswerRejectsWholeAnswerWhenEvidenceOrModelIsDenied(t *t
 				if mode == "unknown-citation" {
 					ids = []string{"invented"}
 				}
-				return map[string]any{"references": refs, "text": "COMPLETE-ANSWER", "citation_ids": ids, "answer_cache_hit": true, "grounding": map[string]bool{"supported": true}, "debug": "FORBIDDEN-DEBUG"}, nil
+				result := map[string]any{"references": refs, "text": "COMPLETE-ANSWER", "citation_ids": ids, "answer_cache_hit": true, "answer_model_version": q.Policy.Model.ModelVersionID, "grounding": map[string]bool{"supported": true}, "debug": "FORBIDDEN-DEBUG"}
+				if mode == "missing-model-version" {
+					delete(result, "answer_model_version")
+				}
+				return result, nil
 			})
 			c := capabilityContext()
 			c.PlatformContextToken = signedContextToken(t, private, c, time.Now().Unix()-1, time.Now().Unix()+120)

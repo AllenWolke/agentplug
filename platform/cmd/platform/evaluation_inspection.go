@@ -12,6 +12,7 @@ import (
 
 	agenteval "github.com/lexagent/agent-evaluation"
 	"github.com/lexagent/platform/internal/audit"
+	"github.com/lexagent/platform/internal/capability"
 	"github.com/lexagent/platform/internal/catalog"
 	"github.com/lexagent/platform/internal/evaluationproduct"
 	"github.com/lexagent/platform/internal/execution"
@@ -22,12 +23,15 @@ import (
 )
 
 type evaluationInspection struct {
-	catalog   *catalog.Module
-	execution *execution.Module
-	runs      *execution.SQLStore
-	identity  identity.Store
-	audit     *audit.SQLStore
-	usage     *usagecost.SQLStore
+	catalog          *catalog.Module
+	execution        *execution.Module
+	runs             *execution.SQLStore
+	identity         identity.Store
+	audit            *audit.SQLStore
+	usage            *usagecost.SQLStore
+	tools            capability.ToolEvaluationEvidencePort
+	models           capability.ModelEvaluationEvidencePort
+	modelPerformance capability.ModelPerformanceEvidencePort
 }
 
 func (p evaluationInspection) AuthorizeSources(ctx context.Context, a evaluationproduct.Actor, refs []agenteval.SourceReference) error {
@@ -164,6 +168,10 @@ func (p evaluationInspection) Agents(ctx context.Context, a evaluationproduct.Ac
 }
 
 func (p evaluationInspection) Trajectory(ctx context.Context, a evaluationproduct.Actor, id, session string, revision uint64) (agenteval.Trajectory, error) {
+	limits, valid := agenteval.TrajectoryReadLimitsFor(evaluationproduct.EvidenceReadProfile(ctx))
+	if !valid {
+		return agenteval.Trajectory{}, evaluationproduct.ErrInvalid
+	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	root, err := p.singleTrajectory(ctx, a, id, session, revision)
@@ -183,7 +191,18 @@ func (p evaluationInspection) Trajectory(ctx context.Context, a evaluationproduc
 	descendants := []agenteval.Trajectory{}
 	complete := true
 	eventCount := len(root.Events)
+	eventBytes := 0
+	if limits.EventBytes > 0 {
+		eventBytes, err = agenteval.TrajectoryEventBytes(root.Events)
+		if err != nil {
+			return agenteval.Trajectory{}, evaluationproduct.ErrUnavailable
+		}
+	}
 	for len(queue) > 0 {
+		if eventCount >= limits.Events || limits.EventBytes > 0 && eventBytes >= limits.EventBytes {
+			complete = false
+			break
+		}
 		item := queue[0]
 		queue = queue[1:]
 		if seen[item.id] || item.depth > 8 || len(all) >= 200 {
@@ -203,11 +222,19 @@ func (p evaluationInspection) Trajectory(ctx context.Context, a evaluationproduc
 			complete = false
 			continue
 		}
-		if eventCount+len(child.Events) > 10000 {
+		childBytes := 0
+		if limits.EventBytes > 0 {
+			childBytes, e = agenteval.TrajectoryEventBytes(child.Events)
+			if e != nil {
+				return agenteval.Trajectory{}, evaluationproduct.ErrUnavailable
+			}
+		}
+		if eventCount+len(child.Events) > limits.Events || limits.EventBytes > 0 && eventBytes+childBytes > limits.EventBytes {
 			complete = false
 			break
 		}
 		eventCount += len(child.Events)
+		eventBytes += childBytes
 		descendants = append(descendants, child)
 		all = append(all, child)
 		for _, grandchild := range child.Children {
@@ -246,6 +273,12 @@ func (p evaluationInspection) singleTrajectory(ctx context.Context, a evaluation
 	if err != nil {
 		return agenteval.Trajectory{}, inspectionReadError(err)
 	}
+	t.ToolArgumentProjection = evaluationproduct.ToolArgumentProjection(ctx)
+	t.EvidenceReadProfile = evaluationproduct.EvidenceReadProfile(ctx)
+	limits, valid := agenteval.TrajectoryReadLimitsFor(t.EvidenceReadProfile)
+	if !valid {
+		return agenteval.Trajectory{}, evaluationproduct.ErrInvalid
+	}
 	run, err := p.runs.GetContext(ctx, id)
 	if err != nil {
 		return agenteval.Trajectory{}, inspectionReadError(err)
@@ -256,7 +289,7 @@ func (p evaluationInspection) singleTrajectory(ctx context.Context, a evaluation
 	if json.Unmarshal(run.RequestJSON, &envelope) == nil {
 		var version string
 		_ = json.Unmarshal(envelope.Input["version"], &version)
-		if version == "agent-eval-judge-input/v1" {
+		if agenteval.IsJudgeInputVersion(version) {
 			delete(envelope.Input, "policy_snapshot")
 			b, _ := json.Marshal(envelope.Input)
 			var frozen agenteval.JudgeInput
@@ -276,10 +309,15 @@ func (p evaluationInspection) singleTrajectory(ctx context.Context, a evaluation
 	// A current owner history grant exposes only exact-Run typed summaries;
 	// it never enables application-wide audit or usage browsing.
 	owned := run.Scope.PrincipalType == "user" && run.Scope.PrincipalID == a.PrincipalID
+	var performanceItems []audit.PerformanceObservation
+	performanceComplete := false
+	var linkedUsageSteps []string
+	usageLinksComplete, noModelProof := false, false
 	if p.audit != nil && (owned || (identityAuditMetadataControl{store: p.identity}).Authorize(ctx, actor.Scope, meta) == nil) {
 		toolEvents := []agenteval.Event{}
 		cursor := ""
-		for n := 0; n < 100; n++ {
+		pages := limits.Events / 100
+		for n := 0; n < pages; n++ {
 			page, e := p.audit.ListRuntimeSteps(ctx, audit.RuntimeStepsQuery{Scope: meta, RunID: id, PageSize: 100, Cursor: cursor})
 			if e != nil {
 				return agenteval.Trajectory{}, e
@@ -318,10 +356,42 @@ func (p evaluationInspection) singleTrajectory(ctx context.Context, a evaluation
 				break
 			}
 			cursor = page.NextCursor
-			if n == 99 {
+			if n == pages-1 {
 				t.Missing = append(t.Missing, "runtime_steps_truncated")
 				t.Complete = false
 			}
+		}
+		var performanceErr error
+		performanceItems, performanceComplete, performanceErr = p.audit.ReadPerformanceObservationsProfile(ctx, run.Scope, t.EvidenceReadProfile)
+		if performanceErr != nil {
+			return agenteval.Trajectory{}, inspectionReadError(performanceErr)
+		}
+		if p.modelPerformance != nil {
+			var receipts []audit.PerformanceObservation
+			var complete bool
+			var err error
+			if t.EvidenceReadProfile != "" {
+				port, ok := p.modelPerformance.(capability.ModelPerformanceEvidenceProfilePort)
+				if !ok {
+					return agenteval.Trajectory{}, evaluationproduct.ErrUnavailable
+				}
+				receipts, complete, err = port.EvaluationModelPerformanceProfile(ctx, run.Scope, t.EvidenceReadProfile)
+			} else {
+				receipts, complete, err = p.modelPerformance.EvaluationModelPerformance(ctx, run.Scope)
+			}
+			if err != nil {
+				return agenteval.Trajectory{}, inspectionReadError(err)
+			}
+			mergeComplete := true
+			if t.EvidenceReadProfile != "" {
+				performanceItems, mergeComplete, err = audit.MergePerformanceEvidenceProfile(run.Scope, performanceItems, receipts, t.EvidenceReadProfile)
+			} else {
+				performanceItems, err = audit.MergePerformanceEvidence(run.Scope, performanceItems, receipts)
+			}
+			if err != nil {
+				return agenteval.Trajectory{}, inspectionReadError(err)
+			}
+			performanceComplete = performanceComplete && complete && mergeComplete
 		}
 		if !owned && (identityAuditMetadataControl{store: p.identity}).Authorize(ctx, actor.Scope, meta) != nil {
 			return agenteval.Trajectory{}, evaluationproduct.ErrForbidden
@@ -334,6 +404,42 @@ func (p evaluationInspection) singleTrajectory(ctx context.Context, a evaluation
 			}
 			return a.Before(b)
 		})
+		if p.tools != nil {
+			var evidence []capability.ToolEvaluationEvidence
+			var complete bool
+			var err error
+			if t.EvidenceReadProfile != "" {
+				port, ok := p.tools.(capability.ToolEvaluationEvidenceProfilePort)
+				if !ok {
+					return agenteval.Trajectory{}, evaluationproduct.ErrUnavailable
+				}
+				evidence, complete, err = port.EvaluationToolEvidenceProfile(ctx, run.Scope, t.ToolArgumentProjection, t.EvidenceReadProfile)
+			} else if t.ToolArgumentProjection == agenteval.ToolArgumentProjectionV2 {
+				port, ok := p.tools.(capability.ToolEvaluationEvidenceV2Port)
+				if !ok {
+					return agenteval.Trajectory{}, evaluationproduct.ErrUnavailable
+				}
+				evidence, complete, err = port.EvaluationToolEvidenceV2(ctx, run.Scope)
+			} else {
+				evidence, complete, err = p.tools.EvaluationToolEvidence(ctx, run.Scope)
+			}
+			if err != nil {
+				return agenteval.Trajectory{}, inspectionReadError(err)
+			}
+			arguments := map[string]capability.ToolEvaluationEvidence{}
+			for _, item := range evidence {
+				arguments[item.StepID] = item
+			}
+			for i := range toolEvents {
+				if item, ok := arguments[toolEvents[i].StepID]; ok && item.ToolName == toolEvents[i].ToolName {
+					toolEvents[i].CallID, toolEvents[i].Arguments = item.CallID, item.Arguments
+				}
+			}
+			if !complete {
+				t.Missing = append(t.Missing, "tool_input_evidence_truncated")
+				t.Complete = false
+			}
+		}
 		t.Events = append(t.Events, toolEvents...)
 	} else {
 		t.Missing = append(t.Missing, "runtime_steps_permission_or_provider")
@@ -349,17 +455,12 @@ func (p evaluationInspection) singleTrajectory(ctx context.Context, a evaluation
 		}
 		// No event is not proof of zero usage; unknown historical bills remain missing.
 		if summary.EventCount > 0 && summary.Unsettled == 0 {
+			linkedUsageSteps, usageLinksComplete = summary.ModelUsageStepIDs, summary.ModelUsageLinksComplete
 			t.Measurements.InputTokens = &summary.InputTokens
 			t.Measurements.OutputTokens = &summary.OutputTokens
 			// 仅同币种、精确结算的历史价目可作为计价费用；不是提供商账单。
 			if summary.Currency != "" && summary.Unpriced == 0 {
-				// 仅同币种、精确结算的历史价目可作为计价费用；不是提供商账单。
-				if summary.Currency != "" && summary.Unpriced == 0 {
-					t.Measurements.CostMicros = &summary.CostMicros
-					t.Measurements.Currency = summary.Currency
-				} else {
-					t.Missing = append(t.Missing, "usage_currency_or_price_proof")
-				}
+				t.Measurements.CostMicros = &summary.CostMicros
 				t.Measurements.Currency = summary.Currency
 			} else {
 				t.Missing = append(t.Missing, "usage_currency_or_price_proof")
@@ -369,7 +470,25 @@ func (p evaluationInspection) singleTrajectory(ctx context.Context, a evaluation
 		} else if summary.Unsettled > 0 {
 			t.Missing = append(t.Missing, "usage_unsettled_or_unknown")
 		} else {
-			t.Missing = append(t.Missing, "confirmed_usage")
+			noRequests := false
+			if p.models != nil && (run.Status == "succeeded" || run.Status == "failed" || run.Status == "cancelled") {
+				var err error
+				noRequests, err = p.models.EvaluationNoModelRequests(ctx, run.Scope)
+				if err != nil {
+					return agenteval.Trajectory{}, inspectionReadError(err)
+				}
+			}
+			if noRequests {
+				noModelProof = true
+				zero := int64(0)
+				t.Measurements.InputTokens, t.Measurements.OutputTokens, t.Measurements.ModelCalls = &zero, &zero, &zero
+				// No model was selected: billed currency/cost remain unknown.
+				// Do not invent USD or replace a missing bill with zero money.
+				t.Coverage["usage"] = true
+				t.Events = append(t.Events, agenteval.Event{RunID: id, Kind: "model_send_proof", Status: "not_submitted", Arguments: map[string]any{"proof_version": "model-empty-session/v1", "model_requests": 0}})
+			} else {
+				t.Missing = append(t.Missing, "confirmed_usage")
+			}
 		}
 		if !owned && (identityUsageControl{store: p.identity}).AuthorizeUsageCost(ctx, uActor, usagecost.ActionReadUsage, uScope) != nil {
 			return agenteval.Trajectory{}, evaluationproduct.ErrForbidden
@@ -377,6 +496,7 @@ func (p evaluationInspection) singleTrajectory(ctx context.Context, a evaluation
 	} else {
 		t.Missing = append(t.Missing, "usage_permission_or_provider")
 	}
+	appendPerformanceEvidence(&t, performanceItems, performanceComplete, linkedUsageSteps, usageLinksComplete, noModelProof)
 	// Final object authorization wins over all previous successful reads.
 	if err = (identityExecutionBrowserControl{store: p.identity, runs: p.runs}).Authorize(ctx, run.Scope, actor, "history.read"); err != nil {
 		return agenteval.Trajectory{}, inspectionReadError(err)

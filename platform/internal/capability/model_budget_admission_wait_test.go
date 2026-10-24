@@ -2,8 +2,10 @@ package capability
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lexagent/platform/internal/usagecost"
@@ -12,6 +14,36 @@ import (
 type scriptedBudgetStore struct {
 	reserved []usagecost.ModelBudgetRequest
 	script   []error
+}
+
+type deadlineRollbackBudgetStore struct{ calls int }
+
+func (s *deadlineRollbackBudgetStore) Reserve(ctx context.Context, _ usagecost.ModelBudgetRequest) (usagecost.ModelBudgetReservation, error) {
+	s.calls++
+	if s.calls == 1 {
+		<-ctx.Done()
+		return usagecost.ModelBudgetReservation{}, sql.ErrTxDone
+	}
+	return usagecost.ModelBudgetReservation{ReservationID: "same-request-after-rollback"}, nil
+}
+
+func TestBudgetAdmissionDeadlineRollbackPreservesAttemptContext(t *testing.T) {
+	store := &deadlineRollbackBudgetStore{}
+	got, err := reserveModelBudgetAdmission(context.Background(), store, usagecost.ModelBudgetRequest{RequestID: "same"})
+	if err != nil || store.calls != 2 || got.ReservationID == "" {
+		t.Fatalf("deadline rollback must retry admission only: calls=%d err=%v", store.calls, err)
+	}
+	// ErrTxDone without an expired attempt is not proof of a timeout.
+	plain := &scriptedBudgetStore{script: []error{sql.ErrTxDone}}
+	if _, err = reserveModelBudgetAdmission(context.Background(), plain, usagecost.ModelBudgetRequest{}); !errors.Is(err, sql.ErrTxDone) || len(plain.reserved) != 1 {
+		t.Fatalf("unexplained transaction termination must not be retried: %v", err)
+	}
+	parent, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	stopped := &deadlineRollbackBudgetStore{}
+	if _, err = reserveModelBudgetAdmission(parent, stopped, usagecost.ModelBudgetRequest{}); !errors.Is(err, context.DeadlineExceeded) || stopped.calls != 1 {
+		t.Fatalf("parent deadline must stop subsequent attempts: calls=%d err=%v", stopped.calls, err)
+	}
 }
 
 func (s *scriptedBudgetStore) Reserve(ctx context.Context, request usagecost.ModelBudgetRequest) (usagecost.ModelBudgetReservation, error) {
@@ -47,6 +79,17 @@ func TestBudgetAdmissionLockWaitRetriesWithoutBecomingExceededOrUnavailable(t *t
 	canceledStatement := &scriptedBudgetStore{script: []error{&pgconn.PgError{Code: "57014"}, nil}}
 	if _, err = reserveModelBudgetAdmission(context.Background(), canceledStatement, request); err != nil || len(canceledStatement.reserved) != 2 {
 		t.Fatalf("statement cancellation while waiting for a row lock must retry: attempts=%d err=%v", len(canceledStatement.reserved), err)
+	}
+	transientConflict := &scriptedBudgetStore{script: []error{usagecost.ErrBudgetReservationConflict, nil}}
+	if _, err = reserveModelBudgetAdmission(context.Background(), transientConflict, request); err != nil || len(transientConflict.reserved) != 2 {
+		t.Fatalf("transient reservation conflict must retry the same admission: attempts=%d err=%v", len(transientConflict.reserved), err)
+	}
+	if budgetAdmissionErrorType(usagecost.ErrBudgetReservationConflict) != "reservation_conflict" {
+		t.Fatalf("reservation conflict must be logged distinctly: %s", budgetAdmissionErrorType(usagecost.ErrBudgetReservationConflict))
+	}
+	exhaustedConflict := &scriptedBudgetStore{script: []error{usagecost.ErrBudgetReservationConflict, usagecost.ErrBudgetReservationConflict, usagecost.ErrBudgetReservationConflict}}
+	if _, err = reserveModelBudgetAdmission(context.Background(), exhaustedConflict, request); !errors.Is(err, usagecost.ErrBudgetReservationConflict) || len(exhaustedConflict.reserved) != modelBudgetAdmissionAttempts {
+		t.Fatalf("permanent reservation conflict must fail after bounded attempts without duplicating: attempts=%d err=%v", len(exhaustedConflict.reserved), err)
 	}
 	unavailable := &scriptedBudgetStore{script: []error{errors.New("ledger connection refused")}}
 	if _, err = reserveModelBudgetAdmission(context.Background(), unavailable, request); budgetAdmissionDeferred(err) || errors.Is(err, usagecost.ErrBudgetExceeded) || len(unavailable.reserved) != 1 {

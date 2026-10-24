@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -44,10 +45,13 @@ func (a toolApprovalAdapter) ResolvePending(r *http.Request, reference capabilit
 		TenantID: r.Header.Get("X-Tenant-ID"), DepartmentID: r.Header.Get("X-Department-ID"), ApplicationID: r.Header.Get("X-Application-ID"),
 	}, Session: r.Header.Get("X-Authentication-Session"), Revision: revision}
 	ctx := r.Context()
-	if a.checkSession(ctx, binding) != nil {
-		return capability.ToolApprovalOperation{}, deny
+	if err := a.checkSession(ctx, binding); err != nil {
+		return capability.ToolApprovalOperation{}, errors.Join(deny, err)
 	}
 	run, err := a.runs.ResolveToolApprovalRun(ctx, binding.Actor, reference.RunID)
+	if err != nil {
+		return capability.ToolApprovalOperation{}, errors.Join(deny, err)
+	}
 	historical := action == "revoke"
 	// Revoke may address an earlier approved checkpoint. Preview/approve and
 	// pending reads require the exact head of the currently waiting generation.
@@ -61,9 +65,12 @@ func (a toolApprovalAdapter) ResolvePending(r *http.Request, reference capabilit
 	} else if reference.CheckpointRevision == 0 || !pendingToolIdentifier.MatchString(reference.Name) || !pendingToolIdentifier.MatchString(reference.CallID) {
 		return capability.ToolApprovalOperation{}, deny
 	}
-	checkRead := func() bool {
-		if a.checkSession(ctx, binding) != nil || ctx.Err() != nil {
-			return false
+	checkRead := func() error {
+		if err := a.checkSession(ctx, binding); err != nil {
+			return errors.Join(deny, err)
+		}
+		if err := ctx.Err(); err != nil {
+			return errors.Join(deny, err)
 		}
 		// Keep the same public memory policy and dual-identity boundary used by
 		// /internal/state/checkpoint; history access alone cannot reveal state.
@@ -71,20 +78,26 @@ func (a toolApprovalAdapter) ResolvePending(r *http.Request, reference capabilit
 			{Action: "history.read", ResourceType: "agent_installation", ResourceID: run.Scope.InstallationID},
 			{Action: "memory.read", ResourceType: "memory", ResourceID: run.PolicyIDs["memory_policy_id"]},
 		} {
-			if access.ResourceID == "" || a.resources.AuthorizeCapabilityResource(ctx, run.Scope, access) != nil {
-				return false
+			if access.ResourceID == "" {
+				return deny
+			}
+			if err := a.resources.AuthorizeCapabilityResource(ctx, run.Scope, access); err != nil {
+				return errors.Join(deny, err)
 			}
 		}
-		return ctx.Err() == nil
+		return ctx.Err()
 	}
-	if !checkRead() {
-		return capability.ToolApprovalOperation{}, deny
+	if err := checkRead(); err != nil {
+		return capability.ToolApprovalOperation{}, errors.Join(deny, err)
 	}
 	loadRevision := uint64(0)
 	if historical {
 		loadRevision = reference.CheckpointRevision
 	}
 	checkpoint, found, err := a.checkpoints.Load(ctx, run.Scope, "harness", reference.PendingKey, "schema://agentplug/harness-loop/v1", loadRevision)
+	if err != nil {
+		return capability.ToolApprovalOperation{}, errors.Join(deny, err)
+	}
 	if err != nil || !found || checkpoint.ExecutionRevision == 0 || checkpoint.ExecutionRevision > run.Revision ||
 		(!historical && (run.Revision < 2 || checkpoint.ExecutionRevision != run.Revision-1)) ||
 		(reference.CheckpointRevision != 0 && reference.CheckpointRevision != checkpoint.Revision) {
@@ -120,14 +133,26 @@ func (a toolApprovalAdapter) ResolvePending(r *http.Request, reference capabilit
 		Payload: operation.Payload, PendingKey: reference.PendingKey, CheckpointRevision: checkpoint.Revision}
 	// Reuse tool/schema/current immutable policy authorization before exposing
 	// even an opaque operation reference. This sets no approval or Run state.
-	if _, _, err = a.resolve(ctx, binding, resolved, !historical); err != nil || !checkRead() {
-		return capability.ToolApprovalOperation{}, deny
+	if _, _, err = a.resolve(ctx, binding, resolved, !historical); err != nil {
+		return capability.ToolApprovalOperation{}, errors.Join(deny, err)
+	}
+	if err := checkRead(); err != nil {
+		return capability.ToolApprovalOperation{}, errors.Join(deny, err)
 	}
 	latestRun, err := a.runs.ResolveToolApprovalRun(ctx, binding.Actor, reference.RunID)
+	if err != nil {
+		return capability.ToolApprovalOperation{}, errors.Join(deny, err)
+	}
 	latest, present, loadErr := a.checkpoints.Load(ctx, run.Scope, "harness", reference.PendingKey, "schema://agentplug/harness-loop/v1", loadRevision)
+	if loadErr != nil {
+		return capability.ToolApprovalOperation{}, errors.Join(deny, loadErr)
+	}
 	if err != nil || loadErr != nil || !present || latestRun.Revision != run.Revision || latestRun.Waiting != run.Waiting ||
-		latest.Revision != checkpoint.Revision || latest.ContentHash != checkpoint.ContentHash || !checkRead() {
+		latest.Revision != checkpoint.Revision || latest.ContentHash != checkpoint.ContentHash {
 		return capability.ToolApprovalOperation{}, deny
+	}
+	if err := checkRead(); err != nil {
+		return capability.ToolApprovalOperation{}, errors.Join(deny, err)
 	}
 	fingerprint, err := capability.ToolCommandFingerprint(resolved.Name, resolved.Payload)
 	if err != nil {
@@ -159,11 +184,19 @@ func (a toolApprovalAdapter) fencePending(ctx context.Context, tx *sql.Tx, scope
 		return err
 	}
 	run, err := a.runSQL.BudgetRunTx(ctx, tx, scope.RunID)
+	if err != nil {
+		return errors.Join(capability.ErrToolApprovalDenied, err)
+	}
 	if err != nil || run.Scope != scope || run.Revision != bound.RunRevision || (run.Status == platformruntime.StatusWaiting) != bound.Waiting || (!bound.Historical && run.Status != platformruntime.StatusWaiting) {
 		return capability.ErrToolApprovalDenied
 	}
-	if !bound.Historical && scope.ParentRunID != "" && (a.waitingAncestry == nil || a.waitingAncestry(ctx, tx, scope) != nil) {
-		return capability.ErrToolApprovalDenied
+	if !bound.Historical && scope.ParentRunID != "" {
+		if a.waitingAncestry == nil {
+			return capability.ErrToolApprovalDenied
+		}
+		if err := a.waitingAncestry(ctx, tx, scope); err != nil {
+			return errors.Join(capability.ErrToolApprovalDenied, err)
+		}
 	}
 	if err := locker.LockCheckpointTx(ctx, tx, scope, "harness", bound.Key, bound.Checkpoint, !bound.Historical); err != nil {
 		return err
@@ -172,12 +205,15 @@ func (a toolApprovalAdapter) fencePending(ctx context.Context, tx *sql.Tx, scope
 		{Action: "history.read", ResourceType: "agent_installation", ResourceID: scope.InstallationID},
 		{Action: "memory.read", ResourceType: "memory", ResourceID: bound.MemoryPolicyID},
 	} {
-		if access.ResourceID == "" || a.resources.AuthorizeCapabilityResource(ctx, scope, access) != nil {
+		if access.ResourceID == "" {
 			return capability.ErrToolApprovalDenied
 		}
+		if err := a.resources.AuthorizeCapabilityResource(ctx, scope, access); err != nil {
+			return errors.Join(capability.ErrToolApprovalDenied, err)
+		}
 	}
-	if ctx.Err() != nil {
-		return capability.ErrToolApprovalDenied
+	if err := ctx.Err(); err != nil {
+		return errors.Join(capability.ErrToolApprovalDenied, err)
 	}
 	return nil
 }

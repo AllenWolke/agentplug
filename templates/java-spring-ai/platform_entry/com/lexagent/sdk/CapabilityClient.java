@@ -35,11 +35,12 @@ import javax.crypto.spec.SecretKeySpec;
 /** Per-execution governed capability client, never a shared model provider.
  * 逐运行的受控公共能力客户端，不持有模型厂商密钥，不跨用户共享。
  */
-public final class CapabilityClient {
+public final class CapabilityClient implements CapabilityPort {
+    private final CheckpointCapacity checkpointCapacity = new CheckpointCapacity();
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final List<String> BINDINGS = List.of("iss", "aud", "subject_type", "sub", "tenant_id", "department_id", "application_id", "installation_id", "agent_instance_id", "agent_id", "agent_version_id", "run_id", "parent_run_id", "session_id", "trace_id", "authorization_epoch", "actions", "body_hash", "policy_snapshot_hash", "execution_revision", "lease_token_hash");
 
-    public static final class Failure extends Exception {
+    public static class Failure extends Exception {
         private final String code;
         private final int status;
         private final boolean retryable;
@@ -99,6 +100,14 @@ public final class CapabilityClient {
         }
     }
 
+    @FunctionalInterface public interface SendLimiter { AutoCloseable acquire(Duration remaining) throws Exception; }
+    public record CallObservation(String path,double wallMs,String status) {}
+    private volatile SendLimiter sendLimiter;
+    private volatile java.util.function.Consumer<CallObservation> callObserver;
+    public void setSendLimiter(SendLimiter limiter){this.sendLimiter=limiter;}
+    public void setCallObserver(java.util.function.Consumer<CallObservation> observer){this.callObserver=observer;}
+    private static final HttpClient SHARED_HTTP=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build();
+    private static final class ObservationLost extends Failure { ObservationLost(){super("CAPABILITY_RENEWAL_UNAVAILABLE",503,true);} }
     private final Config config;
     private final HttpClient http;
     private final Map<String, Object> context;
@@ -138,7 +147,7 @@ public final class CapabilityClient {
 
     private CapabilityClient(Config config, String businessInputFingerprint, String operation) {
         this.config = config;
-        this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build();
+        this.http = SHARED_HTTP;
         context = new LinkedHashMap<>();
         this.businessInputFingerprint = businessInputFingerprint;
         this.operation = operation;
@@ -178,7 +187,24 @@ public final class CapabilityClient {
         }
         long elapsed = Math.max(0, System.nanoTime() - started);
         long remaining = Math.max(1L, timeout.toNanos() - elapsed);
-        Map<String, Object> response = send(path, body, token, 1 << 20, Duration.ofNanos(remaining));
+        Map<String,Object> response;
+        try{response=send(path,body,token,1<<20,Duration.ofNanos(remaining));}
+        catch(ObservationLost lost){
+            if(!path.equals("/internal/tool/invoke"))throw lost;
+            long receiptRemaining=timeout.toNanos()-Math.max(0,System.nanoTime()-started);
+            if(receiptRemaining<=0||Thread.currentThread().isInterrupted())throw new Failure("TOOL_RESULT_UNKNOWN",409,false);
+            Map<String,Object> command=new LinkedHashMap<>();for(String field:List.of("name","call_id","payload"))command.put(field,input.get(field));
+            if(!(command.get("name") instanceof String)||!(command.get("call_id") instanceof String)||!(command.get("payload") instanceof Map<?,?>))throw new Failure("TOOL_RESULT_UNKNOWN",409,false);
+            if(input.containsKey("confirmation_token"))command.put("confirmation_token",input.get("confirmation_token"));
+            Map<String,Object> receipt;
+            try{receipt=postWithin("/internal/tool/receipt",command,Duration.ofNanos(Math.min(receiptRemaining,Duration.ofSeconds(5).toNanos())));}
+            catch(Failure error){if(Set.of("TOOL_CONFIRMATION_REQUIRED","MODEL_BUDGET_EXCEEDED").contains(error.code()))throw new Failure("CAPABILITY_DENIED",403,false);if(Optimization.authorityFailure(error))throw error;throw new Failure("TOOL_RESULT_UNKNOWN",409,false);}
+            if(!"tool-receipt/v1".equals(receipt.get("version"))||!java.util.Objects.equals(input.get("name"),receipt.get("tool_name"))||!java.util.Objects.equals(input.get("call_id"),receipt.get("call_id")))throw new Failure("TOOL_RECEIPT_REJECTED",409,false);
+            if(!"completed".equals(receipt.get("status")))throw new Failure("TOOL_RESULT_UNKNOWN",409,false);
+            if(!(receipt.get("receipt") instanceof Map<?,?> result)||!result.containsKey("data")||!(result.get("observation") instanceof Map<?,?> observation)||!"runtime-observation/v1".equals(observation.get("version"))||!java.util.Objects.equals(input.get("name"),observation.get("tool_name"))||!java.util.Objects.equals(input.get("call_id"),observation.get("call_id"))||!"succeeded".equals(observation.get("status"))||!"completed".equals(observation.get("effect"))||!"untrusted_data".equals(observation.get("instruction_trust")))throw new Failure("TOOL_RECEIPT_REJECTED",409,false);
+            response=new LinkedHashMap<>();for(var entry:result.entrySet()){if(!(entry.getKey() instanceof String key))throw new Failure("TOOL_RECEIPT_REJECTED",409,false);response.put(key,entry.getValue());}
+        }
+
         if (recoveryBinding != null) recoveryBinding.observePost(path, input, response, nowEpochSeconds());
         return response;
     }
@@ -536,6 +562,8 @@ public final class CapabilityClient {
         return result;
     }
 
+    String currentRunId() throws Failure { synchronized(lock){Object run=context.get("task_id");if(!(run instanceof String value)||value.isBlank())throw new Failure("CONTEXT_INVALID",409,false);return value;} }
+
     /** Persistent public Harness, including explicit human-approval pause/resume. */
     public Map<String, Object> runHarness(Map<String, Object> input, HarnessRunner.Options options) throws Failure {
         String runId;
@@ -571,8 +599,8 @@ public final class CapabilityClient {
 
     /** Read current (revision=0) or immutable historical run-scoped state. */
     public Map<String, Object> loadCheckpoint(String namespace, String key, String schemaId, long revision) throws Failure {
-        if (revision < 0 || revision > 64) throw new Failure("REQUEST_INVALID", 400, false);
-        return post("/internal/state/checkpoint", Map.of("operation", "load", "namespace", namespace, "key", key, "schema_id", schemaId, "revision", revision));
+        if (revision < 0 || revision > checkpointCapacity.limit(checkpointScope())) throw new Failure("REQUEST_INVALID", 400, false);
+        return checkpointCapacity.remember(checkpointScope(), post("/internal/state/checkpoint", Map.of("operation", "load", "namespace", namespace, "key", key, "schema_id", schemaId, "revision", revision)));
     }
 
     /**
@@ -591,7 +619,7 @@ public final class CapabilityClient {
                     JSON.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
             if (!snapshot.keySet().equals(fields) || snapshot.values().stream().anyMatch(value -> value == null))
                 throw new Failure("REQUEST_INVALID", 400, false);
-            return post("/internal/state/checkpoint", Map.of("operation", "load", "reference", snapshot));
+            return checkpointCapacity.remember(checkpointScope(), post("/internal/state/checkpoint", Map.of("operation", "load", "reference", snapshot)));
         } catch (Failure failure) {
             throw failure;
         } catch (Exception ignored) {
@@ -637,8 +665,8 @@ public final class CapabilityClient {
 
     /** CAS checkpoint write; never silently retries a changed revision. */
     public Map<String, Object> saveCheckpoint(String namespace, String key, String schemaId, Map<String, Object> value, long expectedRevision, String idempotencyKey) throws Failure {
-        if (expectedRevision < 0 || expectedRevision >= 64 || value == null || idempotencyKey == null || idempotencyKey.isEmpty()) throw new Failure("REQUEST_INVALID", 400, false);
-        return post("/internal/state/checkpoint", Map.of("operation", "save", "namespace", namespace, "key", key, "schema_id", schemaId, "value", value, "expected_revision", expectedRevision, "idempotency_key", idempotencyKey));
+        if (expectedRevision < 0 || expectedRevision >= checkpointCapacity.limit(checkpointScope()) || value == null || idempotencyKey == null || idempotencyKey.isEmpty()) throw new Failure("REQUEST_INVALID", 400, false);
+        return checkpointCapacity.remember(checkpointScope(), post("/internal/state/checkpoint", Map.of("operation", "save", "namespace", namespace, "key", key, "schema_id", schemaId, "value", value, "expected_revision", expectedRevision, "idempotency_key", idempotencyKey)));
     }
 
     private byte[] encode(Map<String, Object> input) throws Failure {
@@ -751,7 +779,11 @@ public final class CapabilityClient {
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body));
             if (!config.workloadClientId().isEmpty()) builder.header("X-Agent-Client-ID", config.workloadClientId()).header("X-Agent-Client-Secret", config.workloadClientSecret());
             HttpRequest request = builder.build();
-            HttpResponse<byte[]> response = http.send(request, ignored -> new BoundedBody(limit));
+            HttpResponse<byte[]> response;
+            SendLimiter limiter=sendLimiter;AutoCloseable permit=null;long sendStarted=System.nanoTime();String sendStatus="failed";
+            try{if(limiter!=null){permit=limiter.acquire(timeout);if(permit==null)throw new Failure("CAPABILITY_LIMITER_INVALID",409,false);}response=http.send(request,ignored->new BoundedBody(limit));sendStatus=response.statusCode()<400?"succeeded":"failed";}
+            finally{if(permit!=null)permit.close();var observer=callObserver;if(observer!=null)try{observer.accept(new CallObservation(path,(System.nanoTime()-sendStarted)/1_000_000.0,sendStatus));}catch(RuntimeException ignored){}}
+
             if ((response.statusCode() == 401 || response.statusCode() == 403) && path.equals("/internal/context/renew")) throw new Failure("CAPABILITY_RENEWAL_DENIED", 403, false);
             JsonNode envelope;
             try { envelope = JSON.readTree(response.body()); } catch (Exception ignored) { envelope = null; }
@@ -766,6 +798,7 @@ public final class CapabilityClient {
             return JSON.convertValue(envelope.get("data"), JSON.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
         } catch (Failure error) { throw error;
         } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new Failure("CANCELLED", 409, false);
+        } catch (java.io.IOException lost) { throw new ObservationLost();
         } catch (Exception ignored) { throw new Failure("CAPABILITY_RENEWAL_UNAVAILABLE", 503, true); }
     }
 
@@ -805,4 +838,18 @@ public final class CapabilityClient {
         public void onError(Throwable error) { result.completeExceptionally(error); }
         public void onComplete() { result.complete(bytes.toByteArray()); }
     }
+    /** Public conveniences retain this exact authenticated Run binding. */
+    public synchronized PublicCapabilities capabilities() {
+        Object value = context.get("task_id");
+        if (!(value instanceof String text) || text.isEmpty()) value = context.get("session_id");
+        if (!(value instanceof String text) || text.isEmpty()) value = context.get("request_id");
+        return new PublicCapabilities(this, value instanceof String text ? text : "");
+    }
+
+    private synchronized String checkpointScope() throws Failure {
+        Map<String, Object> scope = new LinkedHashMap<>(context);
+        scope.remove("platform_context_token"); scope.remove("trace_id");
+        return PublicCapabilities.digest(scope);
+    }
+
 }

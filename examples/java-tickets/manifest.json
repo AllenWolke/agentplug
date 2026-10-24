@@ -1,7 +1,7 @@
 {
   "manifest_version": "agent-manifest/v1",
   "agent_id": "example-java-tickets",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "execution_protocols": [
     "agent-execution/v2"
   ],
@@ -13,8 +13,8 @@
     "events"
   ],
   "schemas": {
-    "input": "schema://example-java-tickets/input/v2",
-    "output": "schema://example-java-tickets/output/v2",
+    "input": "schema://example-java-tickets/input/v3",
+    "output": "schema://example-java-tickets/output/v3",
     "event": "schema://agent-platform/event/v1",
     "checkpoint": "schema://agent-platform/checkpoint/v1"
   },
@@ -40,11 +40,13 @@
       "model.receipt",
       "skill.load:example.tickets.guidance",
       "tool.invoke:notify.self",
-      "tool.invoke:code.javascript"
+      "tool.invoke:code.javascript",
+      "knowledge.references.authorize"
     ],
     "harness": "harness-loop/v1; pinned evidence/Skill; inspect and optional notify_self/sandbox_javascript functions; notification and Code execution require independent approval; optional collaborate uses a fixed single-child documents.answer AgentGroup with current authority and durable gather recovery; child output is bounded untrusted support and is not fed into the ticket Harness; process-local execution transport remains L1; source not deployed or accepted",
     "route_task_types": [
       "tickets.draft"
-    ]
+    ],
+    "sdk_capabilities_version": "2.1.0"
   }
 }

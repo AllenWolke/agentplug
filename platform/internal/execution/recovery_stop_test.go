@@ -89,6 +89,8 @@ func TestExpiredOwnerRecoveryKeepsCommandAndReservationUntilStop(t *testing.T) {
 		t.Fatal("recovery passed remote stop but bypassed unsettled billing")
 	}
 	settled = true
+	// The failed attempt scheduled a backoff hint; expire it rather than sleep.
+	d.cancellationRetries = nil
 	d.reconcileCancellations(context.Background())
 	recovered, err := store.Get(running.ID)
 	if err != nil || recovered.Status != platformruntime.StatusRunning || recovered.LeaseToken != "" || string(recovered.RequestJSON) != string(running.RequestJSON) || gateway.invocations != 0 {

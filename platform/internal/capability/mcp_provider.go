@@ -1,6 +1,7 @@
 package capability
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,13 +21,15 @@ import (
 // MCPBinding is operator-owned configuration. Remote annotations and discovery
 // never register new capabilities or enlarge the caller's published tool policy.
 type MCPBinding struct {
-	Risk           string          `json:"risk,omitempty"`
-	TimeoutSeconds int             `json:"timeout_seconds,omitempty"`
-	ToolName       string          `json:"tool_name"`
-	RemoteName     string          `json:"remote_name"`
-	Endpoint       string          `json:"endpoint"`
-	SecretRef      string          `json:"secret_ref,omitempty"`
-	InputSchema    json.RawMessage `json:"input_schema"`
+	Effects          RemoteToolContract `json:"effect_contract"`
+	Risk             string             `json:"risk,omitempty"`
+	TimeoutSeconds   int                `json:"timeout_seconds,omitempty"`
+	ToolName         string             `json:"tool_name"`
+	RemoteName       string             `json:"remote_name"`
+	Endpoint         string             `json:"endpoint"`
+	SecretRef        string             `json:"secret_ref,omitempty"`
+	ReceiptSecretRef string             `json:"receipt_secret_ref,omitempty"`
+	InputSchema      json.RawMessage    `json:"input_schema"`
 }
 
 type mcpBoundTool struct {
@@ -55,6 +58,21 @@ func NewMCPToolProvider(bindings []MCPBinding, secrets modelgateway.SecretResolv
 	provider := &MCPToolProvider{tools: map[string]mcpBoundTool{}, secrets: secrets}
 	for _, binding := range bindings {
 		binding.InputSchema = append(json.RawMessage(nil), binding.InputSchema...)
+		if binding.Effects == (RemoteToolContract{}) {
+			binding.Effects = conservativeRemoteContract()
+		}
+		if binding.Effects.Validate() != nil || binding.Effects.ReceiptTool == binding.RemoteName {
+			return nil, errors.New("invalid MCP effect contract")
+		}
+		if binding.Effects.ReceiptTool != "" {
+			if binding.SecretRef != "" && (binding.ReceiptSecretRef == "" || binding.ReceiptSecretRef == binding.SecretRef) {
+				return nil, errors.New("MCP receipt query requires a separate read-only credential")
+			}
+			expected, err := canonicalSchemaHash(json.RawMessage(remoteReceiptInputSchema))
+			if err != nil || binding.Effects.ReceiptSchema != expected {
+				return nil, errors.New("MCP receipt query schema must match the platform protocol")
+			}
+		}
 		// Missing remote risk is writable. Remote discovery annotations cannot
 		// declare a tool safe or increase its operator-owned time allowance.
 		if binding.Risk == "" {
@@ -72,7 +90,7 @@ func NewMCPToolProvider(bindings []MCPBinding, secrets modelgateway.SecretResolv
 		if binding.ToolName == "" || len(binding.ToolName) > 128 || strings.TrimSpace(binding.ToolName) != binding.ToolName || provider.Supports(binding.ToolName) || (builtinToolProvider{}).Supports(binding.ToolName) {
 			return nil, errors.New("invalid or duplicate MCP binding")
 		}
-		if binding.SecretRef != "" && secrets == nil {
+		if (binding.SecretRef != "" || binding.ReceiptSecretRef != "") && secrets == nil {
 			return nil, errors.New("MCP secret resolver is required")
 		}
 		policy := policyasset.ToolPolicy{AllowedTools: []string{binding.ToolName}, Functions: []policyasset.FunctionDefinition{{Name: binding.RemoteName, ToolName: binding.ToolName, Parameters: binding.InputSchema}}}
@@ -87,6 +105,16 @@ func NewMCPToolProvider(bindings []MCPBinding, secrets modelgateway.SecretResolv
 		if err != nil {
 			return nil, err
 		}
+		// Bind recovery to the original provider/schema/credential references.
+		// Credentials themselves are neither hashed nor persisted here.
+		identity, _ := json.Marshal([]string{binding.ToolName, binding.RemoteName, binding.Endpoint, hash,
+			binding.SecretRef, binding.ReceiptSecretRef, binding.Effects.ReceiptTool, binding.Effects.ReceiptSchema})
+		digest := sha256.Sum256(identity)
+		frozen := hex.EncodeToString(digest[:])
+		if binding.Effects.BindingSHA256 != "" && binding.Effects.BindingSHA256 != frozen {
+			return nil, errors.New("MCP provider binding digest mismatch")
+		}
+		binding.Effects.BindingSHA256 = frozen
 		provider.tools[binding.ToolName] = mcpBoundTool{binding: binding, client: client, schemaHash: hash, policy: policy}
 	}
 	return provider, nil
@@ -131,6 +159,23 @@ func (p *MCPToolProvider) Invoke(ctx context.Context, command ToolCommand) (map[
 	if _, err = bound.policy.ValidateFunctionArguments(bound.binding.RemoteName, arguments); err != nil {
 		return nil, mcpNotSubmittedError{Err: err}
 	}
+	fingerprint, err := ToolCommandFingerprint(command.Name, command.Payload)
+	if err != nil {
+		return nil, mcpNotSubmittedError{Err: err}
+	}
+	identity, err := NewToolOperationIdentity(ToolReceiptQuery{Scope: command.Scope, Name: command.Name, CallID: command.CallID, Fingerprint: fingerprint})
+	if err != nil {
+		return nil, mcpNotSubmittedError{Err: err}
+	}
+	called, err := p.callRemote(ctx, bound, identity, bound.binding.RemoteName, bound.schemaHash, command.Payload)
+	if err != nil {
+		return nil, err
+	}
+	return mcpToolValue(command.Name, called)
+}
+
+func (p *MCPToolProvider) callRemote(ctx context.Context, bound mcpBoundTool, identity ToolOperationIdentity, remote, schema string, arguments any) (*mcp.CallToolResult, error) {
+	var err error
 	var secret []byte
 	if bound.binding.SecretRef != "" {
 		secret, err = p.secrets.ResolveSecret(ctx, bound.binding.SecretRef)
@@ -144,7 +189,7 @@ func (p *MCPToolProvider) Invoke(ctx context.Context, command ToolCommand) (map[
 		}()
 	}
 	client := *bound.client
-	client.Transport = mcpBoundTransport{base: bound.client.Transport, secret: secret}
+	client.Transport = mcpBoundTransport{base: bound.client.Transport, secret: secret, identity: identity}
 	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	// No roots, sampling, elicitation, autonomous follow-up or retry of a tool
@@ -166,14 +211,14 @@ func (p *MCPToolProvider) Invoke(ctx context.Context, command ToolCommand) (map[
 			return nil, mcpNotSubmittedError{Err: errors.New("MCP discovery unavailable")}
 		}
 		for _, tool := range listed.Tools {
-			if tool == nil || tool.Name != bound.binding.RemoteName {
+			if tool == nil || tool.Name != remote {
 				continue
 			}
 			if found {
 				return nil, mcpNotSubmittedError{Err: errors.New("duplicate MCP tool")}
 			}
 			hash, hashErr := canonicalSchemaHash(tool.InputSchema)
-			if hashErr != nil || hash != bound.schemaHash {
+			if hashErr != nil || hash != schema {
 				return nil, mcpNotSubmittedError{Err: errors.New("MCP schema changed")}
 			}
 			found = true
@@ -186,20 +231,93 @@ func (p *MCPToolProvider) Invoke(ctx context.Context, command ToolCommand) (map[
 	if !found || cursor != "" {
 		return nil, mcpNotSubmittedError{Err: errors.New("MCP tool not discoverable within configured bounds")}
 	}
-	called, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: bound.binding.RemoteName, Arguments: command.Payload})
+	called, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: remote, Arguments: arguments,
+		Meta: mcp.Meta{"agentplug.dev/operation": identity}})
 	if err != nil || called == nil {
 		// A dropped response does not establish that the remote tool did nothing.
 		return nil, errors.New("MCP call outcome is uncertain")
 	}
+	return called, nil
+}
+
+func mcpToolValue(name string, called *mcp.CallToolResult) (map[string]any, error) {
 	serialized, err := json.Marshal(called)
 	if err != nil || len(serialized) > 1<<20 {
 		return nil, errors.New("MCP receipt is invalid or too large")
 	}
 	var receipt map[string]any
-	if json.Unmarshal(serialized, &receipt) != nil {
+	decoder := json.NewDecoder(bytes.NewReader(serialized))
+	decoder.UseNumber()
+	if decoder.Decode(&receipt) != nil || decoder.Decode(new(any)) != io.EOF {
 		return nil, errors.New("MCP receipt is invalid")
 	}
-	return map[string]any{"protocol": "mcp", "tool": command.Name, "receipt": receipt}, nil
+	return map[string]any{"protocol": "mcp", "tool": name, "receipt": receipt}, nil
+}
+
+func (p *MCPToolProvider) DescribeRemoteTool(name string) (RemoteToolContract, bool) {
+	if p == nil {
+		return RemoteToolContract{}, false
+	}
+	bound, found := p.tools[name]
+	return bound.binding.Effects, found
+}
+
+func (p *MCPToolProvider) LookupToolReceipt(ctx context.Context, q ToolReceiptQuery) (map[string]any, bool, error) {
+	if p == nil {
+		return nil, false, nil
+	}
+	bound, found := p.tools[q.Name]
+	if !found {
+		return nil, false, nil
+	}
+	identity, err := NewToolOperationIdentity(q)
+	if err != nil {
+		return nil, false, err
+	}
+	contract := bound.binding.Effects
+	// Drift cannot silently reinterpret an existing side effect or authorize a
+	// new lookup tool. Only the exact durable operator-owned contract is used.
+	if q.RemoteContract == nil || *q.RemoteContract != contract || contract.Validate() != nil {
+		return nil, false, ErrToolInvocationConflict
+	}
+	if contract.ReceiptTool == "" {
+		return nil, false, nil
+	}
+	queryBound := bound
+	queryBound.binding.SecretRef = bound.binding.ReceiptSecretRef
+	called, err := p.callRemote(ctx, queryBound, identity, contract.ReceiptTool, contract.ReceiptSchema, identity)
+	if err != nil {
+		return nil, false, err
+	}
+	if called.IsError {
+		return nil, false, ErrToolResultUnknown
+	}
+	raw, err := json.Marshal(called.StructuredContent)
+	var receipt remoteToolReceipt
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if err != nil || len(raw) > 1<<20 || d.Decode(&receipt) != nil || d.Decode(new(any)) != io.EOF || receipt.Version != "remote-tool-receipt/v1" || receipt.Identity != identity {
+		return nil, false, ErrToolInvocationConflict
+	}
+	switch receipt.Status {
+	case "unknown", "not_found", "failed_final":
+		// A negative lookup never proves permission to resend the effect.
+		return nil, false, nil
+	case "succeeded":
+		var original mcp.CallToolResult
+		if len(receipt.ReceiptJSON) == 0 || len(receipt.ReceiptJSON) > 1<<20 || json.Unmarshal([]byte(receipt.ReceiptJSON), &original) != nil || original.IsError || original.NeedsInput() || original.Content == nil && original.StructuredContent == nil {
+			return nil, false, ErrToolInvocationConflict
+		}
+		var value map[string]any
+		decoder := json.NewDecoder(strings.NewReader(receipt.ReceiptJSON))
+		decoder.UseNumber()
+		if decoder.Decode(&value) != nil || value == nil || decoder.Decode(new(any)) != io.EOF {
+			return nil, false, ErrToolInvocationConflict
+		}
+		return map[string]any{"protocol": "mcp", "tool": q.Name, "receipt": value}, true, nil
+	default:
+		return nil, false, ErrToolInvocationConflict
+	}
 }
 
 func canonicalSchemaHash(schema any) (string, error) {
@@ -217,13 +335,21 @@ func canonicalSchemaHash(schema any) (string, error) {
 }
 
 type mcpBoundTransport struct {
-	base   http.RoundTripper
-	secret []byte
+	base     http.RoundTripper
+	secret   []byte
+	identity ToolOperationIdentity
 }
 
 func (t mcpBoundTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	request = request.Clone(request.Context())
 	request.Header = request.Header.Clone()
+	// The opaque identity is stable across attempts; passing it does not imply
+	// that an unqualified server implements idempotency. MCP discovery is read
+	// only and uses a different method from effect and receipt calls.
+	if t.identity.OperationID != "" {
+		request.Header.Set("X-AgentPlug-Operation-ID", t.identity.OperationID)
+		request.Header.Set("X-AgentPlug-Request-Digest", t.identity.RequestSHA256)
+	}
 	if len(t.secret) > 0 {
 		request.Header.Set("Authorization", "Bearer "+string(t.secret))
 	}

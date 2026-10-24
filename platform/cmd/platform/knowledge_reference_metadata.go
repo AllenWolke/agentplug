@@ -51,10 +51,13 @@ func enrichKnowledgeReferences(ctx context.Context, source selectedKnowledgeSour
 			return knowledge.ErrSourceCorrupt
 		}
 		delete(ref, "status") // Do not invent effective status for missing metadata.
-		for _, key := range []string{"title", "status", "effective_date", "valid_to", "authority_level", "topic_id", "raw_document_id", "raw_document_version", "raw_document_sha256", "parent_id", "section", "language", "page"} {
+		for _, key := range []string{"title", "status", "effective_date", "valid_to", "authority_level", "topic_id", "raw_document_id", "raw_document_version", "raw_document_sha256", "parent_id", "section", "section_id", "language", "page", "source_type", "source_url"} {
 			if value := document.Metadata[key]; value != "" {
 				ref[key] = value
 			}
+		}
+		if document.Metadata["synthetic"] == "true" {
+			ref["synthetic"] = true
 		}
 		for _, key := range []string{"institution_types", "report_types", "supersedes"} {
 			if value := document.Metadata[key]; value != "" {

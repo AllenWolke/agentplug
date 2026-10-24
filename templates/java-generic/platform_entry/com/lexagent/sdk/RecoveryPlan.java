@@ -355,7 +355,7 @@ public final class RecoveryPlan {
 
         private void observeLoad(PlannedStep planned, Map<String, Object> response,
                 long nowEpochSeconds) throws CapabilityClient.Failure {
-            if (response == null || !response.keySet().equals(java.util.Set.of("checkpoint", "state_key"))
+            if (response == null || !(response.keySet().equals(java.util.Set.of("checkpoint", "state_key"))||response.keySet().equals(java.util.Set.of("checkpoint","state_key","checkpoint_history")))
                     || !planned.stateKey.equals(response.get("state_key"))) throw rejected();
             Object rawCheckpoint = response.get("checkpoint");
             if (rawCheckpoint == null) {
@@ -388,7 +388,7 @@ public final class RecoveryPlan {
                 if (planned.originallyCaptured || start == null || !start.consumed()
                         || requestedRevision != 0 || exactLong(saved.get("revision")) != 1) throw rejected();
             }
-            Map<String, Object> nextResponse = Map.of("checkpoint", saved, "state_key", planned.stateKey);
+            Map<String,Object> nextResponse=new LinkedHashMap<>();nextResponse.put("checkpoint",saved);nextResponse.put("state_key",planned.stateKey);if(response.containsKey("checkpoint_history"))nextResponse.put("checkpoint_history",response.get("checkpoint_history"));
             planned.response = immutableMap(nextResponse);
             planned.checkpoint = immutableMap(saved);
             validateStepCheckpoint(planned, planned.checkpoint, nowEpochSeconds);
@@ -422,7 +422,7 @@ public final class RecoveryPlan {
         private Map<String, Object> validateCheckpointResponse(Map<String, Object> response,
                 String schemaId, String expectedStateKey, long nowEpochSeconds,
                 Object expectedRevision, Object expectedValue) throws CapabilityClient.Failure {
-            if (response == null || !response.keySet().equals(java.util.Set.of("checkpoint", "state_key"))
+            if (response == null || !(response.keySet().equals(java.util.Set.of("checkpoint", "state_key"))||response.keySet().equals(java.util.Set.of("checkpoint","state_key","checkpoint_history")))
                     || !(response.get("state_key") instanceof String stateKey)
                     || !stateKey.matches("[a-f0-9]{64}")
                     || (expectedStateKey != null && !expectedStateKey.equals(stateKey))) throw rejected();
@@ -431,7 +431,7 @@ public final class RecoveryPlan {
                     || !schemaId.equals(checkpoint.get("schema_id"))
                     || !(checkpoint.get("content_hash") instanceof String hash) || !hash.matches("[a-f0-9]{64}")
                     || exactLong(checkpoint.get("execution_revision")) != executionRevision
-                    || exactLong(checkpoint.get("revision")) < 1 || exactLong(checkpoint.get("revision")) > 64
+                    || exactLong(checkpoint.get("revision")) < 1 || exactLong(checkpoint.get("revision")) > CheckpointCapacity.replyLimit(response)
                     || !Instant.parse(string(checkpoint.get("expires_at"))).isAfter(Instant.ofEpochSecond(nowEpochSeconds)))
                 throw rejected();
             long expectedNext = exactLong(expectedRevision) + 1;

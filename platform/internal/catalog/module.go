@@ -33,18 +33,19 @@ type Module struct {
 type ControlAction string
 
 const (
-	ControlRead                 ControlAction = "read"
-	ControlManage               ControlAction = "manage"
-	ControlDeploy               ControlAction = "deploy"
-	ControlRequestable          ControlAction = "requestable.read"
-	ControlPromptTargets        ControlAction = "prompt.targets.read"
-	ControlToolTargets          ControlAction = "tool.targets.read"
-	ControlPolicyTargets        ControlAction = "policy.targets.read"
-	ControlAuthorizationTargets ControlAction = "authorization.targets.read"
-	ControlWorkloadTargets      ControlAction = "workload.targets.read"
-	ControlDelegationTargets    ControlAction = "delegation.targets.read"
-	ControlSubmit               ControlAction = "release.submit"
-	ControlApprove              ControlAction = "release.approve"
+	ControlRead                   ControlAction = "read"
+	ControlManage                 ControlAction = "manage"
+	ControlDeploy                 ControlAction = "deploy"
+	ControlRequestable            ControlAction = "requestable.read"
+	ControlPromptTargets          ControlAction = "prompt.targets.read"
+	ControlToolTargets            ControlAction = "tool.targets.read"
+	ControlPolicyTargets          ControlAction = "policy.targets.read"
+	ControlAuthorizationTargets   ControlAction = "authorization.targets.read"
+	ControlWorkloadTargets        ControlAction = "workload.targets.read"
+	ControlDelegationTargets      ControlAction = "delegation.targets.read"
+	ControlDepartmentAgentTargets ControlAction = "department.agent.targets.read"
+	ControlSubmit                 ControlAction = "release.submit"
+	ControlApprove                ControlAction = "release.approve"
 )
 
 // ControlActor is derived only from the trusted browser gateway headers. The
@@ -745,6 +746,8 @@ func (m *Module) installations(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			switch r.URL.Query().Get("purpose") {
+			case "department-access":
+				action = ControlDepartmentAgentTargets
 			case "authorization":
 				action = ControlAuthorizationTargets
 			case "workload":
@@ -788,20 +791,19 @@ func (m *Module) installations(w http.ResponseWriter, r *http.Request) {
 		}
 		var items []Installation
 		var err error
-		var nextCursor string
-		if permissionTargets {
-			if values := r.URL.Query()["after_id"]; len(values) > 1 || len(r.URL.Query().Get("after_id")) > 128 {
+		nextCursor := ""
+		if permissionTargets && action == ControlDepartmentAgentTargets {
+			pager, ok := m.store.(PermissionTargetPager)
+			if !ok {
+				m.writeError(w, http.StatusServiceUnavailable, "PERMISSION_DIRECTORY_UNAVAILABLE")
+				return
+			}
+			cursor := r.URL.Query().Get("cursor")
+			if len(r.URL.Query()["cursor"]) > 1 || len(cursor) > 256 || strings.TrimSpace(cursor) != cursor || strings.ContainsRune(cursor, '\x00') {
 				m.writeError(w, http.StatusBadRequest, "INVALID_CURSOR")
 				return
 			}
-			if pager, ok := m.store.(InstallationTargetPageReader); ok {
-				items, nextCursor, err = pager.PageInstallationTargets(r.Context(), scope.TenantID, scope.DepartmentID, scope.ApplicationID, r.URL.Query().Get("after_id"), limit)
-			} else if r.URL.Query().Get("after_id") != "" {
-				m.writeError(w, http.StatusServiceUnavailable, "CATALOG_LIST_UNAVAILABLE")
-				return
-			} else {
-				items, err = reader.ListInstallations(r.Context(), scope.TenantID, scope.DepartmentID, scope.ApplicationID, limit)
-			}
+			items, nextCursor, err = pager.PagePermissionTargets(r.Context(), scope.TenantID, scope.DepartmentID, scope.ApplicationID, cursor, limit)
 		} else {
 			items, err = reader.ListInstallations(r.Context(), scope.TenantID, scope.DepartmentID, scope.ApplicationID, limit)
 		}
@@ -818,7 +820,11 @@ func (m *Module) installations(w http.ResponseWriter, r *http.Request) {
 				}
 				projection = append(projection, metadata)
 			}
-			m.writeJSON(w, http.StatusOK, map[string]any{"items": projection, "next_cursor": nextCursor})
+			response := map[string]any{"items": projection}
+			if action == ControlDepartmentAgentTargets {
+				response["next_cursor"] = nextCursor
+			}
+			m.writeJSON(w, http.StatusOK, response)
 			return
 		}
 		m.writeJSON(w, http.StatusOK, map[string]any{"items": items})

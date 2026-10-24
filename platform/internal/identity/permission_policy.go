@@ -180,20 +180,10 @@ type DataObject struct {
 }
 
 func (s DataScope) Allows(subject string, resource ManagementScope, object DataObject) bool {
-	if s.Validate() != nil || !resource.Contains(object.Scope) {
+	if s.Validate() != nil {
 		return false
 	}
-	switch s.Type {
-	case "owner":
-		return object.OwnerID == subject
-	case "assigned_task":
-		return slices.Contains(object.AssignedTo, subject)
-	case "explicit_set":
-		return object.ID != "" && slices.Contains(s.IDs, object.ID)
-	case "approved_organization":
-		return true
-	}
-	return false
+	return s.allowsValidated(subject, resource, object, nil)
 }
 
 type DelegatedResource struct {
@@ -288,7 +278,7 @@ func BuiltinPermissionActions() []PermissionAction {
 	var result []PermissionAction
 	result = append(result, PermissionAction{Code: "skill.load", ResourceType: "skill"})
 	result = append(result, PermissionAction{Code: "agent.delegate", ResourceType: "agent_installation"})
-	for _, code := range []string{"organization.manage", "membership.manage", "principal.read", "principal.disable", "authorization.read", "authorization.change", "access_request.decide", "administrator.appoint", "delegation.manage", "platform.monitor", "model.configure", "catalog.manage", "agent.develop", "agent.debug", "evaluation.run", "release.submit", "release.approve", "prompt.manage", "tool.manage", "policy.manage", "machine.manage", "audit.metadata.read", "catalog.requestable.read"} {
+	for _, code := range []string{"organization.manage", "membership.manage", "principal.read", "principal.disable", "authorization.read", "authorization.change", "department.agent_access.manage", "access_request.decide", "administrator.appoint", "delegation.manage", "platform.monitor", "model.configure", "catalog.manage", "agent.develop", "agent.debug", "evaluation.run", "release.submit", "release.approve", "prompt.manage", "tool.manage", "policy.manage", "machine.manage", "audit.metadata.read", "catalog.requestable.read"} {
 		result = append(result, PermissionAction{Code: code, Management: true, Sensitive: code == "administrator.appoint" || code == "delegation.manage"})
 	}
 	for _, code := range []string{"discover", "run", "cancel", "history.read", "history.continue", "history.revise", "history.regenerate", "history.share", "history.export", "history.delete.request", "business.review", "business.content.read", "audit.content.read", "audit.export", "knowledge.search", "tool.invoke", "model.generate", "model.embed", "memory.read", "memory.write"} {
@@ -314,6 +304,7 @@ func BuiltinRoleDefinitions() []RoleDefinition {
 	app := []string{"application", "agent_installation"}
 	org := []string{"tenant", "department", "application"}
 	return []RoleDefinition{
+		{Code: "department_admin", Version: 3, Name: "部门 Agent 管理员", ScopeTypes: []string{"department"}, Actions: []string{"membership.manage", "principal.read", "authorization.read", "department.agent_access.manage", "access_request.decide"}, Assignable: true},
 		// A new immutable version for ordinary Agent use. It cannot activate a
 		// previously stored share/export Grant when a user receives this package.
 		{Code: "operator", Version: 2, Name: "Agent使用者", ScopeTypes: app, Actions: []string{"discover", "run", "cancel", "history.read", "history.continue", "knowledge.search", "tool.invoke", "model.generate", "model.embed", "memory.read", "memory.write"}, Assignable: true},
@@ -362,28 +353,32 @@ func BuiltinIdentityPresets() []IdentityPreset {
 		}
 		result = append(result, IdentityPreset{Code: role.Code, Version: 2, Name: role.Name, RoleCode: role.Code, RoleVersion: role.Version, SubjectType: PrincipalUser, ScopeTypes: role.ScopeTypes, DataScope: DataScope{Type: "owner"}, AppointmentOnly: role.Code == "tenant_admin"})
 	}
+	result = append(result, IdentityPreset{Code: "department_admin", Version: 3, Name: "部门 Agent 管理员", RoleCode: "department_admin", RoleVersion: 3, SubjectType: PrincipalUser, ScopeTypes: []string{"department"}, DataScope: DataScope{Type: "owner"}})
 	return result
 }
 
 type PermissionSnapshot struct {
-	Principal               Principal               `json:"principal"`
-	Mode                    string                  `json:"policy_mode"`
-	Memberships             []Membership            `json:"memberships"`
-	Bindings                []RoleBinding           `json:"role_bindings"`
-	Roles                   []RoleDefinition        `json:"role_definitions"`
-	Grants                  []Grant                 `json:"resource_grants"`
-	Delegations             []Delegation            `json:"delegations"`
-	Assignments             []TaskAssignment        `json:"task_assignments,omitempty"`
-	DepartmentAgentPolicies []DepartmentAgentPolicy `json:"department_agent_policies,omitempty"`
+	AgentPackages           []DepartmentAgentPackage `json:"agent_use_packages,omitempty"`
+	Principal               Principal                `json:"principal"`
+	Mode                    string                   `json:"policy_mode"`
+	Memberships             []Membership             `json:"memberships"`
+	Bindings                []RoleBinding            `json:"role_bindings"`
+	Roles                   []RoleDefinition         `json:"role_definitions"`
+	Grants                  []Grant                  `json:"resource_grants"`
+	Delegations             []Delegation             `json:"delegations"`
+	Assignments             []TaskAssignment         `json:"task_assignments,omitempty"`
+	DepartmentAgentPolicies []DepartmentAgentPolicy  `json:"department_agent_policies,omitempty"`
 }
 
 type PermissionQuery struct {
-	Action       string          `json:"action"`
-	Scope        ManagementScope `json:"scope"`
-	ResourceType string          `json:"resource_type,omitempty"`
-	ResourceID   string          `json:"resource_id,omitempty"`
-	Object       *DataObject     `json:"object,omitempty"`
-	Now          time.Time       `json:"-"`
+	PublishedAgentVersionID string          `json:"-"`
+	RequirePublishedVersion bool            `json:"-"`
+	Action                  string          `json:"action"`
+	Scope                   ManagementScope `json:"scope"`
+	ResourceType            string          `json:"resource_type,omitempty"`
+	ResourceID              string          `json:"resource_id,omitempty"`
+	Object                  *DataObject     `json:"object,omitempty"`
+	Now                     time.Time       `json:"-"`
 }
 
 type PermissionDecision struct {
@@ -477,6 +472,7 @@ func EvaluatePermission(snapshot PermissionSnapshot, q PermissionQuery) (Permiss
 	if q.ResourceType != action.ResourceType || q.ResourceID == "" {
 		return PermissionDecision{}, ErrInvalidResource
 	}
+	packageDenyReason := ""
 	for _, g := range snapshot.Grants {
 		if g.Status != "active" || g.SubjectID != snapshot.Principal.ID || g.SubjectType != snapshot.Principal.Type || g.Action != q.Action || g.ResourceType != q.ResourceType || g.ResourceID != q.ResourceID || !g.Validity.Effective(q.Now) {
 			continue
@@ -511,6 +507,14 @@ func EvaluatePermission(snapshot PermissionSnapshot, q PermissionQuery) (Permiss
 		if g.Effect != "allow" {
 			return PermissionDecision{}, ErrInvalidResource
 		}
+		if !agentPackageAllowsGrant(snapshot, g, q.Now) {
+			packageDenyReason = "AGENT_PACKAGE_APPROVAL_REQUIRED"
+			continue
+		}
+		if hasAgentPackageStamp(g) && (q.RequirePublishedVersion && q.PublishedAgentVersionID == "" || q.PublishedAgentVersionID != "" && !agentPackageMatchesVersion(snapshot, g, q.PublishedAgentVersionID)) {
+			packageDenyReason = "AGENT_PACKAGE_STALE"
+			continue
+		}
 		if !departmentAgentGrantSourceEffective(snapshot, g) {
 			continue
 		}
@@ -518,6 +522,9 @@ func EvaluatePermission(snapshot PermissionSnapshot, q PermissionQuery) (Permiss
 		decision.DataScopes = append(decision.DataScopes, g.DataScope)
 	}
 	if len(decision.GrantIDs) == 0 {
+		if packageDenyReason != "" {
+			return deny(packageDenyReason)
+		}
 		return deny("RESOURCE_GRANT_REQUIRED")
 	}
 	if reason := departmentAgentBlockReason(snapshot, q); reason != "" {
@@ -539,6 +546,8 @@ func PermissionSnapshotDigest(snapshot PermissionSnapshot) (string, error) {
 	snapshot.Delegations = append([]Delegation(nil), snapshot.Delegations...)
 	snapshot.Roles = append([]RoleDefinition(nil), snapshot.Roles...)
 	snapshot.Assignments = append([]TaskAssignment(nil), snapshot.Assignments...)
+	snapshot.AgentPackages = append([]DepartmentAgentPackage(nil), snapshot.AgentPackages...)
+	slices.SortFunc(snapshot.AgentPackages, func(a, b DepartmentAgentPackage) int { return strings.Compare(a.ID, b.ID) })
 	snapshot.DepartmentAgentPolicies = append([]DepartmentAgentPolicy(nil), snapshot.DepartmentAgentPolicies...)
 	for i := range snapshot.DepartmentAgentPolicies {
 		snapshot.DepartmentAgentPolicies[i].Entries = normalizedDepartmentAgentEntries(snapshot.DepartmentAgentPolicies[i].Entries)
@@ -598,7 +607,7 @@ func EffectivePermissionSnapshotDigest(snapshot PermissionSnapshot, now time.Tim
 		}
 	}
 	for _, value := range snapshot.Grants {
-		if value.Status == "active" && value.Validity.Effective(now) {
+		if value.Status == "active" && value.Validity.Effective(now) && (value.Effect != "allow" || agentPackageAllowsGrant(snapshot, value, now)) {
 			active.Grants = append(active.Grants, value.ID)
 		}
 	}
@@ -631,4 +640,25 @@ func EffectivePermissionSnapshotDigest(snapshot PermissionSnapshot, now time.Tim
 	}
 	hash := sha256.Sum256(raw)
 	return hex.EncodeToString(hash[:]), nil
+}
+
+func (s DataScope) allowsValidated(subject string, resource ManagementScope, object DataObject, ids map[string]struct{}) bool {
+	if !resource.Contains(object.Scope) {
+		return false
+	}
+	switch s.Type {
+	case "owner":
+		return object.OwnerID == subject
+	case "assigned_task":
+		return slices.Contains(object.AssignedTo, subject)
+	case "explicit_set":
+		if ids != nil {
+			_, found := ids[object.ID]
+			return object.ID != "" && found
+		}
+		return object.ID != "" && slices.Contains(s.IDs, object.ID)
+	case "approved_organization":
+		return true
+	}
+	return false
 }

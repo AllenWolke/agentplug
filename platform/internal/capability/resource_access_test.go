@@ -42,6 +42,44 @@ func (f *resourceAuthorityFixture) AuthorizeCapabilityResource(_ context.Context
 
 type runOnlyAuthorityFixture struct{}
 
+type joinedResourceAuthorityFixture struct {
+	resourceAuthorityFixture
+}
+
+func (f *joinedResourceAuthorityFixture) AuthorizeCapability(context.Context, sharedkernel.Scope, string, string, string) error {
+	return errors.New("unexpected separate run check")
+}
+
+func (f *joinedResourceAuthorityFixture) AuthorizeCapabilityResource(context.Context, sharedkernel.Scope, CapabilityResourceAccess) error {
+	return errors.New("unexpected separate resource check")
+}
+
+func (f *joinedResourceAuthorityFixture) AuthorizeCapabilityAndResource(ctx context.Context, scope sharedkernel.Scope, operation, body, policy string, access CapabilityResourceAccess) (string, error) {
+	if operation != "invoke" || len(body) != 64 || len(policy) != 64 {
+		return "RUN_AUTHORITY", errors.New("signed binding lost")
+	}
+	return "RESOURCE_AUTHORITY", f.resourceAuthorityFixture.AuthorizeCapabilityResource(ctx, scope, access)
+}
+
+func TestCombinedCapabilityAuthorityKeepsIndependentBeforeAndAfterChecks(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newTestModule("internal-token", "signing-secret", public, "platform", "agent-runtime")
+	c := capabilityContext()
+	c.PlatformContextToken = signedContextToken(t, private, c, time.Now().Unix()-1, time.Now().Unix()+120)
+	f := &joinedResourceAuthorityFixture{}
+	m.SetLiveExecutionAuthority(f)
+	if result := capabilityRequest(t, m, "/internal/model/embed", c, map[string]any{"texts": []string{"joined"}}); result.Code != http.StatusOK || f.calls != 2 {
+		t.Fatal("joined path skipped a full live fence", result.Code, f.calls)
+	}
+	f.denied = true
+	if result := capabilityRequest(t, m, "/internal/model/embed", c, map[string]any{"texts": []string{"revoked"}}); result.Code != http.StatusForbidden || f.calls != 3 {
+		t.Fatal("joined authority was cached across calls", result.Code, f.calls)
+	}
+}
+
 func (runOnlyAuthorityFixture) AuthorizeCapability(context.Context, sharedkernel.Scope, string, string, string) error {
 	return nil
 }
@@ -58,6 +96,7 @@ func TestCapabilityResourceActionsAreDerivedFromActualRouteAndInput(t *testing.T
 		{"/internal/model/embed", `{}`, "model.embed", "model", "model-a"},
 		{"/internal/tool/invoke", `{"name":"actual-tool"}`, "tool.invoke", "tool", "actual-tool"},
 		{"/internal/knowledge/search", `{"knowledge_scope":"actual-knowledge"}`, "knowledge.search", "knowledge", "actual-knowledge"},
+		{"/internal/knowledge/search/recovery", `{"knowledge_scope":"actual-knowledge"}`, "knowledge.search", "knowledge", "actual-knowledge"},
 		{"/internal/knowledge/answer", `{"knowledge_scope":"actual-knowledge"}`, "knowledge.search", "knowledge", "actual-knowledge"},
 		{"/internal/knowledge/replay", `{"request_id":"original"}`, "knowledge.search", "knowledge", "context-scope"},
 		{"/internal/memory/access", `{"operation":" LOAD "}`, "memory.read", "memory", "memory-a"},

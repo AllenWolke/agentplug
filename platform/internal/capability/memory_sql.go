@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lexagent/platform/internal/sharedkernel"
 	"github.com/lexagent/platform/internal/sqlutil"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 type SQLMemoryStore struct {
 	db             *sql.DB
 	authorityGuard func(context.Context, *sql.Tx) error
+	executionGuard func(context.Context, *sql.Tx, sharedkernel.Scope) error
 	cancellation   *memoryCancellation
 }
 
@@ -96,6 +98,7 @@ func (s *SQLMemoryStore) save(ctx context.Context, key string, entry memoryEntry
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	ctx = sqlutil.WithContinuityTransaction(ctx, s.db, tx)
 	if s.cancellation != nil && s.cancellation.bind != nil {
 		mutation, ok := ctx.Value(memoryMutationKey{}).(memoryMutation)
 		if !ok || mutation.Scope.ValidateTrusted() != nil {
@@ -107,7 +110,7 @@ func (s *SQLMemoryStore) save(ctx context.Context, key string, entry memoryEntry
 		}
 	}
 	if check != nil {
-		if err := s.authorityGuard(ctx, tx); err != nil {
+		if err := s.lockAuthorizationContinuity(ctx, tx); err != nil {
 			return errors.Join(errMemoryContinuityUnavailable, err)
 		}
 		if err := check(ctx); err != nil {

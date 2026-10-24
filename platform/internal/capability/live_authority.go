@@ -18,6 +18,15 @@ type LiveExecutionAuthority interface {
 	AuthorizeCapability(context.Context, sharedkernel.Scope, string, string, string) error
 }
 
+// CapabilityAdmissionFactRechecker provides the response fence for the exact
+// request whose entry authorization produced facts. Implementations must read
+// mutable Run/lease/ancestry/IAM state again and may reuse permission snapshots
+// only when their authorization epoch is unchanged.
+type CapabilityAdmissionFactRechecker interface {
+	RecheckCapabilityAndResource(context.Context, sharedkernel.Scope, string, string, string,
+		CapabilityResourceAccess, *CapabilityAdmissionFacts) error
+}
+
 // StopOnlyExecutionAuthority authenticates the signed command against its
 // current execution generation without consulting live IAM or catalog grants.
 // It is reserved for cancelling a previously admitted child edge.
@@ -65,6 +74,7 @@ func (m *Module) SetLiveExecutionAuthority(authority LiveExecutionAuthority) {
 }
 
 func (m *Module) validateLiveAuthority(ctx context.Context, op envelope) error {
+	defer capabilityPhase(ctx, "authority.live_entry")()
 	if m.liveAuthority == nil {
 		return errors.New("live execution authority unavailable")
 	}
@@ -72,27 +82,78 @@ func (m *Module) validateLiveAuthority(ctx context.Context, op envelope) error {
 	// 身份、签名和有效期已由 validateContext 检查，此处只读取已验证的绑定字段。
 	claims, err := signedExecutionClaims(op.Context)
 	if err != nil {
-		return err
+		return &capabilityStageError{stage: "SIGNED_EXECUTION", cause: err}
 	}
 	ctx = sharedkernel.WithExecutionLease(ctx, claims.lease())
 	if m.policy != nil && op.Policy.Hash != claims.PolicyHash {
-		return errors.New("signed policy snapshot denied")
+		return &capabilityStageError{stage: "SIGNED_POLICY", cause: errors.New("signed policy snapshot denied")}
 	}
 	c := op.Context
 	scope := sharedkernel.Scope{TenantID: c.TenantID, DepartmentID: c.DepartmentID, ApplicationID: c.ApplicationID, AgentInstanceID: c.AgentInstanceID, AgentID: c.AgentID, PrincipalType: c.PrincipalType, PrincipalID: c.ActorID, InstallationID: c.InstallationID, AgentVersionID: c.AgentVersionID, SessionID: c.SessionID, RunID: c.TaskID, ParentRunID: c.ParentRunID, AuthorizationEpoch: c.AuthorizationEpoch, TraceID: c.TraceID}
-	if err := m.liveAuthority.AuthorizeCapability(ctx, scope, claims.Actions[0], claims.BodyHash, claims.PolicyHash); err != nil {
-		return err
+	joined, joinsResource := m.liveAuthority.(interface {
+		AuthorizeCapabilityAndResource(context.Context, sharedkernel.Scope, string, string, string, CapabilityResourceAccess) (string, error)
+	})
+	if joinsResource && op.ResourceAccess.Action != "" {
+		if stage, err := joined.AuthorizeCapabilityAndResource(ctx, scope, claims.Actions[0], claims.BodyHash, claims.PolicyHash, op.ResourceAccess); err != nil {
+			if stage != "RUN_AUTHORITY" && stage != "RESOURCE_AUTHORITY" {
+				stage = "RUN_AUTHORITY"
+			}
+			return &capabilityStageError{stage: stage, cause: err}
+		}
+	} else if err := m.liveAuthority.AuthorizeCapability(ctx, scope, claims.Actions[0], claims.BodyHash, claims.PolicyHash); err != nil {
+		return &capabilityStageError{stage: "RUN_AUTHORITY", cause: err}
 	}
-	if op.ResourceAccess.Action != "" {
+	if !joinsResource && op.ResourceAccess.Action != "" {
 		authority, ok := m.liveAuthority.(CapabilityResourceAuthority)
 		if !ok {
-			return errors.New("capability resource authority unavailable")
+			return &capabilityStageError{stage: "RESOURCE_AUTHORITY", cause: errors.New("capability resource authority unavailable")}
 		}
 		if err := authority.AuthorizeCapabilityResource(ctx, scope, op.ResourceAccess); err != nil {
-			return err
+			return &capabilityStageError{stage: "RESOURCE_AUTHORITY", cause: err}
 		}
 	}
-	return m.recheckWorkloadProof(ctx, scope)
+	if err := m.recheckWorkloadProof(ctx, scope); err != nil {
+		return &capabilityStageError{stage: "WORKLOAD_PROOF", cause: err}
+	}
+	return nil
+}
+
+func (m *Module) validateLiveAuthorityWithFacts(ctx context.Context, op envelope, facts *capabilityAdmissionFacts) error {
+	defer capabilityPhase(ctx, "authority.live_recheck")()
+	if m.liveAuthority == nil || facts == nil {
+		return errors.New("request capability admission facts unavailable")
+	}
+	claims, err := signedExecutionClaims(op.Context)
+	if err != nil {
+		return &capabilityStageError{stage: "SIGNED_EXECUTION", cause: err}
+	}
+	c := op.Context
+	scope := sharedkernel.Scope{TenantID: c.TenantID, DepartmentID: c.DepartmentID, ApplicationID: c.ApplicationID,
+		AgentInstanceID: c.AgentInstanceID, AgentID: c.AgentID, PrincipalType: c.PrincipalType, PrincipalID: c.ActorID,
+		InstallationID: c.InstallationID, AgentVersionID: c.AgentVersionID, SessionID: c.SessionID, RunID: c.TaskID,
+		ParentRunID: c.ParentRunID, AuthorizationEpoch: c.AuthorizationEpoch, TraceID: c.TraceID}
+	factsScope, epoch, _, _, _, _, ok := facts.SnapshotValues()
+	if !ok || factsScope != scope || epoch != scope.AuthorizationEpoch || op.Policy.Hash != claims.PolicyHash {
+		return &capabilityStageError{stage: "SIGNED_POLICY", cause: errors.New("request capability admission facts mismatch")}
+	}
+	rechecker, ok := m.liveAuthority.(CapabilityAdmissionFactRechecker)
+	if !ok {
+		// Adapters that do not yet implement the optimized fence retain the old
+		// complete check. A missing optimization must never become an allow.
+		return m.validateLiveAuthority(ctx, op)
+	}
+	if _, exists := ctx.Value(workloadCredentialKey{}).(workloadCredentialProof); !exists {
+		return &capabilityStageError{stage: "WORKLOAD_PROOF", cause: errors.New("request workload proof unavailable")}
+	}
+	ctx = sharedkernel.WithExecutionLease(ctx, claims.lease())
+	if err := rechecker.RecheckCapabilityAndResource(ctx, scope, claims.Actions[0], claims.BodyHash,
+		claims.PolicyHash, op.ResourceAccess, facts); err != nil {
+		return &capabilityStageError{stage: "RUN_AUTHORITY", cause: err}
+	}
+	if err := m.recheckWorkloadProof(ctx, scope); err != nil {
+		return &capabilityStageError{stage: "WORKLOAD_PROOF", cause: err}
+	}
+	return nil
 }
 
 func (m *Module) authorizeStopOnlyExecution(ctx context.Context, op envelope) (sharedkernel.ExecutionLeaseBinding, string, error) {

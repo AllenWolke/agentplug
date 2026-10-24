@@ -13,7 +13,7 @@ const NotificationCompensationProvider = "platform.notification"
 
 type CompensationPort struct {
 	store           *SQLStore
-	coordinator     compensation.EffectRegistry
+	coordinator     compensation.EffectLedger
 	channel         RevocableChannel
 	action, version string
 }
@@ -21,7 +21,7 @@ type CompensationPort struct {
 // The controlled inbox is immediately usable by the normal notification
 // Dispatcher. Its inverse additionally requires the exact coordinator lease
 // and original message binding in the same SQL transaction.
-func NewCompensatingInbox(ctx context.Context, db *sql.DB, coordinator compensation.EffectRegistry, action string) (*SQLInboxChannel, *CompensationPort, error) {
+func NewCompensatingInbox(ctx context.Context, db *sql.DB, coordinator compensation.EffectLedger, action string) (*SQLInboxChannel, *CompensationPort, error) {
 	if db == nil || coordinator == nil || (action != "withdraw" && action != "correct") {
 		return nil, nil, compensation.ErrInvalid
 	}

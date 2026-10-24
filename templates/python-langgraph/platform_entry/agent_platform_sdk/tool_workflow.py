@@ -48,7 +48,8 @@ _dispatch: ContextVar[_Dispatch | None] = ContextVar("governed_graph_tool_dispat
 
 
 async def run_tool_operation(client, name: str, payload: dict, *, key: str,
-                             timeout: float = 30, execute_approved: bool = True) -> dict:
+                             timeout: float = 30, execute_approved: bool = True,
+                             recovery_only: bool = False) -> dict:
     """Run one deterministic tool operation or return a safe approval pause.
 
     A dispatch intent is committed before invocation. After a lost reply only
@@ -57,12 +58,18 @@ async def run_tool_operation(client, name: str, payload: dict, *, key: str,
     """
     if (not isinstance(name, str) or re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", name) is None
             or not isinstance(key, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", key) is None
-            or not isinstance(payload, dict)):
+            or not isinstance(payload, dict) or type(recovery_only) is not bool):
         raise DomainExecutionError("INVALID_REQUEST")
     run_id = getattr(client._context, "task_id", "")
+    # task_id is the trusted platform RunID, not a reusable business task ID.
+    if not isinstance(run_id, str) or not run_id or len(run_id) > 128 or run_id.strip() != run_id:
+        raise DomainExecutionError("INVALID_REQUEST")
     canonical = _json([run_id, name, payload, key])
     digest = hashlib.sha256(canonical.encode()).hexdigest()
-    call_id = "wf-" + digest
+    # A changed request must conflict with the same intent, never acquire a new
+    # external identity. The independent input_hash above still binds all args.
+    intent = _json(["tool-intent/v1", run_id, key])
+    call_id = "wf-" + hashlib.sha256(intent.encode()).hexdigest()
     operation = {"name": name, "call_id": call_id, "payload": copy.deepcopy(payload),
                  "model_call_id": call_id, "run_id": run_id}
     loaded = await client.load_checkpoint("harness", key, STATE_SCHEMA, timeout=timeout)
@@ -79,6 +86,10 @@ async def run_tool_operation(client, name: str, payload: dict, *, key: str,
                 or state.get("phase") not in {"tool", "tool_dispatch", "approval_required", "done"}
                 or state.get("pending") != ([] if state.get("phase") == "done" else [operation])):
             raise _deny()
+    if recovery_only and state["phase"] not in {"done", "tool_dispatch"}:
+        # Receipt recovery after a parent deadline cannot dispatch an operation
+        # that has no saved send boundary, including an approved-but-unsent one.
+        raise GatewayError("TOOL_OPERATION_NOT_DISPATCHED", "read-only receipt recovery requires saved dispatch")
     async def save():
         nonlocal revision
         receipt = await client.save_checkpoint("harness", key, STATE_SCHEMA, copy.deepcopy(state),
@@ -181,16 +192,29 @@ class GraphToolApproval:
     async def execute(self, request: ExecuteRequest, client, work) -> ExecuteResponse:
         binding = _Dispatch(request)
         resume = request.resume_input or {}
+        runtime_refs = None
+        runtime = resume.get("version") in {"runtime-recovery/v1", "runtime-recovery/v2"}
+        approval = resume
+        if runtime and "confirmation_token" in resume:
+            from .checkpoint_reference_set import runtime_parts
+            identity = ExecutionLifecycle._identity(request)
+            generation = json.loads(identity.key)
+            _, runtime_refs, group = await runtime_parts(request, client, identity, generation[1])
+            marker = resume.get("tool_resume")
+            if group is not None or not isinstance(marker, dict):
+                raise _deny()
+            approval = {"confirmation_token": resume["confirmation_token"],
+                        "handoff": marker["handoff"], "checkpoint": marker["checkpoint"]}
         if "confirmation_token" in resume:
-            if (request.operation != "resume" or set(resume) != {"confirmation_token", "handoff", "checkpoint"}
+            if (request.operation != "resume" or set(approval) != {"confirmation_token", "handoff", "checkpoint"}
                     or self.registry.has_other_active_generation(request)):
                 raise _deny()
             token = resume["confirmation_token"]
             if not isinstance(token, str) or not token or len(token.encode()) > 8192:
                 raise _deny()
             try:
-                handoff = HandlerHandoff.model_validate(resume["handoff"])
-                reference = resume["checkpoint"]
+                handoff = HandlerHandoff.model_validate(approval["handoff"])
+                reference = approval["checkpoint"]
                 identity = ExecutionLifecycle._identity(request)
                 generation = json.loads(identity.key)
                 sequence_base, _ = generation_sequence_range(generation[1])
@@ -206,6 +230,13 @@ class GraphToolApproval:
                         or re.fullmatch(r"[a-f0-9]{64}", reference["content_hash"]) is None
                         or reference["schema_id"] != STATE_SCHEMA or reference["execution_revision"] != handoff.execution_revision):
                     raise _deny()
+                if runtime_refs is not None:
+                    from .recovery_context import checkpoint_state_key
+                    expected = checkpoint_state_key(request.scope, "harness", handoff.harness_key)
+                    matches = [cp for cp in runtime_refs if cp["state_key"] == expected]
+                    if len(matches) != 1 or any(matches[0][field] != reference[field] for field in
+                            ("revision", "schema_id", "content_hash", "execution_revision")):
+                        raise _deny()
                 loaded = await client.load_checkpoint("harness", handoff.harness_key, STATE_SCHEMA)
                 cp = loaded.get("checkpoint")
                 value = cp.get("value") if isinstance(cp, dict) else None
@@ -268,3 +299,50 @@ class GraphToolApproval:
             origin_operation=pending[3], harness_key=pending[1]["harness_key"],
             tool_name=pending[1]["tool_name"], call_id=pending[1]["call_id"], last_event_seq=pending[2])
         return response.model_copy(update={"handoff": receipt})
+
+
+def graph_tool_resume_input(request: ExecuteRequest) -> dict | None:
+    """Redact the bearer token before any LangGraph resume value is persisted."""
+    binding = _dispatch.get()
+    if binding is None or binding.request is not request or not binding.approved_key:
+        return None
+    return {"kind": "tool_confirmation", "harness_key": binding.approved_key,
+            "tool_name": binding.approved_name, "call_id": binding.approved_call}
+
+
+async def recover_graph_tool_interrupt(request, client, interrupts):
+    """Resume only the exact approval slot or a receipt reconciliation slot."""
+    values = [getattr(item, "value", None) for item in interrupts]
+    candidates = [value for value in values if isinstance(value, dict) and value.get("kind") == "tool_confirmation"]
+    if not candidates:
+        if "confirmation_token" in (request.resume_input or {}): raise _deny()
+        return None
+    if len(values) != 1 or len(candidates) != 1:
+        raise _deny()
+    value = candidates[0]
+    if set(value) != {"kind", "harness_key", "tool_name", "call_id"}:
+        raise _deny()
+    approved = graph_tool_resume_input(request)
+    if approved is not None:
+        if approved != value: raise _deny()
+        return approved
+    if "confirmation_token" in (request.resume_input or {}): raise _deny()
+    loaded = await client.load_checkpoint("harness", value["harness_key"], STATE_SCHEMA)
+    cp = loaded.get("checkpoint")
+    state = cp.get("value") if isinstance(cp, dict) else None
+    if (not isinstance(state, dict) or state.get("version") != "harness-loop/v1"
+            or state.get("driver") != "tool-operation/v1"):
+        raise _deny()
+    if state.get("phase") == "done":
+        observation = state.get("receipt", {}).get("observation", {})
+        if (state.get("pending") != [] or observation.get("tool_name") != value["tool_name"]
+                or observation.get("call_id") != value["call_id"] or observation.get("effect") != "completed"):
+            raise _deny()
+        return value
+    if state.get("phase") == "tool_dispatch":
+        pending = state.get("pending")
+        if (isinstance(pending, list) and len(pending) == 1
+                and pending[0].get("name") == value["tool_name"] and pending[0].get("call_id") == value["call_id"]):
+            return value  # run_tool_operation reads the receipt; it cannot resend.
+    raise _deny()
+

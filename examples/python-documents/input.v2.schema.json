@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://example-python-documents/input/v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "question"
+  ],
+  "properties": {
+    "question": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "top_k": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "default": 3
+    },
+    "cache_mode": {
+      "type": "string",
+      "enum": [
+        "use",
+        "cold",
+        "bypass"
+      ],
+      "default": "use"
+    },
+    "workflow_mode": {
+      "type": "string",
+      "enum": [
+        "direct",
+        "tool_loop"
+      ],
+      "default": "direct"
+    },
+    "notify_me": {
+      "type": "boolean",
+      "default": false,
+      "description": "Explicitly request an independently approved notification to the current caller; requires workflow_mode=tool_loop"
+    },
+    "sandbox_check": {
+      "type": "boolean",
+      "default": false,
+      "description": "Allow the optional Function Harness to request independently approved, read-only Python analysis; requires workflow_mode=tool_loop"
+    },
+    "collaborate": {
+      "type": "boolean",
+      "default": false,
+      "description": "Optionally request the fixed operations.diagnosis AgentGroup; target, operation and child endpoint are not caller-selectable"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "notify_me"
+        ],
+        "properties": {
+          "notify_me": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "workflow_mode"
+        ],
+        "properties": {
+          "workflow_mode": {
+            "const": "tool_loop"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "sandbox_check"
+        ],
+        "properties": {
+          "sandbox_check": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "workflow_mode"
+        ],
+        "properties": {
+          "workflow_mode": {
+            "const": "tool_loop"
+          }
+        }
+      }
+    }
+  ]
+}

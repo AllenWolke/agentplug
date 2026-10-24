@@ -9,7 +9,7 @@ export const actionLabels = Object.freeze({
   "history.share": "分享会话历史", "history.export": "导出会话历史", "history.delete.request": "申请删除会话历史",
   "business.review": "审核业务事项", "business.content.read": "查看业务内容", "audit.content.read": "查看审计内容", "audit.export": "导出审计记录",
   "knowledge.search": "检索知识库", "tool.invoke": "调用工具", "model.generate": "生成模型回答", "model.embed": "生成向量", "memory.read": "读取记忆", "memory.write": "写入记忆",
-  "organization.manage": "管理组织", "membership.manage": "管理成员关系", "principal.read": "查看账号", "principal.disable": "停用账号",
+  "department.agent_access.manage": "管理部门智能体使用", "organization.manage": "管理组织", "membership.manage": "管理成员关系", "principal.read": "查看账号", "principal.disable": "停用账号",
   "authorization.read": "查看授权", "authorization.change": "办理角色与资源授权", "access_request.decide": "审批权限申请",
   "administrator.appoint": "任命管理员", "delegation.manage": "管理授权委托", "platform.monitor": "查看平台运行状态", "model.configure": "配置模型",
   "catalog.manage": "管理智能体目录", "catalog.requestable.read": "查看可申请的智能体", "agent.develop": "开发智能体", "agent.debug": "调试智能体",

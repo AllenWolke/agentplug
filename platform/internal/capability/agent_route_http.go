@@ -26,7 +26,10 @@ func AgentCoordinationAuthority(ctx context.Context, scope sharedkernel.Scope) (
 	if !ok || bound.Scope != scope || bound.Check == nil {
 		return sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, agentcoordination.ClassifyRouteError(agentcoordination.RouteDenialParent, agentcoordination.RouteReasonParentBoundContext, nil)
 	}
-	if bound.Check(ctx) != nil {
+	if err := bound.Check(ctx); err != nil {
+		if budgetAdmissionDeferred(err) {
+			return sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, err
+		}
 		return sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, agentcoordination.ClassifyRouteError(agentcoordination.RouteDenialParent, agentcoordination.RouteReasonParentLiveCheck, nil)
 	}
 	if bound.Policy.Runtime.Delegation == nil || bound.Policy.Runtime.Delegation.Validate() != nil {

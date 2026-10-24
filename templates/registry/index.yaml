@@ -1,26 +1,26 @@
 version: v1
 templates:
   - id: python-generic
-    version: 1.0.0
+    version: 1.1.0
     language: python
     framework: generic
   - id: python-langgraph
-    version: 1.0.0
+    version: 1.1.0
     language: python
     framework: langgraph
   - id: go-generic
-    version: 1.0.0
+    version: 1.1.0
     language: go
     framework: net-http
   - id: go-eino
-    version: 1.0.0
+    version: 1.1.0
     language: go
     framework: eino
   - id: java-generic
-    version: 1.0.0
+    version: 1.1.0
     language: java
     framework: spring-boot
   - id: java-spring-ai
-    version: 1.0.0
+    version: 1.1.0
     language: java
     framework: spring-ai

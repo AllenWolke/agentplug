@@ -73,7 +73,7 @@ func TestSQLStoreImplementsApprovedMetadataPorts(t *testing.T) {
 		case strings.Contains(query, "FROM platform_model_provider WHERE id=$1"):
 			return []driver.Value{"provider-a", "local-provider", ProviderOnPrem, TrustLocal, "service://models", "secret://provider.key", StatusApproved}, true, nil
 		case strings.Contains(query, "FROM platform_model_version mv"):
-			return []driver.Value{"version-a", StatusApproved, "model-a", "provider-a", "chat-model", ModelKindChat, StatusDraft, "provider-a", StatusApproved}, true, nil
+			return []driver.Value{"version-a", StatusApproved, "model-a", "provider-a", "chat-model", ModelKindChat, StatusDraft, "provider-a", StatusApproved, `{"provider_protocol":"openai-compatible/v1","wire_model":"provider-alias","json_output":true}`}, true, nil
 		default:
 			return nil, false, errors.New("unexpected query")
 		}
@@ -90,7 +90,7 @@ func TestSQLStoreImplementsApprovedMetadataPorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("approved model resolution failed: %v", err)
 	}
-	if model.ID != "model-a" || model.VersionID != "version-a" || model.ProviderID != "provider-a" || model.Key != "chat-model" || model.Status != StatusApproved {
+	if model.ID != "model-a" || model.VersionID != "version-a" || model.ProviderID != "provider-a" || model.Key != "chat-model" || model.Status != StatusApproved || model.WireModel != "provider-alias" || !model.SupportsJSON {
 		t.Fatalf("unexpected model metadata: %+v", model)
 	}
 	var _ modelgateway.ProviderMetadataPort = store
@@ -106,11 +106,11 @@ func TestSQLStoreApprovedMetadataPortsFailClosed(t *testing.T) {
 		{name: "provider draft", query: "provider", values: []driver.Value{"provider-a", "local-provider", ProviderOnPrem, TrustLocal, "service://models", "secret://provider.key", StatusDraft}},
 		{name: "provider trust mismatch", query: "provider", values: []driver.Value{"provider-a", "local-provider", ProviderExternalManaged, TrustLocal, "service://models", "secret://provider.key", StatusApproved}},
 		{name: "provider arbitrary endpoint", query: "provider", values: []driver.Value{"provider-a", "local-provider", ProviderOnPrem, TrustLocal, "https://127.0.0.1", "secret://provider.key", StatusApproved}},
-		{name: "model draft version", query: "model", values: []driver.Value{"version-a", StatusDraft, "model-a", "provider-a", "chat-model", ModelKindChat, StatusDraft, "provider-a", StatusApproved}},
-		{name: "model disabled definition", query: "model", values: []driver.Value{"version-a", StatusApproved, "model-a", "provider-a", "chat-model", ModelKindChat, StatusDisabled, "provider-a", StatusApproved}},
-		{name: "model provider disabled", query: "model", values: []driver.Value{"version-a", StatusApproved, "model-a", "provider-a", "chat-model", ModelKindChat, StatusDraft, "provider-a", StatusDisabled}},
-		{name: "model provider relationship mismatch", query: "model", values: []driver.Value{"version-a", StatusApproved, "model-a", "provider-a", "chat-model", ModelKindChat, StatusDraft, "provider-b", StatusApproved}},
-		{name: "model kind unsupported", query: "model", values: []driver.Value{"version-a", StatusApproved, "model-a", "provider-a", "chat-model", "completion_only", StatusDraft, "provider-a", StatusApproved}},
+		{name: "model draft version", query: "model", values: []driver.Value{"version-a", StatusDraft, "model-a", "provider-a", "chat-model", ModelKindChat, StatusDraft, "provider-a", StatusApproved, `{}`}},
+		{name: "model disabled definition", query: "model", values: []driver.Value{"version-a", StatusApproved, "model-a", "provider-a", "chat-model", ModelKindChat, StatusDisabled, "provider-a", StatusApproved, `{}`}},
+		{name: "model provider disabled", query: "model", values: []driver.Value{"version-a", StatusApproved, "model-a", "provider-a", "chat-model", ModelKindChat, StatusDraft, "provider-a", StatusDisabled, `{}`}},
+		{name: "model provider relationship mismatch", query: "model", values: []driver.Value{"version-a", StatusApproved, "model-a", "provider-a", "chat-model", ModelKindChat, StatusDraft, "provider-b", StatusApproved, `{}`}},
+		{name: "model kind unsupported", query: "model", values: []driver.Value{"version-a", StatusApproved, "model-a", "provider-a", "chat-model", "completion_only", StatusDraft, "provider-a", StatusApproved, `{}`}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

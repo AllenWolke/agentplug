@@ -20,8 +20,14 @@ import (
 )
 
 const observationVersion = "runtime-observation/v1"
-const observationOutputLimit = 64 * 1024
+
+// Structured tool data feeds deterministic business code as well as the model.
+// Keep its bounded result separate from the 2 KiB model context excerpt: a
+// report, page or vector list must not silently lose its 257th element.
+const observationOutputLimit = sharedkernel.MaxToolObservationOutputBytes
 const observationContextLimit = 2048
+const observationNodeLimit = 65536
+const observationArrayLimit = 16384
 
 // Provider output remains untrusted data. Observations never grant permissions.
 // Unknown CPU/memory measurements and historical timing are null, not zero.
@@ -83,7 +89,7 @@ type observationSanitizer struct {
 
 func (s *observationSanitizer) value(value any, depth int) any {
 	s.nodes++
-	if depth > 16 || s.nodes > 2048 || s.bytes > observationOutputLimit {
+	if depth > 16 || s.nodes > observationNodeLimit || s.bytes > observationOutputLimit {
 		s.truncated = true
 		return "[output omitted]"
 	}
@@ -147,8 +153,8 @@ func (s *observationSanitizer) value(value any, depth int) any {
 		return result
 	case []any:
 		limit := len(v)
-		if limit > 256 {
-			limit = 256
+		if limit > observationArrayLimit {
+			limit = observationArrayLimit
 			s.truncated = true
 		}
 		result := make([]any, 0, limit)
@@ -157,9 +163,9 @@ func (s *observationSanitizer) value(value any, depth int) any {
 		}
 		return result
 	case []string:
-		items := make([]any, 0, min(len(v), 256))
+		items := make([]any, 0, min(len(v), observationArrayLimit))
 		for i, item := range v {
-			if i >= 256 {
+			if i >= observationArrayLimit {
 				s.truncated = true
 				break
 			}
@@ -167,9 +173,9 @@ func (s *observationSanitizer) value(value any, depth int) any {
 		}
 		return s.value(items, depth+1)
 	case []map[string]any:
-		items := make([]any, 0, min(len(v), 256))
+		items := make([]any, 0, min(len(v), observationArrayLimit))
 		for i, item := range v {
-			if i >= 256 {
+			if i >= observationArrayLimit {
 				s.truncated = true
 				break
 			}

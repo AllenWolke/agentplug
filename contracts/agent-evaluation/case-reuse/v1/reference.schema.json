@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://agent-evaluation/case-reuse/v1",
+  "title": "Reference to an original persisted Agent Evaluation case result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "run_id", "index", "result_hash"],
+  "properties": {
+    "version": {"const": "evaluation-case-reuse/v1"},
+    "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "index": {"type": "integer", "minimum": 0, "maximum": 9999},
+    "result_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

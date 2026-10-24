@@ -154,6 +154,20 @@ func (d *ExecutionDispatcher) ExecutionType(name string) string {
 	return descriptor.ExecutionType
 }
 
+func (d *ExecutionDispatcher) DescribeRemoteTool(name string) (RemoteToolContract, bool) {
+	if d == nil {
+		return RemoteToolContract{}, false
+	}
+	binding, found := d.bindings[name]
+	if !found {
+		return RemoteToolContract{}, false
+	}
+	if described, ok := binding.executor.(RemoteToolDescriber); ok {
+		return described.DescribeRemoteTool(name)
+	}
+	return RemoteToolContract{}, false
+}
+
 // Receipt delegation is read-only at the executor. The gateway owns any
 // separately authorized ledger reconciliation; dispatch never replays code.
 func (d *ExecutionDispatcher) LookupToolReceipt(ctx context.Context, q ToolReceiptQuery) (map[string]any, bool, error) {
@@ -206,7 +220,37 @@ func (m *Module) RuntimeToolDescriptor(name string) (RuntimeToolDescriptor, bool
 	return d, found && d.Validate() == nil
 }
 
+// policyGatedWriteExecutor marks platform-owned writes whose effects are
+// locally compensable and reviewed at the business result gate. For those the
+// published policy alone decides human confirmation; call_id, receipt, audit
+// and compensation stay mandatory. Remote MCP/API writes never qualify.
+type policyGatedWriteExecutor interface {
+	PolicyGatedWrite(string) bool
+}
+
+func (d *ExecutionDispatcher) policyGatedWrite(name string) bool {
+	if d == nil {
+		return false
+	}
+	binding, found := d.bindings[name]
+	if !found || binding.descriptor.Risk != "write" || binding.descriptor.ExecutionType != "tool" {
+		return false
+	}
+	gated, ok := binding.executor.(policyGatedWriteExecutor)
+	return ok && gated.PolicyGatedWrite(name)
+}
+
 func (m *Module) runtimeConfirmationRequired(policy []string, name string) bool {
 	descriptor, found := m.RuntimeToolDescriptor(name)
-	return !found || descriptor.Risk != "read_only" || toolRequiresConfirmation(policy, name)
+	if !found {
+		return true
+	}
+	if toolRequiresConfirmation(policy, name) {
+		return true
+	}
+	if descriptor.Risk == "read_only" || isNotificationTool(name) {
+		return isNotificationTool(name)
+	}
+	dispatcher, ok := m.tools.(*ExecutionDispatcher)
+	return !ok || !dispatcher.policyGatedWrite(name)
 }

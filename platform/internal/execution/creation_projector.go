@@ -31,7 +31,7 @@ func projectCreation(ctx context.Context, repository Repository, p platformrunti
 		}
 		if err != nil {
 			telemetry.RecordExecutionReconciliationFailure("creation")
-			log.Printf("creation projection pending run_id=%s code=CONVERSATION_PROJECTION_FAILED", run.ID)
+			log.Printf("creation projection pending run_id=%q code=CONVERSATION_PROJECTION_FAILED", run.ID)
 		}
 	}
 	if p.TaskPending && task != nil {
@@ -47,7 +47,7 @@ func projectCreation(ctx context.Context, repository Repository, p platformrunti
 		}
 		if err != nil {
 			telemetry.RecordExecutionReconciliationFailure("creation")
-			log.Printf("creation projection pending run_id=%s code=TASK_PROJECTION_FAILED", run.ID)
+			log.Printf("creation projection pending run_id=%q code=TASK_PROJECTION_FAILED", run.ID)
 		}
 	}
 }

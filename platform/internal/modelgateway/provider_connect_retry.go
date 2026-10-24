@@ -29,12 +29,25 @@ func (a *HTTPAdapter) connectProvider(ctx context.Context, endpoint string, secr
 			request.Header.Set("X-Agentplug-Embedding-Purpose", purpose)
 		}
 		telemetry.Inject(attemptCtx, request.Header)
+		started := time.Now()
 		response, err := a.client.Do(request)
 		if err == nil {
+			observeProviderAttempt(ctx, attempt, started, response.StatusCode, nil, progress, false)
 			return response, nil
 		}
 		failure := providerTransportFailure(ctx, err, progress.stage.Load())
-		if attempt >= 2 || !standardTransport || !retryUnsentConnection(ctx, err, failure, progress) {
+		if detail, ok := failure.(*ProviderFailure); ok && progress.started.Load() {
+			detail.connectionState = "not_acquired"
+			if progress.connected.Load() {
+				detail.connectionState = "acquired"
+			}
+			detail.unsent = standardTransport && !progress.connected.Load() &&
+				progress.stage.Load() == providerStageDial && detail.Category == "network" &&
+				(detail.networkCause == "connection_refused" || detail.networkCause == "dns")
+		}
+		retry := attempt < 2 && standardTransport && retryUnsentConnection(ctx, err, failure, progress)
+		observeProviderAttempt(ctx, attempt, started, 0, failure, progress, retry)
+		if !retry {
 			return nil, failure
 		}
 		telemetry.RecordModelProviderConnectRetry()

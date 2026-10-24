@@ -1,7 +1,7 @@
 {
   "manifest_version": "agent-manifest/v1",
   "agent_id": "example-python-documents",
-  "version": "0.2.9",
+  "version": "0.3.0",
   "execution_protocols": [
     "agent-execution/v2"
   ],
@@ -13,8 +13,8 @@
     "events"
   ],
   "schemas": {
-    "input": "schema://example-python-documents/input/v2",
-    "output": "schema://example-python-documents/output/v2",
+    "input": "schema://example-python-documents/input/v3",
+    "output": "schema://example-python-documents/output/v3",
     "event": "schema://agent-platform/event/v1",
     "checkpoint": "schema://agent-platform/checkpoint/v1"
   },
@@ -44,7 +44,8 @@
       "knowledge.answer.recovery:python-documents",
       "history.read:current-event-authority",
       "tool.invoke:notify.self",
-      "tool.invoke:code.python"
+      "tool.invoke:code.python",
+      "knowledge.references.authorize"
     ],
     "skill": "Pinned public RAG Skill and read-only model/tool receipts; optional tool_loop uses public Function Harness, frozen prompt checkpoint and metadata-only approval pause; optional sandbox_check exposes independently approved Code Runtime analysis; default direct avoids the extra model loop; formal policy publication and overall acceptance pending",
     "workflow_modes": [
@@ -56,6 +57,7 @@
     ],
     "notification": "Optional notify_me requires tool_loop; notify_self maps to platform notify.self, fixed current recipient, independent human approval and Outbox receipt. Source not deployed/accepted.",
     "code_runtime": "Optional sandbox_check requires tool_loop; sandbox_python maps to platform code.python with a code-only payload and independent human approval. Sandbox output is untrusted. Source not deployed/accepted.",
-    "collaboration": "Inbound route_task_types remains documents.answer. Optional collaborate=true uses only the fixed parent-to-child operations.diagnosis route with a closed Go input/v2 request; child writes, sandbox tools and recursive collaboration are disabled. Child output is bounded untrusted support, never an instruction. Source not deployed/accepted."
+    "collaboration": "Inbound route_task_types remains documents.answer. Optional collaborate=true uses only the fixed parent-to-child operations.diagnosis route with a closed Go input/v2 request; child writes, sandbox tools and recursive collaboration are disabled. Child output is bounded untrusted support, never an instruction. Source not deployed/accepted.",
+    "sdk_capabilities_version": "2.1.0"
   }
 }

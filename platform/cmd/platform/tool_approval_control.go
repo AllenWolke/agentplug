@@ -59,19 +59,36 @@ func (a toolApprovalAdapter) resolveExecution(ctx context.Context, actor sharedk
 		return sharedkernel.Scope{}, "", capability.ErrToolApprovalDenied
 	}
 	run, err := a.runs.ResolveToolApprovalRun(ctx, actor, operation.RunID)
+	if err != nil {
+		return sharedkernel.Scope{}, "", errors.Join(capability.ErrToolApprovalDenied, err)
+	}
 	if err != nil || (active && !run.Active) {
 		return sharedkernel.Scope{}, "", capability.ErrToolApprovalDenied
 	}
 	snapshot, err := a.identity.PermissionSnapshot(ctx, identity.PrincipalUser, run.Scope.PrincipalID)
+	if err != nil {
+		return sharedkernel.Scope{}, "", errors.Join(capability.ErrToolApprovalDenied, err)
+	}
 	if err != nil || snapshot.Mode != "v2" || a.tools == nil || !a.tools.HasRegisteredTool(operation.Name) {
 		return sharedkernel.Scope{}, "", capability.ErrToolApprovalDenied
 	}
+	owner := any(a.runs)
+	if a.runSQL != nil {
+		owner = a.runSQL
+	}
+	expected, proofErr := expectedExecutionEpoch(ctx, owner, run.Scope)
 	epoch, err := a.identity.CurrentAuthorizationEpoch(ctx, run.Scope, "run")
-	if err != nil || epoch != run.Scope.AuthorizationEpoch {
+	if proofErr != nil || err != nil {
+		return sharedkernel.Scope{}, "", errors.Join(capability.ErrToolApprovalDenied, proofErr, err)
+	}
+	if proofErr != nil || err != nil || epoch != expected {
 		return sharedkernel.Scope{}, "", capability.ErrToolApprovalDenied
 	}
 	requested := policyasset.SnapshotFromContext(run.PolicyIDs)
 	policy, err := a.policy.Resolve(ctx, run.Scope, run.Scope.AgentVersionID)
+	if err != nil {
+		return sharedkernel.Scope{}, "", errors.Join(capability.ErrToolApprovalDenied, err)
+	}
 	if err != nil || requested.ValidateIDs() != nil || !policy.SameIDs(requested) || !policy.SameRuleBinding(requested) || policy.Hash != run.PolicyHash || !policy.AllowsTool(operation.Name) {
 		return sharedkernel.Scope{}, "", capability.ErrToolApprovalDenied
 	}
@@ -115,10 +132,16 @@ func (a toolApprovalAdapter) StepUp(ctx context.Context, r *http.Request, scope 
 	}
 	proof, err := a.identity.CreateToolStepUp(ctx, scope, identity.StepUpRequest{CurrentPassword: password, Action: action, RequestDigest: digest}, func(ctx context.Context, tx *sql.Tx, actor sharedkernel.Scope, action, digest string) error {
 		fingerprint, err := capability.ToolCommandFingerprint(operation.Name, operation.Payload)
-		if err != nil || a.fencePending(ctx, tx, scope, operation.Name, operation.CallID, fingerprint, action) != nil {
-			return capability.ErrToolApprovalDenied
+		if err != nil {
+			return errors.Join(capability.ErrToolApprovalDenied, err)
+		}
+		if err := a.fencePending(ctx, tx, scope, operation.Name, operation.CallID, fingerprint, action); err != nil {
+			return errors.Join(capability.ErrToolApprovalDenied, err)
 		}
 		actual, _, err := a.resolve(ctx, b, operation, action == "tool.approval.approve")
+		if err != nil {
+			return errors.Join(capability.ErrToolApprovalDenied, err)
+		}
 		if err != nil || actual != scope {
 			return capability.ErrToolApprovalDenied
 		}
@@ -145,6 +168,9 @@ func (a toolApprovalAdapter) Authorize(ctx context.Context, tx *sql.Tx, scope sh
 		return err
 	}
 	actual, hash, err := a.resolve(ctx, b, capability.ToolApprovalOperation{RunID: scope.RunID, Name: claims.ToolName, CallID: claims.CallID}, action == "tool.approval.approve")
+	if err != nil {
+		return errors.Join(capability.ErrToolApprovalDenied, err)
+	}
 	if err != nil || actual != scope || hash != claims.PolicyHash || claims.ScopeHash != capability.ToolReceiptScopeHash(scope) {
 		return errors.New("current tool approval authorization denied")
 	}

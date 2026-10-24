@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "schema://example-java-tickets/output/v2",
+  "$id": "schema://example-java-tickets/output/v3",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -13,11 +13,12 @@
     "notify_me",
     "sandbox_check",
     "collaborate",
-    "document_support"
+    "document_support",
+    "model_metadata"
   ],
   "properties": {
     "schema": {
-      "const": "schema://example-java-tickets/output/v2"
+      "const": "schema://example-java-tickets/output/v3"
     },
     "ticket_id": {
       "type": "string"
@@ -34,7 +35,10 @@
       "type": "object"
     },
     "usage": {
-      "type": ["object", "null"]
+      "type": [
+        "object",
+        "null"
+      ]
     },
     "notify_me": {
       "type": "boolean",
@@ -49,21 +53,44 @@
       "description": "Echo of the caller's fixed document-support collaboration request; it does not grant cross-Agent authority."
     },
     "document_support": {
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["agent_id", "task_type", "answer", "citation_ids"],
+      "required": [
+        "agent_id",
+        "task_type",
+        "answer",
+        "citation_ids"
+      ],
       "properties": {
-        "agent_id": {"const": "example-python-documents"},
-        "task_type": {"const": "documents.answer"},
-        "answer": {"type": "string", "minLength": 1, "maxLength": 8192},
+        "agent_id": {
+          "const": "example-python-documents"
+        },
+        "task_type": {
+          "const": "documents.answer"
+        },
+        "answer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
         "citation_ids": {
           "type": "array",
           "minItems": 1,
           "maxItems": 16,
           "uniqueItems": true,
-          "items": {"type": "string", "minLength": 1, "maxLength": 1024}
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
         }
       }
+    },
+    "model_metadata": {
+      "type": "object"
     }
   }
 }

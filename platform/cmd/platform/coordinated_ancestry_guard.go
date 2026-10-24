@@ -17,17 +17,18 @@ import (
 	"github.com/lexagent/platform/internal/sqlutil"
 )
 
-// ancestryLockWait is an unfinished ancestor row lock. context.Canceled is the
-// caller's stop and is not a wait. A finished permission mismatch is neither.
+// Preserve an unfinished ancestor check, including an explicit SQL transaction
+// abort. The transaction owner retries the WHOLE transaction, not the statement.
+// Caller cancellation and finished permission denials remain closed stops.
 func ancestryLockWait(err error) bool {
-	if err == nil {
+	if err == nil || errors.Is(err, context.Canceled) {
 		return false
 	}
 	switch sqlutil.SQLState(err) {
 	case "55P03", "57014":
 		return true
 	}
-	return errors.Is(err, context.DeadlineExceeded)
+	return errors.Is(err, context.DeadlineExceeded) || sqlutil.IsTransactionRollback(err)
 }
 
 func ancestryDeny(err error) error {
@@ -118,6 +119,15 @@ func (g coordinatedAncestryGuard) Check(ctx context.Context, scope sharedkernel.
 		return agentcoordination.ErrDenied
 	}
 	joined := budgetAncestryTransaction(ctx)
+	if joined == nil {
+		bound, present, err := sqlutil.ContinuityTransaction(ctx, a.runs.DB())
+		if err != nil {
+			return err
+		}
+		if present {
+			joined = bound
+		}
+	}
 	var tx *sql.Tx
 	if joined != nil {
 		tx = joined

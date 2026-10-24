@@ -68,20 +68,8 @@ func (m *Module) ResolveEvaluationAgentTarget(ctx context.Context, scope sharedk
 	if selected == nil || selected.Status != InstallationActive || selected.VersionID != versionID || selected.Revision == 0 {
 		return EvaluationAgentTarget{}, ErrEvaluationTargetUnavailable
 	}
-	version, err := m.store.GetVersion(ctx, selected.VersionID)
-	if err != nil || version.ID != versionID || version.Status != DefinitionPublished || version.Validate() != nil {
-		return EvaluationAgentTarget{}, ErrEvaluationTargetUnavailable
-	}
-	definition, err := m.store.GetDefinition(ctx, version.DefinitionID)
-	if err != nil || definition.ID != version.DefinitionID || definition.Status != DefinitionPublished || definition.Validate() != nil || definition.AgentKey != agentID {
-		return EvaluationAgentTarget{}, ErrEvaluationTargetUnavailable
-	}
-	versionSnapshot, err := version.Snapshot(definition)
-	if err != nil || versionSnapshot.AgentID != agentID || versionSnapshot.VersionID != versionID {
-		return EvaluationAgentTarget{}, ErrEvaluationTargetUnavailable
-	}
-	var manifest agentManifest
-	if err := jsonUnmarshalStrict(version.Manifest, &manifest); err != nil || manifest.AgentID != agentID || manifest.Version != version.SemanticVersion || !schemaRef(manifest.Schemas.Input) {
+	version, manifest, err := m.publishedExecutionVersion(ctx, agentID, versionID)
+	if err != nil {
 		return EvaluationAgentTarget{}, ErrEvaluationTargetUnavailable
 	}
 	deployments, err := m.store.ListDeployments(ctx, selected.TenantID, selected.DepartmentID, selected.ApplicationID, selected.ID, 1)
@@ -100,6 +88,23 @@ func (m *Module) ResolveEvaluationAgentTarget(ctx context.Context, scope sharedk
 		InputSchemaURI: manifest.Schemas.Input, Endpoint: deployment.EndpointRef,
 		Transport: deployment.Transport, Revision: selected.Revision, ManifestHash: version.ManifestHash,
 	}, nil
+}
+
+func (m *Module) publishedExecutionVersion(ctx context.Context, agentID, versionID string) (Version, agentManifest, error) {
+	var manifest agentManifest
+	version, err := m.store.GetVersion(ctx, versionID)
+	if err != nil || version.ID != versionID || version.Status != DefinitionPublished || version.Validate() != nil {
+		return Version{}, manifest, ErrEvaluationTargetUnavailable
+	}
+	definition, err := m.store.GetDefinition(ctx, version.DefinitionID)
+	if err != nil || definition.ID != version.DefinitionID || definition.Status != DefinitionPublished || definition.Validate() != nil || definition.AgentKey != agentID {
+		return Version{}, manifest, ErrEvaluationTargetUnavailable
+	}
+	snapshot, err := version.Snapshot(definition)
+	if err != nil || snapshot.AgentID != agentID || snapshot.VersionID != versionID || jsonUnmarshalStrict(version.Manifest, &manifest) != nil || manifest.AgentID != agentID || manifest.Version != version.SemanticVersion || !schemaRef(manifest.Schemas.Input) {
+		return Version{}, manifest, ErrEvaluationTargetUnavailable
+	}
+	return version, manifest, nil
 }
 
 // jsonUnmarshalStrict rejects malformed or trailing manifest data while

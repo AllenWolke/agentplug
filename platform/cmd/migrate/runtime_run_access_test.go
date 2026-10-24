@@ -22,22 +22,12 @@ import (
 func assertRuntimeBrowserRunAccess(t *testing.T, ctx context.Context, client *http.Client, address, dsn string, db *sql.DB, sessionID, subject string) {
 	t.Helper()
 	const tenant, department, application = "session-fixture", "session-fixture-dept", "session-fixture-app"
-	owner := sharedkernel.Scope{TenantID: tenant, DepartmentID: department, ApplicationID: application, AgentInstanceID: "fixture-history-installation", InstallationID: "fixture-history-installation", AgentID: "fixture-history-agent", AgentVersionID: "fixture-history-version", PrincipalType: "user", PrincipalID: subject, RunID: "fixture-owned-history-run", SessionID: "fixture-owned-history-session", AuthorizationEpoch: 1, TraceID: strings.Repeat("9", 32)}
+	owner := runtimeAccessHistoryScope(subject)
 	store, err := execution.ConnectSQLStore(ctx, "pgx", dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	created, err := store.Create(platformruntime.CreateRequest{ID: owner.RunID, Scope: owner, AgentVersionID: owner.AgentVersionID, IdempotencyKey: owner.RunID, Fingerprint: owner.RunID, RequestJSON: []byte(`{"input":{}}`), AgentEndpoint: "http://127.0.0.1:1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.Transition(owner.RunID, platformruntime.StatusAccepted, platformruntime.StatusRunning, created.Run.Revision); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.AcquireLease(owner.RunID, "fixture-owned-history-lease", time.Now().UTC(), time.Minute); err != nil {
-		t.Fatal(err)
-	}
 	request := func(method, suffix, body string) *http.Request {
 		t.Helper()
 		r, err := http.NewRequestWithContext(ctx, method, "http://"+address+"/modules/execution/platform/runs/"+owner.RunID+suffix, bytes.NewBufferString(body))
@@ -136,4 +126,32 @@ func assertRuntimeBrowserRunAccess(t *testing.T, ctx context.Context, client *ht
 	assertStreamError(stream, "SESSION_INVALID")
 	second.Body.Close()
 	invoke(http.MethodGet, "", "", http.StatusUnauthorized)
+}
+
+func runtimeAccessHistoryScope(subject string) sharedkernel.Scope {
+	const tenant, department, application = "session-fixture", "session-fixture-dept", "session-fixture-app"
+	return sharedkernel.Scope{TenantID: tenant, DepartmentID: department, ApplicationID: application, AgentInstanceID: "fixture-history-installation", InstallationID: "fixture-history-installation", AgentID: "fixture-history-agent", AgentVersionID: "fixture-history-version", PrincipalType: "user", PrincipalID: subject, RunID: "fixture-owned-history-run", SessionID: "fixture-owned-history-session", AuthorizationEpoch: 1, TraceID: strings.Repeat("9", 32)}
+}
+
+// Build immutable browser-history facts before the lifecycle worker starts.
+// These tests observe historical permissions; dispatcher lease races belong to
+// the dedicated execution tests and must not mutate this fixture during setup.
+func seedRuntimeAccessHistory(t *testing.T, ctx context.Context, dsn string) {
+	t.Helper()
+	owner := runtimeAccessHistoryScope("session-fixture-user")
+	store, err := execution.ConnectSQLStore(ctx, "pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	created, err := store.Create(platformruntime.CreateRequest{ID: owner.RunID, Scope: owner, AgentVersionID: owner.AgentVersionID, IdempotencyKey: owner.RunID, Fingerprint: owner.RunID, RequestJSON: []byte(`{"input":{}}`), AgentEndpoint: "http://127.0.0.1:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Transition(owner.RunID, platformruntime.StatusAccepted, platformruntime.StatusRunning, created.Run.Revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AcquireLease(owner.RunID, "fixture-owned-history-lease", time.Now().UTC(), time.Minute); err != nil {
+		t.Fatal(err)
+	}
 }

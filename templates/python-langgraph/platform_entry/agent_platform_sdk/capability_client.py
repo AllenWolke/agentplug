@@ -13,6 +13,7 @@ import logging
 import math
 import os
 import re
+import time
 from typing import Any
 
 import httpx
@@ -21,15 +22,17 @@ from .security import encode_internal_envelope, internal_token, signed_internal_
 from .agent_group_resume import current_agent_group_resume
 from .token_renewal import TokenRenewalError, renew_context_token
 from .graph_context import resolve_graph_context
+from .capability_connections import connection_transport
 
 
 class GatewayError(RuntimeError):
     """Stable error exposed by the platform capability boundary."""
 
-    def __init__(self, code: str, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, code: str, message: str, details: dict[str, Any] | None = None, *, status_code: int | None = None):
         super().__init__(f"{code}: {message}")
         self.code = code
         self.details = dict(details or {})
+        self.status_code=status_code
 
 
 MAX_GATEWAY_RESPONSE_BYTES = 1 << 20
@@ -133,7 +136,7 @@ class CapabilityGatewayClient:
                     "revision": 0,
                 }):
             return
-        if path == "/internal/runtime/harness-policy" and payload == {}:
+        if path == "/internal/runtime/harness-policy" and payload in ({}, {"include_batch": True}):
             # Read-only policy discovery is allowed during the bound gather.
             return
         if (path == "/internal/agent/gather" and payload == {
@@ -143,6 +146,67 @@ class CapabilityGatewayClient:
         raise GatewayError("AGENT_GROUP_RESUME_BOUNDARY", "only the original gather read is allowed")
 
     async def _post(self, path: str, payload: dict, timeout: float) -> dict:
+        from .call_observation import observed_call
+        return await observed_call(self._context,path,payload,
+            lambda:self._post_with_tool_receipt(path,payload,timeout))
+
+    async def _post_with_tool_receipt(self, path: str, payload: dict, timeout: float) -> dict:
+        deadline = (time.monotonic() + timeout if path == "/internal/tool/invoke"
+                    and isinstance(timeout, (int, float)) and math.isfinite(timeout) and timeout > 0 else None)
+        try:
+            return await self._post_request(path, payload, timeout)
+        except (httpx.TransportError, GatewayError) as error:
+            if isinstance(error, GatewayError) and error.code != "UPSTREAM_TIMEOUT":
+                raise
+            # Read the original receipt; this is never a second tool/model
+            # invocation. The ordinary request still owns its original budget.
+            if (path != "/internal/tool/invoke" or not isinstance(payload, dict)
+                    or not isinstance(payload.get("name"), str) or not payload["name"]
+                    or not isinstance(payload.get("call_id"), str) or not payload["call_id"]
+                    or not isinstance(payload.get("payload"), dict)):
+                raise
+            remaining = min(5.0, deadline - time.monotonic()) if deadline is not None else 0
+            if remaining <= 0:
+                raise GatewayError("TOOL_RESULT_UNKNOWN", "original tool dispatch requires reconciliation") from error
+            command = {key: payload[key] for key in ("name", "call_id", "payload")}
+            if payload.get("confirmation_token"):
+                command["confirmation_token"] = payload["confirmation_token"]
+            cause = type(error).__name__ if isinstance(error, httpx.TransportError) else "UPSTREAM_TIMEOUT"
+            _logger.warning("tool_response_observation_lost cause=%s recovery=original_receipt", cause)
+            try:
+                async with asyncio.timeout(remaining):
+                    receipt = await self._post("/internal/tool/receipt", command, remaining)
+            except GatewayError as lookup_error:
+                # A receipt error must never enter the caller's invoke retry,
+                # approval retry or budget-completion branch. Keep dispatch
+                # unknown; current authority loss still stops the execution.
+                if lookup_error.code in {"TOOL_CONFIRMATION_REQUIRED", "MODEL_BUDGET_EXCEEDED"}:
+                    raise GatewayError("CAPABILITY_DENIED", "original tool receipt is not authorized") from lookup_error
+                from .optimization import authority_failure
+                if authority_failure(lookup_error):
+                    raise
+                raise GatewayError("TOOL_RESULT_UNKNOWN", "original tool receipt is unavailable") from lookup_error
+            except (httpx.TransportError, TimeoutError) as lookup_error:
+                raise GatewayError("TOOL_RESULT_UNKNOWN", "original tool receipt is unavailable") from lookup_error
+            if (not isinstance(receipt, dict) or receipt.get("version") != "tool-receipt/v1"
+                    or receipt.get("tool_name") != payload["name"]
+                    or receipt.get("call_id") != payload["call_id"]):
+                raise GatewayError("TOOL_RECEIPT_REJECTED", "original tool receipt binding is invalid")
+            if receipt.get("status") != "completed":
+                raise GatewayError("TOOL_RESULT_UNKNOWN", "original tool dispatch requires reconciliation")
+            result = receipt.get("receipt")
+            observation = result.get("observation") if isinstance(result, dict) else None
+            if (not isinstance(result, dict) or "data" not in result
+                    or not isinstance(observation, dict) or observation.get("version") != "runtime-observation/v1"
+                    or observation.get("tool_name") != payload["name"]
+                    or observation.get("call_id") != payload["call_id"]
+                    or observation.get("status") != "succeeded" or observation.get("effect") != "completed"
+                    or observation.get("instruction_trust") != "untrusted_data"):
+                raise GatewayError("TOOL_RECEIPT_REJECTED", "original tool observation is invalid")
+            _logger.info("tool_response_observation_recovered source=original_receipt")
+            return result
+
+    async def _post_request(self, path: str, payload: dict, timeout: float) -> dict:
         resume_binding = self._current_group_resume_binding()
         self._enforce_group_resume_request(path, payload, resume_binding)
         post_gather = (resume_binding is not None and resume_binding.gathered
@@ -157,23 +221,29 @@ class CapabilityGatewayClient:
         body = encode_internal_envelope(self._context, payload)
         async with httpx.AsyncClient(
             timeout=timeout,
-            transport=self._transport,
+            transport=connection_transport(self._base, self._transport),
             trust_env=False,
         ) as client:
-            response = await client.post(
-                self._base + path,
-                content=body,
-                headers=signed_internal_headers(
-                    body,
-                    self._token,
-                    getattr(self._context, "trace_id", ""),
-                    getattr(self._context, "platform_context_token", ""),
-                    method="POST",
-                    request_target=httpx.URL(self._base + path).raw_path.decode(
-                        "ascii"
+            try:
+                response = await client.post(
+                    self._base + path,
+                    content=body,
+                    headers=signed_internal_headers(
+                        body,
+                        self._token,
+                        getattr(self._context, "trace_id", ""),
+                        getattr(self._context, "platform_context_token", ""),
+                        method="POST",
+                        request_target=httpx.URL(self._base + path).raw_path.decode(
+                            "ascii"
+                        ),
                     ),
-                ),
-            )
+                )
+            except httpx.TimeoutException as error:
+                # This is an observation failure, not proof that the operation
+                # was unsent. Leave durable intent/receipts to their workflow;
+                # never retry, release a reservation or select another model.
+                raise GatewayError("UPSTREAM_TIMEOUT", "capability observation timed out") from error
         if len(response.content) > MAX_GATEWAY_RESPONSE_BYTES:
             raise GatewayError(
                 "GATEWAY_RESPONSE_TOO_LARGE", "response exceeded the limit"
@@ -202,9 +272,9 @@ class CapabilityGatewayClient:
             diagnostic_code = error_code if re.fullmatch(r"[A-Z0-9_]{1,64}", error_code) else "INVALID_UPSTREAM_CODE"
             _logger.warning("capability_call_failed path=%s status=%d code=%s", path, response.status_code, diagnostic_code)
             raise GatewayError(
-                error_code,
-                str(response_data.get("message", "gateway failed"))[:512],
-                details=details,
+                diagnostic_code,
+                "platform capability rejected",
+                details=details, status_code=response.status_code,
             )
         try:
             response_data = response.json()
@@ -250,6 +320,7 @@ class CapabilityGatewayClient:
         max_tokens: int = 2048,
         timeout: float = DEFAULT_GATEWAY_REQUEST_TIMEOUT_SECONDS,
         step_name: str = "model.generate",
+        *, require_json: bool = False, response_schema: dict | None = None, response_schema_mode: str = "",
     ) -> dict[str, Any]:
         identity = {
             "messages": messages,
@@ -258,17 +329,29 @@ class CapabilityGatewayClient:
             "usage_step": step_name,
             "prompt_template_hash": getattr(self._context, "prompt_template_hash", ""),
         }
+        if type(require_json) is not bool:
+            raise ValueError("require_json must be a boolean")
+        if require_json:
+            identity["require_json"] = True
+        from .response_schema import schema_request
+        schema, mode = schema_request(response_schema, response_schema_mode, require_json)
+        if schema is not None:
+            identity.update(response_schema=schema, response_schema_mode=mode)
         identity["idempotency_key"] = self._idempotency_key("model-", identity)
         data = await self._post("/internal/model/generate", identity, timeout)
+        from .model_usage import chat_usage
         usage = data.get("usage", {})
-        return {
+        result = {
             "text": data["text"],
             "model": data.get("model", ""),
-            "usage": {
-                "prompt_tokens": int(usage.get("input_tokens", 0)),
-                "completion_tokens": int(usage.get("output_tokens", 0)),
-            },
+            "usage": chat_usage(usage),
         }
+        # Retain actual platform references. Selection remains a Run preference;
+        # this API grants no Agent override or provider-specific routing client.
+        for field in ("routing", "route_execution", "billing", "context_cache", "response_schema", "model_version_id", "provider_id", "model_id", "step_id"):
+            if field in data:
+                result[field] = data[field]
+        return result
 
     async def embed(
         self,
@@ -561,19 +644,31 @@ class CapabilityGatewayClient:
 
     async def run_harness(self, input: dict, *, key: str, max_rounds: int = 4,
                           max_tool_calls: int = 8, confirmation_token: str = "",
-                          timeout: float = 30) -> dict:
+                          timeout: float = 30, action_validator=None, progress_evaluator=None,
+                          extension_id: str = "", deadline_ms: int | None = None) -> dict:
         """Persist loop state through governed APIs; never replay unknown effects."""
         from .harness import run_harness
         return await run_harness(self, input, key=key, max_rounds=max_rounds,
                                  max_tool_calls=max_tool_calls,
-                                 confirmation_token=confirmation_token, timeout=timeout)
+                                 confirmation_token=confirmation_token, timeout=timeout,
+                                 action_validator=action_validator, progress_evaluator=progress_evaluator,
+                                 extension_id=extension_id, deadline_ms=deadline_ms)
+
+    async def run_step_workflow(self, steps, executor, **configuration) -> dict:
+        """Execute an ordered plan using durable governed operation adapters."""
+        from .step_workflow import run_step_workflow
+        return await run_step_workflow(self, steps, executor, **configuration)
 
     async def load_harness_policy(self, timeout: float = 10) -> dict:
         """Read the current server-governed Harness limits for this execution."""
         if (type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0):
             raise GatewayError("HARNESS_POLICY_REJECTED", "invalid policy request timeout")
         result = await self._post("/internal/runtime/harness-policy", {}, timeout)
-        if (set(result) != {"version", "policy_hash", "server_time_ms", "limits"}
+        return self._validate_harness_policy_response(result)
+
+    @staticmethod
+    def _validate_harness_policy_response(result):
+        if (not isinstance(result, dict) or set(result) != {"version", "policy_hash", "server_time_ms", "limits"}
                 or result.get("version") != "harness-policy/v1"):
             raise GatewayError("HARNESS_POLICY_REJECTED", "invalid Harness policy response")
         policy_hash = result.get("policy_hash")
@@ -599,12 +694,48 @@ class CapabilityGatewayClient:
     async def resolve_prompt(self, timeout: float = 10) -> dict:
         return await self._post("/internal/prompt/resolve", {}, timeout)
 
+    async def load_execution_policy(self, timeout: float = 10) -> dict:
+        """Opt in to v2 batch bounds without changing the v1 response contract."""
+        if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
+            raise GatewayError("HARNESS_POLICY_REJECTED", "invalid policy request timeout")
+        result = await self._post("/internal/runtime/harness-policy", {"include_batch": True}, timeout)
+        if (not isinstance(result, dict) or set(result) != {"version", "policy_hash", "server_time_ms", "limits", "execution"}
+                or result.get("version") != "harness-policy/v2"
+                or not isinstance(result.get("policy_hash"), str) or re.fullmatch(r"[0-9a-f]{64}", result["policy_hash"]) is None
+                or type(result.get("server_time_ms")) is not int or not 0 < result["server_time_ms"] <= (1 << 53) - 1):
+            raise GatewayError("HARNESS_POLICY_REJECTED", "invalid execution policy response")
+        execution = result["execution"]
+        if (not isinstance(execution, dict) or set(execution) not in
+                ({"task_timeout_seconds", "batch"}, {"task_timeout_seconds", "batch", "window"})
+                or type(execution["task_timeout_seconds"]) is not int or execution["task_timeout_seconds"] < 1):
+            raise GatewayError("HARNESS_POLICY_REJECTED", "invalid execution limits")
+        batch = execution["batch"]
+        if batch is not None and (not isinstance(batch, dict)
+                or set(batch) != {"max_items", "item_timeout_seconds", "elapsed_seconds"}
+                or any(type(value) is not int for value in batch.values())
+                or not 1 <= batch["max_items"] <= 10000
+                or not 1 <= batch["item_timeout_seconds"] <= batch["elapsed_seconds"] <= 3600
+                or batch["elapsed_seconds"] != execution["task_timeout_seconds"]):
+            raise GatewayError("HARNESS_POLICY_REJECTED", "invalid batch profile")
+        self._validate_harness_policy_response({"version": "harness-policy/v1", **{
+            key: result[key] for key in ("policy_hash", "server_time_ms", "limits")}})
+        window = execution.get("window")
+        if batch is not None and (not isinstance(window, dict) or set(window) != {"started_ms", "deadline_ms"}
+                or any(type(value) is not int or not 0 < value <= (1 << 53) - 1 for value in window.values())
+                or window["started_ms"] > result["server_time_ms"]
+                or window["deadline_ms"] != window["started_ms"] + batch["elapsed_seconds"] * 1000):
+            raise GatewayError("HARNESS_POLICY_REJECTED", "invalid original execution window")
+        if batch is None and window is not None:
+            raise GatewayError("HARNESS_POLICY_REJECTED", "unexpected execution window")
+        return result
+
     async def invoke_tool(self, name: str, payload: dict, confirmed: bool = False, timeout: float = 30,
                           *, call_id: str | None = None, confirmation_token: str = "") -> dict:
         """Governed tool call using this execution's signed/renewable context.
 
-        Retry only the platform's explicit in-progress receipt with the same
-        call ID; unknown network outcomes and denied permissions are not retried.
+        Retry only an explicit invoke-in-progress response with the same call
+        ID. Transport loss may read one original receipt within the original
+        budget; it never repeats an unknown invocation or denied permission.
         """
         if not isinstance(name, str) or not name.strip() or len(name) > 128 or not isinstance(payload, dict):
             raise ValueError("tool name and object payload required")
@@ -657,12 +788,18 @@ class CapabilityGatewayClient:
         timeout: float = 30,
     ) -> dict:
         """Read run-scoped public state under the current execution authority."""
-        if type(revision) is not int or not 0 <= revision <= 64:
-            raise ValueError("checkpoint revision must be between 0 and 64")
+        from .checkpoint_capacity import revision_limit, remember
+        if type(revision) is not int or not 0 <= revision <= revision_limit(self):
+            raise ValueError("checkpoint revision exceeds the published negotiated capacity")
+        from .graph_state_fence import load as fenced_graph_load
+        fenced = await fenced_graph_load(self, namespace, key, schema_id, revision, timeout)
+        if fenced is not None:
+            return fenced
         result = await self._post("/internal/state/checkpoint", {
             "operation": "load", "namespace": namespace, "key": key,
             "schema_id": schema_id, "revision": revision,
         }, timeout)
+        remember(self, result)
         from .recovery_context import validate_runtime_recovery_checkpoint
         validate_runtime_recovery_checkpoint(namespace, key, schema_id, result)
         return result
@@ -685,9 +822,11 @@ class CapabilityGatewayClient:
             snapshot = json.loads(raw)
         except (TypeError, ValueError, OverflowError, RecursionError) as exc:
             raise ValueError("bounded JSON recovery reference required") from exc
-        return await self._post("/internal/state/checkpoint", {
+        result = await self._post("/internal/state/checkpoint", {
             "operation": "load", "reference": snapshot,
         }, timeout)
+        from .checkpoint_capacity import remember
+        return remember(self, result)
 
     async def save_checkpoint(
         self, namespace: str, key: str, schema_id: str, value: dict,
@@ -698,16 +837,22 @@ class CapabilityGatewayClient:
         Reuse the same operation key for a replay. Revision conflicts and
         uncertain transport results are returned without automatic retries.
         """
-        if (type(expected_revision) is not int or not 0 <= expected_revision < 64
+        from .checkpoint_capacity import revision_limit, remember
+        if (type(expected_revision) is not int or not 0 <= expected_revision < revision_limit(self)
                 or not isinstance(value, dict) or not isinstance(idempotency_key, str)
                 or not idempotency_key):
             raise ValueError("checkpoint CAS, object and operation key are required")
+        from .graph_state_fence import before_save as graph_before_save
+        graph_before_save(namespace, key, schema_id, expected_revision)
         result = await self._post("/internal/state/checkpoint", {
             "operation": "save", "namespace": namespace, "key": key,
             "schema_id": schema_id, "value": value,
             "expected_revision": expected_revision, "idempotency_key": idempotency_key,
         }, timeout)
+        remember(self, result)
         from .recovery_context import record_runtime_recovery_checkpoint_save
+        from .graph_state_fence import saved as graph_state_saved
+        graph_state_saved(namespace, key, schema_id, expected_revision, result)
         record_runtime_recovery_checkpoint_save(namespace, key, schema_id,
                                                 expected_revision, result)
         return result
@@ -721,9 +866,12 @@ class CapabilityGatewayClient:
         as_of: str = "",
         cache_mode: str = "",
         source_ids: list[str] | None = None,
+        *, recovery_only: bool = False,
     ) -> dict:
         if cache_mode not in ("", "use", "cold", "bypass"):
             raise ValueError("cache_mode must be use, cold or bypass")
+        if type(recovery_only) is not bool:
+            raise ValueError("recovery_only requires a boolean")
         identity = {
             "query": query,
             "knowledge_scope": scope,
@@ -739,7 +887,17 @@ class CapabilityGatewayClient:
                 raise ValueError("source_ids requires unique nonempty provider IDs")
             identity["source_ids"] = list(source_ids)
         identity["idempotency_key"] = self._idempotency_key("knowledge-", identity)
-        return await self._post("/internal/knowledge/search", identity, timeout)
+        path = "/internal/knowledge/search/recovery" if recovery_only else "/internal/knowledge/search"
+        return await self._post(path, identity, timeout)
+
+    async def run_knowledge_search(self, query: str, scope: str, *, key: str, as_of: str,
+                                   top_k: int = 5, cache_mode: str = "use", timeout: float = 30,
+                                   recovery_only: bool = False, source_ids: list[str] | None = None) -> dict:
+        """Durable search with explicit business date and read-only recovery."""
+        from .knowledge_search import run_knowledge_search
+        return await run_knowledge_search(self, query, scope, key=key, as_of=as_of,
+                                         top_k=top_k, cache_mode=cache_mode, timeout=timeout,
+                                         recovery_only=recovery_only, source_ids=source_ids)
 
     async def load_skill_bindings(self, skill_ids: list[str], timeout: float = 30) -> dict:
         """Load approved summaries and return metadata for public RAG requests.
@@ -767,11 +925,11 @@ class CapabilityGatewayClient:
             bindings[skill_id] = {"version_id": value["version_id"], "digest": value["digest"]}
         return bindings
 
-    async def run_knowledge_harness(self, query: str, scope: str, *, key: str, top_k: int = 3, cache_mode: str = "use", skill_requests: list[dict] | None = None, timeout: float = DEFAULT_GATEWAY_REQUEST_TIMEOUT_SECONDS) -> dict:
+    async def run_knowledge_harness(self, query: str, scope: str, *, key: str, top_k: int = 3, cache_mode: str = "use", skill_requests: list[dict] | None = None, timeout: float = DEFAULT_GATEWAY_REQUEST_TIMEOUT_SECONDS, as_of: str = "", source_ids: list[str] | None = None) -> dict:
         """Checkpointed public RAG; recovery never sends replacement model calls."""
         from .knowledge_harness import run_knowledge_harness
         return await run_knowledge_harness(self, query, scope, key=key, top_k=top_k,
-            cache_mode=cache_mode, skill_requests=skill_requests, timeout=timeout)
+            cache_mode=cache_mode, skill_requests=skill_requests, timeout=timeout, as_of=as_of, source_ids=source_ids)
 
     async def answer_knowledge(
         self,
@@ -780,7 +938,7 @@ class CapabilityGatewayClient:
         top_k: int = 3,
         cache_mode: str = "use",
         timeout: float = DEFAULT_GATEWAY_REQUEST_TIMEOUT_SECONDS,
-        *, skill_requests: list[dict] | None = None, skill_bindings: dict | None = None, recovery_only: bool = False,
+        *, skill_requests: list[dict] | None = None, skill_bindings: dict | None = None, recovery_only: bool = False, as_of: str = "", source_ids: list[str] | None = None,
     ) -> dict:
         """Reuse the platform RAG pipeline, cited answer and governed cache.
 
@@ -796,6 +954,17 @@ class CapabilityGatewayClient:
             "top_k": top_k,
             "cache_mode": cache_mode,
         }
+        if as_of:
+            from datetime import date
+            try:
+                if not isinstance(as_of,str) or date.fromisoformat(as_of).isoformat()!=as_of: raise ValueError()
+            except (ValueError,TypeError): raise ValueError("invalid knowledge date") from None
+            identity["as_of"]=as_of
+        if source_ids is not None:
+            from .harness import _skill_identifier
+            if (not isinstance(source_ids,list) or not 1<=len(source_ids)<=16 or any(not _skill_identifier(v) for v in source_ids) or len(set(source_ids))!=len(source_ids)):
+                raise ValueError("invalid knowledge sources")
+            identity["source_ids"]=list(source_ids)
         if skill_requests is not None or skill_bindings is not None:
             from .harness import _skill_identifier
             if (not isinstance(skill_requests, list) or not 1 <= len(skill_requests) <= 4

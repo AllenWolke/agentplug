@@ -14,14 +14,16 @@ import (
 	"strings"
 
 	"github.com/lexagent/platform/internal/contract"
+	"github.com/lexagent/platform/internal/policyasset"
 	platformruntime "github.com/lexagent/platform/internal/runtime"
 	"github.com/lexagent/platform/internal/sharedkernel"
 )
 
 type machineStartRunRequest struct {
-	SessionID      string         `json:"session_id"`
-	IdempotencyKey string         `json:"idempotency_key"`
-	Input          map[string]any `json:"input"`
+	ModelSelection policyasset.ModelSelection `json:"model_selection,omitempty"`
+	SessionID      string                     `json:"session_id"`
+	IdempotencyKey string                     `json:"idempotency_key"`
+	Input          map[string]any             `json:"input"`
 }
 
 type machineCancelRequest struct {
@@ -200,7 +202,7 @@ func (m *Module) startMachineRun(w http.ResponseWriter, r *http.Request, access 
 	}
 	var request machineStartRunRequest
 	if err := decodeJSON(r, &request); err != nil || strings.TrimSpace(request.SessionID) == "" || len(request.SessionID) > 128 ||
-		strings.TrimSpace(request.IdempotencyKey) == "" || len(request.IdempotencyKey) > 200 || request.Input == nil {
+		strings.TrimSpace(request.IdempotencyKey) == "" || len(request.IdempotencyKey) > 200 || request.Input == nil || request.ModelSelection.Validate() != nil {
 		m.writeError(w, http.StatusBadRequest, "INVALID_REQUEST")
 		return
 	}
@@ -259,6 +261,14 @@ func (m *Module) startMachineRun(w http.ResponseWriter, r *http.Request, access 
 		m.writeError(w, http.StatusServiceUnavailable, "POLICY_SNAPSHOT_UNAVAILABLE")
 		return
 	}
+	if request.ModelSelection.EffectiveMode() == "automatic" {
+		var model policyasset.ModelPolicy
+		raw, err := json.Marshal(policy["model"])
+		if m.modelSelections == nil || err != nil || json.Unmarshal(raw, &model) != nil || model.Routing == nil || model.ValidateRouting() != nil {
+			m.writeError(w, http.StatusConflict, "MODEL_ROUTING_UNAVAILABLE")
+			return
+		}
+	}
 	// The platform replaces no client policy fields because the public contract
 	// rejects policy_snapshot above. This makes the published policy resolver
 	// the sole policy authority for machine identities as well as browser Runs.
@@ -304,6 +314,31 @@ func (m *Module) startMachineRun(w http.ResponseWriter, r *http.Request, access 
 		return
 	}
 	fingerprint := sha256.Sum256(fingerprintPayload)
+	if request.ModelSelection.EffectiveMode() == "automatic" {
+		fingerprint = sha256.Sum256([]byte("run-model-selection/v1:automatic:" + hex.EncodeToString(fingerprint[:])))
+	}
+	if m.modelSelections != nil {
+		policyHash, _ := policy["content_hash"].(string)
+		binding := policyasset.ModelSelectionBinding{Selection: request.ModelSelection, PolicySHA256: policyHash, CommandFingerprint: hex.EncodeToString(fingerprint[:])}
+		if binding.Selection.EffectiveMode() == "automatic" {
+			var model policyasset.ModelPolicy
+			raw, marshalErr := json.Marshal(policy["model"])
+			task, taskErr := json.Marshal(request.Input)
+			if marshalErr != nil || taskErr != nil || json.Unmarshal(raw, &model) != nil || model.Routing == nil {
+				m.writeError(w, http.StatusBadRequest, "INVALID_ROUTING_TASK")
+				return
+			}
+			binding, taskErr = policyasset.BindRoutingTask(binding, task, *model.Routing)
+			if taskErr != nil {
+				m.writeError(w, http.StatusBadRequest, "INVALID_ROUTING_TASK")
+				return
+			}
+		}
+		if err := m.modelSelections.BindModelSelection(r.Context(), scope, binding); err != nil {
+			m.writeError(w, http.StatusConflict, "MODEL_SELECTION_BINDING_FAILED")
+			return
+		}
+	}
 	createdID, err := m.startRun(r.Context(), scope, runID, strings.TrimSpace(request.IdempotencyKey), hex.EncodeToString(fingerprint[:]), target.Endpoint, requestBytes, "")
 	if err != nil {
 		m.writeRuntimeError(w, err)

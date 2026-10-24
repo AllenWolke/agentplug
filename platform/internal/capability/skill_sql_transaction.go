@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/lexagent/platform/internal/sharedkernel"
+	"github.com/lexagent/platform/internal/sqlutil"
 )
 
 // SkillSQLTransactionFence establishes IAM and execution ownership before a
@@ -38,9 +39,16 @@ func skillSQLTransactionFromContext(ctx context.Context, db *sql.DB, scope share
 	}
 	binding, ok := ctx.Value(skillSQLTransactionContextKey{}).(skillSQLTransactionBinding)
 	if !ok {
-		return nil, false, nil
+		tx, joined, err := sqlutil.ContinuityTransaction(ctx, db)
+		if joined && (err != nil || scope.ValidateTrusted() != nil) {
+			return nil, true, ErrSkillDenied
+		}
+		return tx, joined, err
 	}
 	if db == nil || binding.db != db || binding.tx == nil || binding.scope != scope || scope.ValidateTrusted() != nil {
+		return nil, true, ErrSkillDenied
+	}
+	if tx, joined, err := sqlutil.ContinuityTransaction(ctx, db); joined && (err != nil || tx != binding.tx) {
 		return nil, true, ErrSkillDenied
 	}
 	return binding.tx, true, nil

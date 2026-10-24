@@ -212,6 +212,12 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "evidence_read_profile": {
+          "const": "bounded-large/v1"
+        },
+        "tool_argument_projection": {
+          "const": "tool-arguments/v2"
+        },
         "agent_id": {
           "type": "string",
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"

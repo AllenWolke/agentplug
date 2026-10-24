@@ -61,6 +61,9 @@ if ($LASTEXITCODE -ne 0) { throw "secret scan failed" }
 & python (Join-Path $projectRoot "scripts\test_scan_secrets.py")
 if ($LASTEXITCODE -ne 0) { throw "secret scanner self-tests failed" }
 
+& python (Join-Path $projectRoot "scripts\sync_public_sdks.py") --check
+if ($LASTEXITCODE -ne 0) { throw "SDK/template drift detected" }
+
 Write-Host "[format and documentation links]" -ForegroundColor Cyan
 & python -m pytest -q -p no:cacheprovider --basetemp (Join-Path $pytestRunRoot "table-boundary") (Join-Path $projectRoot "tests\release-validation\modular_table_boundary_test.py")
 if ($LASTEXITCODE -ne 0) { throw "table boundary negative fixtures failed" }
@@ -109,7 +112,7 @@ if ($LASTEXITCODE -ne 0) { throw "Markdown link gate failed" }
 if ($LASTEXITCODE -ne 0) { throw "Agent productization contract gate failed" }
 & python (Join-Path $projectRoot "scripts\check_agent_code_ownership.py")
 if ($LASTEXITCODE -ne 0) { throw "Agent code ownership gate failed" }
-foreach ($module in @("platform", "cli\agentctl", "adapters\grpc-mapping", "adapters\legacy-http", "adapters\process", "adapters\sidecar", "workers\metric-runner", "frontend", "sdk\go", "examples\go-operations", "templates\go-generic", "templates\go-eino")) {
+foreach ($module in @("platform", "cli\agentctl", "cli\agent-eval", "contracts\agent-evaluation\go", "contracts\code-runtime", "adapters\grpc-mapping", "adapters\legacy-http", "adapters\process", "adapters\sidecar", "workers\metric-runner", "workers\code-runtime", "frontend", "sdk\go", "examples\go-operations", "agents\examples\go-eino", "templates\go-generic", "templates\go-eino")) {
     Write-Host "[go test] $module" -ForegroundColor Cyan
     Push-Location (Join-Path $projectRoot $module)
     try { & go test ./...; if ($LASTEXITCODE -ne 0) { throw "go test failed: $module" } }
@@ -154,7 +157,7 @@ foreach ($lane in $sandboxLanes) {
         "-e", "GOTOOLCHAIN=local",
         "-v", "${sandboxMount}:/workspace",
         "-w", "/workspace/workers/metric-runner",
-        "golang:1.26.9-bookworm",
+        "golang:1.26.10-bookworm",
         "go", "test", "-count=1", "-v", "-run", "TestSandbox", "./internal/sandbox/..."
     )
     $sandboxOutput = & docker @sandboxCommand 2>&1

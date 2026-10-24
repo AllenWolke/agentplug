@@ -39,6 +39,8 @@ type StateWrite struct {
 	ExpectedRevision                         uint64
 	Value                                    map[string]any
 	TTLSeconds, MaxEntries                   int
+	MaxRevisions                             uint64
+	ReservedQuota                            bool
 }
 
 type CheckpointStore interface {
@@ -52,6 +54,12 @@ type CheckpointReferenceReader interface {
 	LoadReference(context.Context, sharedkernel.Scope, contract.RecoveryCheckpointReference) (Checkpoint, error)
 }
 
+type RecoveryCheckpointPager interface {
+	ReadRecoveryCheckpointPage(context.Context, sharedkernel.Scope, sharedkernel.ExecutionLeaseBinding, contract.RecoveryCheckpointSetReference, int, int) (contract.RecoveryCheckpointReferencePage, error)
+}
+
+func (m *Module) SetRecoveryCheckpointPager(pager RecoveryCheckpointPager) { m.recoveryPager = pager }
+
 // CheckpointMaintenanceStore deletes expired payloads only. Lineage heads are
 // retained so expiry cannot reset CAS versions or resurrect an old operation.
 type CheckpointMaintenanceStore interface {
@@ -61,14 +69,11 @@ type CheckpointMaintenanceStore interface {
 var stateName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
 
 func stateKeys(scope sharedkernel.Scope, namespace, key string) (string, string, error) {
-	if scope.ValidateTrusted() != nil || !stateName.MatchString(namespace) || !stateName.MatchString(key) {
+	prefix, id, err := sharedkernel.CheckpointIdentity(scope, namespace, key)
+	if err != nil {
 		return "", "", ErrStateDenied
 	}
-	encoded, _ := json.Marshal([]string{scope.TenantID, scope.DepartmentID, scope.ApplicationID, scope.AgentID, scope.AgentInstanceID, scope.PrincipalType, scope.PrincipalID, scope.InstallationID, scope.AgentVersionID, scope.SessionID, scope.RunID})
-	prefix := sha256.Sum256(encoded)
-	encoded, _ = json.Marshal([]string{hex.EncodeToString(prefix[:]), namespace, key})
-	id := sha256.Sum256(encoded)
-	return hex.EncodeToString(prefix[:]), hex.EncodeToString(id[:]), nil
+	return prefix, id, nil
 }
 
 func validStateSchema(schema string) bool {

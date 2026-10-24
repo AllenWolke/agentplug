@@ -100,7 +100,7 @@ func automaticAssignmentRevocations(target PermissionSnapshot, command Authoriza
 				}
 			}
 		}
-		if affected && !membershipCovers(preserved, target.Principal.ID, assignment.Scope, now) {
+		if removedDepartmentContains(command, assignment.Scope) || affected && !membershipCovers(preserved, target.Principal.ID, assignment.Scope, now) {
 			result = append(result, assignment.ID)
 		}
 	}

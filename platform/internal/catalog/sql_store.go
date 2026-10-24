@@ -64,6 +64,44 @@ type CatalogListReader interface {
 	ListInstallations(context.Context, string, string, string, int) ([]Installation, error)
 }
 
+// PermissionTargetPager keeps the department Agent selector complete without
+// exposing runtime manifests or lifting the limit on each directory request.
+type PermissionTargetPager interface {
+	PagePermissionTargets(context.Context, string, string, string, string, int) ([]Installation, string, error)
+}
+
+func (s *SQLStore) PagePermissionTargets(ctx context.Context, tenantID, departmentID, applicationID, after string, limit int) ([]Installation, string, error) {
+	if strings.TrimSpace(tenantID) == "" || strings.TrimSpace(departmentID) == "" || strings.TrimSpace(applicationID) == "" ||
+		limit < 1 || limit > 100 || len(after) > 256 || strings.TrimSpace(after) != after || strings.ContainsRune(after, '\x00') {
+		return nil, "", ErrInvalidInstallation
+	}
+	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT i.id,i.tenant_id,i.department_id,i.application_id,i.agent_id,i.version_id,o.display_name,i.status
+		FROM platform_catalog_installation i JOIN platform_catalog_installation_options o ON o.installation_id=i.id
+		WHERE i.tenant_id=? AND i.department_id=? AND i.application_id=? AND i.id>?
+		ORDER BY i.id ASC LIMIT ?`), tenantID, departmentID, applicationID, after, limit+1)
+	if err != nil {
+		return nil, "", fmt.Errorf("page permission Agent targets: %w", err)
+	}
+	defer rows.Close()
+	items := make([]Installation, 0, limit+1)
+	for rows.Next() {
+		var item Installation
+		if err := rows.Scan(&item.ID, &item.TenantID, &item.DepartmentID, &item.ApplicationID, &item.AgentID, &item.VersionID, &item.DisplayName, &item.Status); err != nil {
+			return nil, "", fmt.Errorf("scan permission Agent target: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(items) > limit {
+		items = items[:limit]
+		next = items[len(items)-1].ID
+	}
+	return items, next, nil
+}
+
 // InstallableCatalogReader exposes only globally published definitions and
 // versions to an authorized application scope. It deliberately omits drafts,
 // raw manifests, schemas, and runtime endpoint material.
@@ -270,8 +308,12 @@ func (s *SQLStore) createDefinition(ctx context.Context, definition Definition, 
 }
 
 func (s *SQLStore) GetDefinition(ctx context.Context, id string) (Definition, error) {
+	reader, err := sqlutil.ContinuityReader(ctx, s.db)
+	if err != nil {
+		return Definition{}, err
+	}
 	var row Definition
-	err := s.db.QueryRowContext(ctx, sqlutil.Bind(`SELECT d.id,d.publisher_id,d.agent_key,d.display_name,m.description,d.status,d.revision,COALESCE(p.submitted_by,''),COALESCE(p.approved_by,'')
+	err = reader.QueryRowContext(ctx, sqlutil.Bind(`SELECT d.id,d.publisher_id,d.agent_key,d.display_name,m.description,d.status,d.revision,COALESCE(p.submitted_by,''),COALESCE(p.approved_by,'')
 		FROM platform_catalog_definition d JOIN platform_catalog_definition_metadata m ON m.definition_id=d.id LEFT JOIN platform_catalog_submission p ON p.object_kind='definition' AND p.object_id=d.id WHERE d.id=?`), id).
 		Scan(&row.ID, &row.PublisherID, &row.AgentKey, &row.DisplayName, &row.Description, &row.Status, &row.Revision, &row.SubmittedBy, &row.ApprovedBy)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -393,9 +435,13 @@ func (s *SQLStore) createVersion(ctx context.Context, version Version, actor *Co
 }
 
 func (s *SQLStore) GetVersion(ctx context.Context, id string) (Version, error) {
+	reader, err := sqlutil.ContinuityReader(ctx, s.db)
+	if err != nil {
+		return Version{}, err
+	}
 	var row Version
 	var evaluated, published sql.NullTime
-	err := s.db.QueryRowContext(ctx, sqlutil.Bind(`SELECT v.id,v.definition_id,v.semantic_version,v.manifest_hash,v.artifact_digest,a.manifest_json,a.input_schema_json,a.output_schema_json,v.status,v.revision,v.created_at,v.evaluated_at,v.published_at,COALESCE(p.submitted_by,''),COALESCE(p.approved_by,'')
+	err = reader.QueryRowContext(ctx, sqlutil.Bind(`SELECT v.id,v.definition_id,v.semantic_version,v.manifest_hash,v.artifact_digest,a.manifest_json,a.input_schema_json,a.output_schema_json,v.status,v.revision,v.created_at,v.evaluated_at,v.published_at,COALESCE(p.submitted_by,''),COALESCE(p.approved_by,'')
 		FROM platform_catalog_version v JOIN platform_catalog_version_artifact a ON a.version_id=v.id LEFT JOIN platform_catalog_submission p ON p.object_kind='version' AND p.object_id=v.id WHERE v.id=?`), id).
 		Scan(&row.ID, &row.DefinitionID, &row.SemanticVersion, &row.ManifestHash, &row.ArtifactDigest, &row.Manifest, &row.InputSchema, &row.OutputSchema, &row.Status, &row.Revision, &row.CreatedAt, &evaluated, &published, &row.SubmittedBy, &row.ApprovedBy)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -582,8 +628,12 @@ func (s *SQLStore) CreateInstallation(ctx context.Context, installation Installa
 }
 
 func (s *SQLStore) GetInstallation(ctx context.Context, id string) (Installation, error) {
+	reader, err := sqlutil.ContinuityReader(ctx, s.db)
+	if err != nil {
+		return Installation{}, err
+	}
 	var row Installation
-	err := s.db.QueryRowContext(ctx, sqlutil.Bind(`SELECT i.id,i.tenant_id,i.department_id,i.application_id,i.agent_id,i.version_id,o.display_name,o.deployment_mode,o.drain_policy,o.retention_policy_id,i.status,i.revision
+	err = reader.QueryRowContext(ctx, sqlutil.Bind(`SELECT i.id,i.tenant_id,i.department_id,i.application_id,i.agent_id,i.version_id,o.display_name,o.deployment_mode,o.drain_policy,o.retention_policy_id,i.status,i.revision
 		FROM platform_catalog_installation i JOIN platform_catalog_installation_options o ON o.installation_id=i.id WHERE i.id=?`), id).
 		Scan(&row.ID, &row.TenantID, &row.DepartmentID, &row.ApplicationID, &row.AgentID, &row.VersionID, &row.DisplayName, &row.DeploymentMode, &row.DrainPolicy, &row.RetentionPolicyID, &row.Status, &row.Revision)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -599,6 +649,10 @@ func (s *SQLStore) ListInstallations(ctx context.Context, tenantID, departmentID
 	if strings.TrimSpace(tenantID) == "" || limit <= 0 || limit > 100 {
 		return nil, ErrInvalidInstallation
 	}
+	reader, err := sqlutil.ContinuityReader(ctx, s.db)
+	if err != nil {
+		return nil, err
+	}
 	conditions := []string{"i.tenant_id=?"}
 	args := []any{tenantID}
 	if departmentID = strings.TrimSpace(departmentID); departmentID != "" {
@@ -610,7 +664,7 @@ func (s *SQLStore) ListInstallations(ctx context.Context, tenantID, departmentID
 		args = append(args, applicationID)
 	}
 	args = append(args, limit)
-	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT i.id,i.tenant_id,i.department_id,i.application_id,i.agent_id,i.version_id,o.display_name,o.deployment_mode,o.drain_policy,o.retention_policy_id,i.status,i.revision
+	rows, err := reader.QueryContext(ctx, sqlutil.Bind(`SELECT i.id,i.tenant_id,i.department_id,i.application_id,i.agent_id,i.version_id,o.display_name,o.deployment_mode,o.drain_policy,o.retention_policy_id,i.status,i.revision
 		FROM platform_catalog_installation i JOIN platform_catalog_installation_options o ON o.installation_id=i.id
 		WHERE `+strings.Join(conditions, " AND ")+`
 		ORDER BY i.created_at DESC,i.id ASC LIMIT ?`), args...)
@@ -900,7 +954,11 @@ func (s *SQLStore) ListDeployments(ctx context.Context, tenantID, departmentID, 
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT d.id,d.tenant_id,d.department_id,d.application_id,d.agent_version_id,d.agent_installation_id,d.artifact_digest,d.transport,d.endpoint_ref,d.placement_policy,d.resource_policy,d.status,d.desired_revision,d.observed_revision,d.manifest_hash,d.created_at,d.updated_at
+	reader, err := sqlutil.ContinuityReader(ctx, s.db)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := reader.QueryContext(ctx, sqlutil.Bind(`SELECT d.id,d.tenant_id,d.department_id,d.application_id,d.agent_version_id,d.agent_installation_id,d.artifact_digest,d.transport,d.endpoint_ref,d.placement_policy,d.resource_policy,d.status,d.desired_revision,d.observed_revision,d.manifest_hash,d.created_at,d.updated_at
 		FROM platform_catalog_deployment d JOIN platform_catalog_installation_options io ON io.installation_id=d.agent_installation_id
 		JOIN platform_catalog_version_artifact va ON va.version_id=d.agent_version_id
 		WHERE d.tenant_id=? AND d.department_id=? AND d.application_id=? AND d.agent_installation_id=? ORDER BY d.desired_revision DESC LIMIT ?`), tenantID, departmentID, applicationID, installationID, limit)

@@ -60,3 +60,31 @@ func TestDerivedDatasetReadAndReviewRequireSourceAccess(t *testing.T) {
 		}
 	}
 }
+
+func TestV2DerivedDatasetKeepsOriginalHistoryGuard(t *testing.T) {
+	for _, version := range []string{agenteval.JudgeInputV2, agenteval.JudgeInputV3} {
+		t.Run(version, func(t *testing.T) {
+			d := judgingDataset()
+			var sample map[string]json.RawMessage
+			_ = json.Unmarshal(d.Cases[0], &sample)
+			var frozen agenteval.JudgeInput
+			_ = json.Unmarshal(sample["input"], &frozen)
+			frozen.Version = version
+			sample["input"], _ = json.Marshal(frozen)
+			d.Cases[0], _ = json.Marshal(sample)
+			refs, err := JudgeDatasetReferences(d)
+			if err != nil || len(refs) != 1 || refs[0].RunID != frozen.SourceRunID {
+				t.Fatal("new version skipped source authority", err)
+			}
+			m := NewModule(newMemoryStore(), "module-secret", nil, nil)
+			a := Actor{Scope: Scope{TenantID: "tenant-a", DepartmentID: "dept-a", ApplicationID: "app-a"}, PrincipalType: "user", PrincipalID: "reviewer", Browser: true}
+			if m.authorizeDatasetSources(context.Background(), a, d) != ErrUnavailable {
+				t.Fatal("new version skipped missing source guard")
+			}
+			m.SetSourceAuthorizer(sourceGuard(func(context.Context, Actor, []agenteval.SourceReference) error { return ErrForbidden }))
+			if m.authorizeDatasetSources(context.Background(), a, d) != ErrForbidden {
+				t.Fatal("new version ignored current revocation")
+			}
+		})
+	}
+}

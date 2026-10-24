@@ -107,6 +107,8 @@ func (f *capabilityFixture) Post(_ context.Context, path string, payload map[str
 		}
 		*state = map[string]any{"revision": currentRevision + 1, "schema_id": schema, "value": payload["value"]}
 		return map[string]any{"checkpoint": *state}, nil
+	case "/internal/knowledge/references/authorize":
+		return map[string]any{"version": "knowledge-reference-authorization/v1", "authorized": true, "reference_count": reflect.ValueOf(payload["references"]).Len(), "model_requests_sent": 0}, nil
 	case "/internal/prompt/resolve":
 		return map[string]any{"template": "Diagnose carefully", "template_hash": "published-hash"}, nil
 	case "/internal/model/generate":
@@ -121,7 +123,7 @@ func (f *capabilityFixture) Post(_ context.Context, path string, payload map[str
 		if f.cancel != nil {
 			f.cancel()
 		}
-		return map[string]any{"references": []any{}}, nil
+		return map[string]any{"references": []any{map[string]any{"doc_id": "doc", "content": "authorized evidence", "source": "platform-knowledge", "provider_knowledge_base_id": "go-operations", "provider_document_id": "doc", "document_version": "v1"}}}, nil
 	case "/internal/tool/invoke":
 		if payload["name"] != "runtime.inspect" || payload["call_id"] != "command-1:inspect" {
 			return nil, errors.New("unexpected tool binding")
@@ -173,6 +175,18 @@ func (f *capabilityFixture) RunHarness(ctx context.Context, input map[string]any
 
 func businessRequest() agentplatform.ExecuteRequest {
 	return agentplatform.ExecuteRequest{InputSchema: inputSchema, IdempotencyKey: "command-1", Input: map[string]any{"service": "api", "symptom": "latency increased", "observations": "p95=2s"}}
+}
+
+func TestHistoricalV2OutputRetainsPublishedShape(t *testing.T) {
+	request := businessRequest()
+	request.InputSchema = "schema://example-go-operations/input/v2"
+	result, err := diagnose(context.Background(), request, &capabilityFixture{}, nil)
+	if err != nil || result["schema"] != "schema://example-go-operations/output/v2" {
+		t.Fatal("historical v2 execution changed", err)
+	}
+	if _, exists := result["model_metadata"]; exists {
+		t.Fatal("v3 metadata changed the published v2 shape")
+	}
 }
 
 func TestHarnessRecoveryCheckpointUsesSDKSchemaAndRejectsLegacySchema(t *testing.T) {
@@ -309,7 +323,7 @@ func TestRejectedInputMakesNoCapabilityCalls(t *testing.T) {
 }
 
 func TestCapabilityRejectionStopsWorkflow(t *testing.T) {
-	for _, path := range []string{"/internal/prompt/resolve", "/internal/tool/invoke", "/internal/knowledge/search", "/internal/model/generate"} {
+	for _, path := range []string{"/internal/prompt/resolve", "/internal/tool/invoke", "/internal/knowledge/search", "/internal/model/generate", "/internal/knowledge/references/authorize"} {
 		t.Run(path, func(t *testing.T) {
 			denied := &agentplatform.AppError{Code: "CAPABILITY_DENIED", Message: "denied"}
 			f := &capabilityFixture{failurePath: path, failure: denied}

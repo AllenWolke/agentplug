@@ -16,10 +16,10 @@ type RuntimeCancellationBinding struct {
 }
 
 type runtimeCancellationOwner interface {
-	CancellationBinding(compensation.EffectRegistry, *SQLToolInvocationStore) (RuntimeCancellationBinding, error)
+	CancellationBinding(compensation.EffectLedger, *SQLToolInvocationStore) (RuntimeCancellationBinding, error)
 }
 
-func (m *Module) RuntimeCancellationBindings(ledger compensation.EffectRegistry, tools *SQLToolInvocationStore) ([]RuntimeCancellationBinding, error) {
+func (m *Module) RuntimeCancellationBindings(ledger compensation.EffectLedger, tools *SQLToolInvocationStore) ([]RuntimeCancellationBinding, error) {
 	if m == nil || ledger == nil || tools == nil {
 		return nil, compensation.ErrUnavailable
 	}

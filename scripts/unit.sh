@@ -51,6 +51,7 @@ step "secret scan"
 # 因此直接调用与本门禁口径完全一致；真正被跟踪的 `.env*` 仍会被拦截。
 "${PYTHON_BIN}" "${project_root}/scripts/scan_secrets.py"
 "${PYTHON_BIN}" "${project_root}/scripts/test_scan_secrets.py"
+"${PYTHON_BIN}" "${project_root}/scripts/sync_public_sdks.py" --check
 
 step "format and documentation links"
 "${PYTHON_BIN}" "${project_root}/scripts/verify_modular_boundaries.py"
@@ -75,14 +76,19 @@ bash "${project_root}/scripts/check_proto_generated.sh"
 go_modules=(
     "platform"
     "cli/agentctl"
+    "cli/agent-eval"
+    "contracts/agent-evaluation/go"
+    "contracts/code-runtime"
     "adapters/grpc-mapping"
     "adapters/legacy-http"
     "adapters/process"
     "adapters/sidecar"
     "workers/metric-runner"
+    "workers/code-runtime"
     "frontend"
     "sdk/go"
     "examples/go-operations"
+    "agents/examples/go-eino"
     "templates/go-generic"
     "templates/go-eino"
 )
@@ -129,7 +135,7 @@ run_sandbox_lane() {
         -v "${sandbox_mount}:/workspace" \
         -w /workspace/workers/metric-runner \
         "${extra[@]}" \
-        golang:1.26.9-bookworm \
+        golang:1.26.10-bookworm \
         go test -count=1 -v -run TestSandbox ./internal/sandbox/... 2>&1)"
     exit_code=$?
     set -e

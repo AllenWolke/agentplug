@@ -35,6 +35,12 @@ func TestCapabilityRenewalRechecksLeaseCommandAndAuthorization(t *testing.T) {
 	if err := json.Unmarshal(body, &request); err != nil {
 		t.Fatal(err)
 	}
+	request.Input["numeric_evidence"] = map[string]any{"coverage": json.Number("1.0"), "source_id": json.Number("9007199254740993")}
+	var encodeErr error
+	body, encodeErr = json.Marshal(request)
+	if encodeErr != nil {
+		t.Fatal(encodeErr)
+	}
 	created, err := store.Create(platformruntime.CreateRequest{ID: scope.RunID, Scope: scope.domain(), AgentVersionID: "v1", IdempotencyKey: "renewal-key", Fingerprint: "fp", RequestJSON: body})
 	if err != nil {
 		t.Fatal(err)
@@ -71,6 +77,10 @@ func TestCapabilityRenewalRechecksLeaseCommandAndAuthorization(t *testing.T) {
 	ctx := sharedkernel.BindExecutionLease(context.Background(), running.Revision, running.LeaseToken)
 	if token, err := m.RenewCapabilityToken(ctx, running.Scope, "invoke", hash, policy); err != nil || token != "renewed-test-token" || authorizationChecks != 1 {
 		t.Fatal("current execution renewal failed", err)
+	}
+	numbers := signer.request.Input["numeric_evidence"].(map[string]any)
+	if numbers["coverage"] != json.Number("1.0") || numbers["source_id"] != json.Number("9007199254740993") {
+		t.Fatal("capability renewal changed original evidence")
 	}
 	allowed = false
 	if _, err := m.RenewCapabilityToken(ctx, running.Scope, "invoke", hash, policy); err == nil {

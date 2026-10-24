@@ -162,6 +162,7 @@ CREATE INDEX IF NOT EXISTS idx_model_deployment_version ON platform_model_deploy
 			updated_at TIMESTAMPTZ(6) NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_model_access_policy_scope ON platform_model_access_policy (tenant_id,department_id,application_id,status,created_at);
 CREATE INDEX IF NOT EXISTS idx_model_access_policy_installation ON platform_model_access_policy (installation_id,agent_version_id,principal_id);`,
+		`ALTER TABLE platform_model_price_version ADD COLUMN IF NOT EXISTS cached_input_micros_per_1k_tokens BIGINT NULL CHECK (cached_input_micros_per_1k_tokens >= 0 AND cached_input_micros_per_1k_tokens <= input_micros_per_1k_tokens);`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, sqlutil.Bind(statement)); err != nil {
@@ -378,6 +379,9 @@ func (s *SQLStore) CreatePriceVersion(ctx context.Context, row *PriceVersion) er
 	if err = validatePriceRates(trustZone, modelKind, row.InputMicrosPer1K, row.OutputMicrosPer1K); err != nil {
 		return err
 	}
+	if row.CachedInputMicrosPer1K != nil && modelKind != ModelKindChat {
+		return ErrInvalidRequest
+	}
 	rows, err := tx.QueryContext(ctx, sqlutil.Bind(`SELECT `+priceColumns+` FROM platform_model_price_version WHERE model_version_id=? FOR UPDATE`), row.ModelVersionID)
 	if err != nil {
 		return err
@@ -402,7 +406,7 @@ func (s *SQLStore) CreatePriceVersion(ctx context.Context, row *PriceVersion) er
 	}
 	now := time.Now().UTC()
 	row.CreatedAt, row.UpdatedAt = now, now
-	_, err = tx.ExecContext(ctx, sqlutil.Bind(`INSERT INTO platform_model_price_version (id,model_version_id,currency,input_micros_per_1k_tokens,output_micros_per_1k_tokens,effective_from,effective_until,content_hash,status,revision,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`), row.ID, row.ModelVersionID, row.Currency, row.InputMicrosPer1K, row.OutputMicrosPer1K, row.EffectiveFrom, row.EffectiveUntil, row.ContentHash, row.Status, row.Revision, row.CreatedBy, now, now)
+	_, err = tx.ExecContext(ctx, sqlutil.Bind(`INSERT INTO platform_model_price_version (id,model_version_id,currency,input_micros_per_1k_tokens,output_micros_per_1k_tokens,effective_from,effective_until,content_hash,status,revision,created_by,created_at,updated_at,cached_input_micros_per_1k_tokens) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`), row.ID, row.ModelVersionID, row.Currency, row.InputMicrosPer1K, row.OutputMicrosPer1K, row.EffectiveFrom, row.EffectiveUntil, row.ContentHash, row.Status, row.Revision, row.CreatedBy, now, now, row.CachedInputMicrosPer1K)
 	if err != nil {
 		return mapDuplicate(err)
 	}

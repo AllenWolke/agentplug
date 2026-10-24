@@ -15,6 +15,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/lexagent/platform/internal/modelgateway"
 )
 
 var (
@@ -176,30 +178,32 @@ type ModelVersion struct {
 // It contains accounting rates only; provider credentials and SecretRefs are
 // deliberately outside this public DTO.
 type PriceVersion struct {
-	ID                string     `json:"id"`
-	ModelVersionID    string     `json:"model_version_id"`
-	Currency          string     `json:"currency"`
-	InputMicrosPer1K  int64      `json:"input_micros_per_1k_tokens"`
-	OutputMicrosPer1K int64      `json:"output_micros_per_1k_tokens"`
-	EffectiveFrom     time.Time  `json:"effective_from"`
-	EffectiveUntil    *time.Time `json:"effective_until,omitempty"`
-	ContentHash       string     `json:"content_hash"`
-	Status            string     `json:"status"`
-	Revision          uint64     `json:"revision"`
-	CreatedBy         string     `json:"created_by"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	CachedInputMicrosPer1K *int64     `json:"cached_input_micros_per_1k_tokens,omitempty"`
+	ID                     string     `json:"id"`
+	ModelVersionID         string     `json:"model_version_id"`
+	Currency               string     `json:"currency"`
+	InputMicrosPer1K       int64      `json:"input_micros_per_1k_tokens"`
+	OutputMicrosPer1K      int64      `json:"output_micros_per_1k_tokens"`
+	EffectiveFrom          time.Time  `json:"effective_from"`
+	EffectiveUntil         *time.Time `json:"effective_until,omitempty"`
+	ContentHash            string     `json:"content_hash"`
+	Status                 string     `json:"status"`
+	Revision               uint64     `json:"revision"`
+	CreatedBy              string     `json:"created_by"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
 // CreatePriceVersionRequest is intentionally free of caller-selected scope
 // and credential fields. Its identity is supplied by the trusted gateway.
 type CreatePriceVersionRequest struct {
-	ModelVersionID    string     `json:"model_version_id"`
-	Currency          string     `json:"currency"`
-	InputMicrosPer1K  int64      `json:"input_micros_per_1k_tokens"`
-	OutputMicrosPer1K int64      `json:"output_micros_per_1k_tokens"`
-	EffectiveFrom     time.Time  `json:"effective_from"`
-	EffectiveUntil    *time.Time `json:"effective_until,omitempty"`
+	CachedInputMicrosPer1K *int64     `json:"cached_input_micros_per_1k_tokens,omitempty"`
+	ModelVersionID         string     `json:"model_version_id"`
+	Currency               string     `json:"currency"`
+	InputMicrosPer1K       int64      `json:"input_micros_per_1k_tokens"`
+	OutputMicrosPer1K      int64      `json:"output_micros_per_1k_tokens"`
+	EffectiveFrom          time.Time  `json:"effective_from"`
+	EffectiveUntil         *time.Time `json:"effective_until,omitempty"`
 }
 
 // PriceResolver is a read-only port for resolving exactly one approved price
@@ -432,6 +436,9 @@ func validateCreateDefinition(in CreateModelDefinitionRequest) (ModelDefinition,
 	capabilities, err := normalizeJSONObject(in.Capabilities)
 	if err != nil {
 		return ModelDefinition{}, err
+	}
+	if wire, err := modelgateway.ParseWireCapabilities(capabilities); err != nil || in.Kind != ModelKindChat && wire.ContextCacheMode != "" {
+		return ModelDefinition{}, ErrInvalidRequest
 	}
 	return ModelDefinition{ProviderID: in.ProviderID, ModelKey: in.ModelKey, Kind: in.Kind, DisplayName: in.DisplayName, Capabilities: capabilities, ContextLimit: in.ContextLimit, LifecycleStatus: StatusDraft, Revision: 1}, nil
 }

@@ -42,8 +42,10 @@ async def test_receipt_polling_reuses_key_and_revalidates(monkeypatch, codes, ex
                               json={"code": code, "message": "private-upstream-message"})
 
     real_client = httpx.AsyncClient
+    # The governed tool client passes its own connection transport; the fixture
+    # replaces that transport with the mock instead of adding a second one.
     monkeypatch.setattr(tool_client.httpx, "AsyncClient",
-                        lambda **options: real_client(**options, transport=httpx.MockTransport(handle)))
+                        lambda **options: real_client(**{**options, "transport": httpx.MockTransport(handle)}))
     monkeypatch.setattr(tool_client, "renew_context_token", renew)
     monkeypatch.setattr(tool_client.asyncio, "sleep", sleep)
     if codes[-1] is None:

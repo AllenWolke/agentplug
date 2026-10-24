@@ -22,4 +22,14 @@ func TestRestoreEvaluationParentFromDurableRequest(t *testing.T) {
 	if run.Scope.ParentRunID != "" {
 		t.Fatalf("invalid request invented billing lineage: %+v", run.Scope)
 	}
+	run.RequestJSON = []byte(`{"scope":{"parent_run_id":"forged-parent"},"input":`)
+	restoreParentRunID(&run)
+	if run.Scope.ParentRunID != "" {
+		t.Fatal("valid header hid corrupt trailing JSON")
+	}
+	run.RequestJSON = []byte(`{"scope":{"parent_run_id":"new-parent"}}`)
+	restoreParentRunID(&run)
+	if run.Scope.ParentRunID != "new-parent" {
+		t.Fatal("changed request reused old lineage")
+	}
 }

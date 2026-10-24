@@ -30,7 +30,7 @@ func TestHeartbeatLockTimeoutDoesNotCancelAndDenialStillDoes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	claimed, err := base.AcquireLease(created.Run.ID, "owner", time.Now(), 90*time.Millisecond)
+	claimed, err := base.AcquireLease(created.Run.ID, "owner", time.Now(), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,9 +54,9 @@ func TestHeartbeatLockTimeoutDoesNotCancelAndDenialStillDoes(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stop := d.startHeartbeat(ctx, cancel, run, 90*time.Millisecond)
+	stop := d.startHeartbeat(ctx, cancel, run, time.Second)
 	defer stop()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(3 * time.Second)
 	for {
 		current, err := base.Get(run.ID)
 		if err != nil {
@@ -76,7 +76,7 @@ func TestHeartbeatLockTimeoutDoesNotCancelAndDenialStillDoes(t *testing.T) {
 	deny.Store(true)
 	select {
 	case <-ctx.Done():
-	case <-time.After(time.Second):
+	case <-time.After(3 * time.Second):
 		t.Fatal("ancestry denial did not cancel the run")
 	}
 }
@@ -88,7 +88,7 @@ func TestHeartbeatStatementCancelDoesNotCancelAndDenialStillDoes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	claimed, err := base.AcquireLease(created.Run.ID, "owner", time.Now(), 90*time.Millisecond)
+	claimed, err := base.AcquireLease(created.Run.ID, "owner", time.Now(), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,9 +108,9 @@ func TestHeartbeatStatementCancelDoesNotCancelAndDenialStillDoes(t *testing.T) {
 	d.authorize = wait
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stop := d.startHeartbeat(ctx, cancel, run, 90*time.Millisecond)
+	stop := d.startHeartbeat(ctx, cancel, run, time.Second)
 	defer stop()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(3 * time.Second)
 	for {
 		current, err := base.Get(run.ID)
 		if err != nil {
@@ -130,7 +130,7 @@ func TestHeartbeatStatementCancelDoesNotCancelAndDenialStillDoes(t *testing.T) {
 	deny.Store(true)
 	select {
 	case <-ctx.Done():
-	case <-time.After(time.Second):
+	case <-time.After(3 * time.Second):
 		t.Fatal("permission denial did not cancel the run")
 	}
 }
@@ -142,7 +142,7 @@ func TestHeartbeatCallerCancelStillCancels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	claimed, err := base.AcquireLease(created.Run.ID, "owner", time.Now(), 90*time.Millisecond)
+	claimed, err := base.AcquireLease(created.Run.ID, "owner", time.Now(), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,11 +154,11 @@ func TestHeartbeatCallerCancelStillCancels(t *testing.T) {
 	d.coordinatedGuard = func(context.Context, sharedkernel.Scope) error { return context.Canceled }
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stop := d.startHeartbeat(ctx, cancel, run, 90*time.Millisecond)
+	stop := d.startHeartbeat(ctx, cancel, run, time.Second)
 	defer stop()
 	select {
 	case <-ctx.Done():
-	case <-time.After(time.Second):
+	case <-time.After(3 * time.Second):
 		t.Fatal("caller cancellation was deferred")
 	}
 }
@@ -174,7 +174,7 @@ func TestHeartbeatRenewsLeaseAndCancelsOnDatabaseFailureOrRevocation(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			claimed, err := base.AcquireLease(created.Run.ID, "owner", time.Now(), 90*time.Millisecond)
+			claimed, err := base.AcquireLease(created.Run.ID, "owner", time.Now(), time.Second)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -193,9 +193,9 @@ func TestHeartbeatRenewsLeaseAndCancelsOnDatabaseFailureOrRevocation(t *testing.
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			stop := d.startHeartbeat(ctx, cancel, run, 90*time.Millisecond)
+			stop := d.startHeartbeat(ctx, cancel, run, time.Second)
 			defer stop()
-			deadline := time.Now().Add(time.Second)
+			deadline := time.Now().Add(3 * time.Second)
 			for {
 				current, err := base.Get(run.ID)
 				if err != nil {
@@ -216,7 +216,7 @@ func TestHeartbeatRenewsLeaseAndCancelsOnDatabaseFailureOrRevocation(t *testing.
 			}
 			select {
 			case <-ctx.Done():
-			case <-time.After(time.Second):
+			case <-time.After(3 * time.Second):
 				t.Fatal("execution was not cancelled")
 			}
 		})

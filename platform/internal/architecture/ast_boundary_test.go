@@ -16,24 +16,52 @@ import (
 // Explicit Port/DTO symbols: no automatic adoption of a passing baseline.
 // 显式Port/DTO符号，不自动收编违规实现为通过基线。
 var publicSymbols = map[string]string{
-	"sqlutil":  "Bind IsUniqueViolation OpenPostgres SQLState TransactionDB",
-	"identity": "AccessContext PrincipalType PrincipalUser PrincipalServicePrincipal",
-	"audit":    "TxRecorder Event",
+	"compensation":  "ContractVersion ErrConflict ErrInvalid ErrNotSubmitted ErrPending ErrUnavailable LeaseFromContext CurrentLeaseFromContext OriginalEffect Receipt Registration Step StepID ScopeDigest StopProof Progress Authority Coordinator EffectLedger LocalEffects LocalEffect LocalEffectOwner Port Engine SweepStats WorkerStore MaxSteps",
+	"reversibleapi": "Hash Protocol Provider Request Response",
+	"knowledge":     "BusinessDate ErrDocumentValidityUnavailable ErrKnowledgeAuthorityChanged ErrKnowledgeAuthorityUnavailable",
+	// SchemaWriter exposes bound statements only, and excludes transaction
+	// completion. WithSchemaTransaction joins the migration owner's transaction.
+	// ContinuityTransaction carries only a trusted same-database transaction;
+	// it grants no authority and cannot commit it. IAM rechecks remain live.
+	// The rollback helper retries only a complete local transaction after an
+	// explicit PostgreSQL abort. Its report is a value DTO; neither database
+	// ownership nor unknown-commit replay authority crosses this boundary.
+	"sqlutil": "Bind IsUniqueViolation OpenPostgres SQLState TransactionDB SchemaWriter WithSchemaTransaction WithContinuityTransaction ContinuityTransaction ContinuityReader ContinuityQueryer IsTransactionRollback RetryRolledBack IsKnownRollback TransactionRetryReport LockTransactionResources",
+	// IAM fact DTOs are read inside the shared continuity fence transaction
+	// (WithCurrentAuthorizationSnapshotContext): the snapshot, workload binding,
+	// machine credential, validity window and data scope are plain JSON DTOs
+	// with no repository, signer or connection. Authority stays live: every read
+	// is rechecked before disclosure or commit, and revocation still fails
+	// closed. They carry no secret material beyond what the caller may read.
+	"identity": "AccessContext PrincipalType PrincipalUser PrincipalServicePrincipal PermissionSnapshot WorkloadBinding MachineCredential Validity DataScope",
+	// The writer port accepts validated, scoped telemetry DTOs only. Its
+	// constructor carries no database access; the audit repository stays private.
+	"audit": "TxRecorder Event PerformanceRecorder PerformanceObservation NewPerformanceObservation ErrInvalidPerformanceObservation",
 	// Typed denial classifications are a bounded diagnostic DTO, not a repository
 	// or an authorization bypass. Capability uses them without raw error text.
 	"agentcoordination": "AdmissionState ChildAdmission ChildAdmitRequest ChildCancellation ChildCancelRequest ChildPreparation ChildPrepareRequest ChildReadRequest ChildResult ChildStopControlConflictVersion ChildStopIdentity ChildStopRevisionConflict ClassifyRouteError RouteErrorClassification RouteDenialParent RouteReasonParentBoundContext RouteReasonParentLiveCheck RouteReasonParentPolicy ErrConflict ErrDenied GroupReadRequest GroupResult RoutePlan RouteRequest Router",
 	"notification":      "TxEnqueuer Event ChannelAdapter ErrAdapterUnavailable ErrInvalidEvent",
-	// Reviewed cancellation protocol ports, immutable DTOs and safe errors.
-	// Concrete SQLStore/LocalEffectLedger constructors remain private to their owner.
-	"compensation":    "Authority ContractVersion Coordinator CurrentLeaseFromContext EffectRegistry Engine ErrConflict ErrInvalid ErrNotSubmitted ErrPending ErrUnavailable LeaseFromContext LocalEffect LocalEffectRecorder MaxSteps OpenCoordinator OriginalEffect Port Progress Receipt Registration ScopeDigest Step StepID StopProof SweepStats WorkerStore",
-	"reversibleapi":   "Hash Protocol Provider Request Response",
-	"capability":      "ToolReceiptQuery ErrToolInvocationConflict ToolReceiptScopeHash ToolCommitGuard BusinessIssueCommand ToolCommandFingerprint BusinessReviewCommand BusinessToolStore",
-	"agentgateway":    "Target ErrInvalidResponse ErrInvalidTarget EventStream CompletedExecutionFailure NewCompletedExecutionFailure",
-	"modelcapacity":   "CapacityProvider Deployment ErrExceeded ErrUnavailable Lease ParseCapacityUnits RegisterPoolTx Request RuntimeDeployment UpdatePoolStateTx",
-	"modelgateway":    "AccessResolver ErrEndpointUnresolved ErrModelUnavailable ErrRequestTooLarge ErrSecretUnavailable ErrUnsafeEndpoint GenerateRequest GenerateResult EmbeddingResult UsageEmbeddingPort Message ModelMetadata ModelMetadataPort Port ProviderMetadata ProviderMetadataPort Selection WithEmbeddingPurpose SafeProviderFailureKind ErrProviderUnavailable ErrResponseTooLarge ErrProviderResponse SecretResolver ValidateFunctionRequest",
-	"modelgovernance": "ActionApprove Actor Authorizer ErrForbidden ErrModelAccessDenied ErrNotFound PriceVersion Scope StatusApproved TrustExternal TrustLocal",
-	"policyasset":     "KnowledgeDocumentBinding ModelPolicy Resolver Snapshot SnapshotFromContext ToolPolicy FunctionDefinition ErrFunctionDenied AgentDelegationPolicy",
-	"usagecost":       "ErrBudgetExceeded ErrBudgetReservationClosed ErrInvalidUsage Event ModelBudgetManualReleaseStore ModelBudgetReconciliationStore ModelBudgetRequest ModelBudgetReservation ModelBudgetScope ModelBudgetStore ModelBudgetWindow Recorder Scope StableModelUsageStepID ErrBudgetScopeMismatch ModelBudgetExecutionBindingStore RunTreeBudgetReceipt",
+	"capability":        "ToolReceiptQuery ErrToolInvocationConflict ToolReceiptScopeHash ToolCommitGuard BusinessIssueCommand ToolCommandFingerprint BusinessReviewCommand BusinessToolStore ToolNoEffectError",
+	"agentgateway":      "Target ErrInvalidResponse ErrInvalidTarget EventStream CompletedExecutionFailure NewCompletedExecutionFailure",
+	"modelcapacity":     "CapacityProvider Deployment ErrExceeded ErrUnavailable Lease ParseCapacityUnits RegisterPoolTx Request RuntimeDeployment UpdatePoolStateTx",
+	// Routing crosses modules through reviewed DTOs, pure validators and scoped
+	// ports. Catalog, policy and invocation SQL repositories remain private.
+	// Published-stage rendering and cache prefix preparation are pure functions.
+	// ResolvedModel contains catalog identity/status only, with no secret or SQL.
+	"prompt": "InvocationMessages",
+	// This utility only decodes immutable bytes and clones values. It carries
+	// no storage, authorization, policy freshness or request execution port.
+	"jsonvaluecache": "Cache New",
+	// Attempt tracing exposes bounded redacted values and a request-local
+	// observer only; provider transports, retry decisions and secrets stay private.
+	"modelgateway":    "AccessResolver ErrEndpointUnresolved ErrModelUnavailable ErrRequestTooLarge ErrSecretUnavailable ErrUnsafeEndpoint GenerateRequest GenerateResult EmbeddingResult UsageEmbeddingPort Message ModelMetadata ModelMetadataPort Port ProviderMetadata ProviderMetadataPort SafeProviderFailureKind SafeProviderTransportDetail WithProviderAttemptTrace ProviderAttemptTrace ProviderAttemptObservation ErrProviderResponse ErrProviderUnavailable ErrResponseTooLarge Selection WithEmbeddingPurpose SecretResolver ValidateFunctionRequest RoutingMetadata RoutingMetadataResolver ParseWireCapabilities ValidateWireReasoning PrepareContextCachePrefix NormalizeResponseSchema ResponseSchemaDialect ResponseSchemaReceipt SupportsResponseSchema ProvablyUnsent",
+	"modelgovernance": "ActionApprove Actor Authorizer ErrForbidden ErrModelAccessDenied ErrNotFound PriceVersion PriceResolver ResolvedModel Scope StatusApproved TrustExternal TrustLocal TrustPrivate ModelKindChat",
+	"policyasset":     "KnowledgeDocumentBinding ModelPolicy RulePolicy Resolver Snapshot SnapshotFromContext ToolPolicy FunctionDefinition ErrFunctionDenied AgentDelegationPolicy ModelRoutingPolicy ModelRouteAvailabilityPolicy ModelRouteQualificationReuse ModelSelection ModelSelectionBinding ModelSelectionStore ModelRoutingReceipt RunModelRoutingSummary ModelRoutingSummaryReader BindRoutingTask RoutingExecutionContextSHA256 ModelComplexityRank ErrMissingPolicy MaximumCheckpointRevisions DefaultCheckpointRevisions",
+	// Failed preparation repair uses narrow transaction ports; SQL stores stay
+	// private. The ports cannot release money or complete the caller transaction.
+	// Reservation contention is an explicit retryable result of the public
+	// budget admission port; it grants no direct store or transaction access.
+	"usagecost": "ModelPreparationBindingReader ModelPreparationReconciliationWriter ModelBudgetClosureReader ModelBudgetClosure ModelBudgetRetentionReader ErrBudgetExceeded ErrBudgetReservationClosed ErrBudgetReservationConflict ErrInvalidUsage Event ModelBudgetManualReleaseStore ModelBudgetReconciliationStore ModelBudgetRequest ModelBudgetReservation ModelBudgetScope ModelBudgetStore ModelBudgetWindow Recorder Scope StableModelUsageStepID ErrBudgetScopeMismatch ModelBudgetExecutionBindingStore RunTreeBudgetReceipt",
 }
 
 func importViolations(owner string, source []byte) ([]string, error) {
@@ -134,10 +162,22 @@ func TestImportBoundaryNegativeFixtures(t *testing.T) {
 		allowed      bool
 	}{
 		{"legal-port", `package x; import p "github.com/lexagent/platform/internal/agentgateway"; var _ p.Target`, true},
-		{"compensation-port", `package x; import p "github.com/lexagent/platform/internal/compensation"; var _ p.EffectRegistry`, true},
-		{"compensation-repository", `package x; import p "github.com/lexagent/platform/internal/compensation"; var _ = p.NewSQLStore`, false},
-		{"compensation-storage", `package x; import p "github.com/lexagent/platform/internal/compensation"; var _ *p.SQLStore`, false},
-		{"compensation-ledger", `package x; import p "github.com/lexagent/platform/internal/compensation"; var _ *p.LocalEffectLedger`, false},
+		{"schema-writer-port", `package x; import p "github.com/lexagent/platform/internal/sqlutil"; var _ p.SchemaWriter; var _ = p.WithSchemaTransaction`, true},
+		{"confirmed-rollback-port", `package x; import p "github.com/lexagent/platform/internal/sqlutil"; var _ = p.IsTransactionRollback; var _ = p.RetryRolledBack[int]; var _ = p.IsKnownRollback; var _ p.TransactionRetryReport`, true},
+		{"rollback-proof-private", `package x; import p "github.com/lexagent/platform/internal/sqlutil"; var _ p.confirmedRollback`, false},
+		{"transaction-resource-port", `package x; import p "github.com/lexagent/platform/internal/sqlutil"; var _ = p.LockTransactionResources`, true},
+		{"resource-key-implementation-private", `package x; import p "github.com/lexagent/platform/internal/sqlutil"; var _ = p.transactionResourceIDs`, false},
+		{"performance-writer-port", `package x; import p "github.com/lexagent/platform/internal/audit"; var _ p.PerformanceRecorder; var _ p.PerformanceObservation; var _ = p.NewPerformanceObservation`, true},
+		{"performance-repository-private", `package x; import p "github.com/lexagent/platform/internal/audit"; var _ p.SQLStore`, false},
+		{"preparation-recovery-ports", `package x; import p "github.com/lexagent/platform/internal/usagecost"; var _ p.ModelPreparationBindingReader; var _ p.ModelPreparationReconciliationWriter`, true},
+		{"budget-window-repository-private", `package x; import p "github.com/lexagent/platform/internal/usagecost"; var _ p.SQLStore`, false},
+		{"budget-tree-repository-private", `package x; import p "github.com/lexagent/platform/internal/usagecost"; var _ p.SQLRunTreeBudgetStore`, false},
+		{"routing-scoped-port", `package x; import p "github.com/lexagent/platform/internal/policyasset"; var _ p.ModelSelectionBinding; var _ p.ModelSelectionStore; var _ = p.BindRoutingTask`, true},
+		{"routing-policy-repository-private", `package x; import p "github.com/lexagent/platform/internal/policyasset"; var _ p.SQLStore`, false},
+		{"routing-catalog-repository-private", `package x; import p "github.com/lexagent/platform/internal/modelgovernance"; var _ p.SQLStore`, false},
+		{"known-billing-catalog-dto", `package x; import p "github.com/lexagent/platform/internal/modelgovernance"; var _ p.ResolvedModel`, true},
+		{"published-stage-renderer", `package x; import p "github.com/lexagent/platform/internal/prompt"; var _ = p.InvocationMessages`, true},
+		{"prompt-repository-private", `package x; import p "github.com/lexagent/platform/internal/prompt"; var _ = p.NewSQLStore`, false},
 		{"alias-flat", `package x; import p "github.com/lexagent/platform/internal/modelcapacity"; var _ = p.NewSQLProvider`, false},
 		{"nested", `package x; import "github.com/lexagent/platform/internal/identity/repository"; var _ repository.SQLStore`, false},
 		{"dot", `package x; import . "github.com/lexagent/platform/internal/modelcapacity"; var _ = NewSQLProvider`, false},

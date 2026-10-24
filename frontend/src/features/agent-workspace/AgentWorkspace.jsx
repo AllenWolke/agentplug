@@ -5,6 +5,7 @@ import { asItems } from "../../state.js";
 import { ArtifactRenderer } from "../../renderers/ArtifactRenderer.jsx";
 import { parseBusinessInput } from "./business-input.js";
 import { ToolApproval } from "./ToolApproval.jsx";
+import { checkedModelRouting } from "./model-routing-state.js";
 import { checkedCancellation, formatCancellationStatus } from "./cancellation-state.js";
 import { agentPresentation } from "./catalog-presentation.js";
 import { formatStatus, statusTone } from "../../format.js";
@@ -54,6 +55,7 @@ export function AgentWorkspace({ agentId }) {
   const [catalog, setCatalog] = useState([]);
   const [error, setError] = useState("");
   const [input, setInput] = useState("");
+  const [automaticModel,setAutomaticModel]=useState(false);
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [activeRunID, setActiveRunID] = useState("");
@@ -213,7 +215,8 @@ export function AgentWorkspace({ agentId }) {
         throw new Error("运行状态响应与当前 Run 不匹配，请重新核查");
       }
       const cancellation = checkedCancellation(snapshot.status, snapshot.cancellation);
-      setRunStatus({ runID, status: snapshot.status, revision: snapshot.revision, cancellation });
+      const modelRouting=checkedModelRouting(snapshot.model_routing);
+      setRunStatus({ runID, status: snapshot.status, revision: snapshot.revision, cancellation, modelRouting });
       setRunStatusError("");
       setResult((current) => current?.run_id === runID
         ? { ...current, status: snapshot.status, revision: snapshot.revision, agent_version_id: snapshot.agent_version_id, cancellation,
@@ -278,7 +281,7 @@ export function AgentWorkspace({ agentId }) {
       if (!isCurrent()) return;
       await api.appendConversationMessage(sessionId, { id: messageId, role: "user", content: input });
       if (!isCurrent()) return;
-      const accepted = await api.startConversationRun(sessionId, { run_id: runId, idempotency_key: `workspace:${runId}`, message_id: messageId, request });
+      const accepted = await api.startConversationRun(sessionId, { run_id: runId, idempotency_key: `workspace:${runId}`, message_id: messageId, request, model_selection:{mode:automaticModel?"automatic":"manual"} });
       if (!isCurrent()) return;
       const currentRunID = accepted.run_id || runId;
       activeRunRef.current = currentRunID;
@@ -421,6 +424,8 @@ export function AgentWorkspace({ agentId }) {
     {error && <div className="form-error" role="alert">{error}</div>}
     {connectionNotice && <div className="notice" role="status">{connectionNotice}</div>}
     <BusinessInput agentId={agentId} presentation={presentation} input={input} onChange={setInput} busy={submitting || cancelling || cancellationPending}/>
+    <label className="form-hint"><input type="checkbox" checked={automaticModel} disabled={submitting || cancelling || cancellationPending} onChange={event=>setAutomaticModel(event.target.checked)}/>自动选择模型</label>
+    <p className="form-hint">{automaticModel?"平台在已发布且获授权的候选模型中选择。":"使用该 Agent 已配置的模型。"}</p>
     {!agent && <p className="form-hint">该 Agent 未安装到当前应用，或当前用户没有 discover/run 授权。</p>}
     <button className="button primary" disabled={submitting || cancelling || cancellationPending || !exampleInputReady(agentId, input) || !agent?.installation_id || !agent?.version_id} onClick={submit}>{submitting ? "运行中…" : "开始处理任务"}</button>
     {activeRunID && <section className="agent-event-metadata" aria-label="Agent 元数据事件">
@@ -431,6 +436,10 @@ export function AgentWorkspace({ agentId }) {
         <TechnicalDetails values={{ "运行编号": activeRunID, "事件游标": agentEventCursor }}/>
       </div>
       {runStatus && runStatus.runID === activeRunID && <p className="form-hint" role="status">运行状态：{formatCancellationStatus(runStatus.status, runStatus.cancellation)} · 状态版本 {runStatus.revision}</p>}
+      {runStatus?.runID===activeRunID && runStatus.modelRouting && <div className="form-hint" aria-label="模型调用信息">
+        <p>模型选择：{runStatus.modelRouting.mode==="automatic"?"自动选择":"指定模型"}</p>
+        {runStatus.modelRouting.decisions.map(item=><p key={item.decision_sha256}><span data-i18n-preserve>{item.model_key}</span> · {({completed:"已完成",reconcile:"结果待核对",failed:"失败",not_admitted:"尚未开始",running:"处理中"})[item.invocation_status]} · {item.actual_cost_micros===undefined?"费用待确认":"费用已确认"}</p>)}
+      </div>}
       {runStatusError && <p className="form-error" role="status">{runStatusError}</p>}
       {agentEventError && <p className="form-error" role="status">{agentEventError}</p>}
       {latestAgentMetadata && <details><summary>查看最近一条 Agent 事件</summary><pre className="artifact-preview" aria-label="最近一条 Agent 元数据事件" translate="no">{JSON.stringify(latestAgentMetadata, null, 2)}</pre></details>}

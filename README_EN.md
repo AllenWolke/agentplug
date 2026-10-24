@@ -10,6 +10,8 @@
 
 </div>
 
+**Shared capability update:** model routing and structured output, durable workflows and checkpoints, current reference authorization, Kafka notifications and cancellation compensation now use the shared platform layer. SDK capabilities are 2.1.0, templates 1.1.0, and example agents 0.3.0 with v3 schemas. [Features and compatibility](docs/releases/public-capabilities-2.1.en.md).
+
 AgentPlug is an enterprise agent development, execution and governance platform. Build an agent in **Go, Python or Java**, deploy it independently, and make it available to selected companies, departments and users. Reuse model access, knowledge retrieval, tools, memory, checkpoints and collaboration instead of rebuilding infrastructure for every agent.
 
 The console supports **Chinese / English**, with visible switches on the login page and top bar. Business users can start with the [user guide](docs/用户手册/README.en.md).
@@ -60,8 +62,10 @@ New to AgentPlug? Follow this order to understand the project, run an agent and 
 | Requirement | Platform support |
 | --- | --- |
 | Multiple teams developing agents | Three SDK languages, six templates, a common execution protocol and separate deployments |
-| Shared model access | Model gateway, operator-managed credentials, versions, pricing and budgets |
-| Enterprise knowledge and business tools | Authorized retrieval, controlled tools, memory and skills |
+| Shared model access | Governed routing, quality admission, bounded failover, structured output, prefix caching and cached-token pricing |
+| Enterprise knowledge and business tools | Multi-source retrieval, current ACL checks for cached/frozen references, tool identities and original receipts, memory and skills |
+| Durable execution | Extended Harness, durable stages and step workflows, checkpoint capacity/pagination and read-only receipt recovery |
+| Notifications and cancellation | Kafka delivery, self inbox and withdrawal, stop confirmation, compensation and budget closure evidence |
 | Department-specific assistants | Company workspace → department → available agents; membership and batch authorization |
 | Traceable execution | Runs, events, cancellation, conversation history, audit and evaluation evidence |
 | Platform customization | Module boundaries, public contracts, source maps and extension guides |
@@ -99,7 +103,7 @@ An empty agent catalog is expected. After the base stack is ready, develop, publ
 
 ### Local source deployment
 
-Install Go 1.26.9+, Node.js 20+, Python 3.12+, and PostgreSQL 16 + pgvector. Java agents also need JDK 21 and Maven. Prepare separate migration, platform, frontend and Runner configuration using the [local deployment guide](docs/developer/en/deployment.md#local-source-and-host-processes).
+Install Go 1.26.10+, Node.js 20+, Python 3.12+, and PostgreSQL 16 + pgvector. Java agents also need JDK 21 and Maven. Prepare separate migration, platform, frontend and Runner configuration using the [local deployment guide](docs/developer/en/deployment.md#local-source-and-host-processes).
 
 ```text
 python scripts/local.py build

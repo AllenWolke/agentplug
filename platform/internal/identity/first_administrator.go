@@ -123,6 +123,8 @@ func (s *SQLStore) InitializeFirstAdministrator(ctx context.Context, request Fir
 	var tables []string
 	// 只读登记过的 IAM 表；未来未知表不能通过前缀隐式获得访问权限。
 	identityTables := map[string]bool{
+		"platform_identity_department_agent_package": true,
+
 		"platform_identity_permission_request": true,
 		"platform_identity_tenant":             true, "platform_identity_department": true,
 		"platform_identity_application": true, "platform_identity_principal": true,

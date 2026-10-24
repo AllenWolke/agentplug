@@ -10,14 +10,14 @@ import (
 
 // Include the full tool transcript and schema bytes in conservative input
 // admission. Ordinary text requests preserve their existing budget estimate.
-func modelBudgetMessages(messages []modelgateway.Message, policy policyasset.ToolPolicy, names []string) []struct {
+func modelBudgetMessages(messages []modelgateway.Message, policy policyasset.ToolPolicy, names []string, requireJSON ...bool) []struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 } {
 	result := make([]struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
-	}, 0, len(messages))
+	}, 0, len(messages)+len(names))
 	appendContent := func(role, content string) {
 		result = append(result, struct {
 			Role    string `json:"role"`
@@ -37,6 +37,9 @@ func modelBudgetMessages(messages []modelgateway.Message, policy policyasset.Too
 			serialized, _ := json.Marshal(f)
 			appendContent("tool_definition", string(serialized))
 		}
+	}
+	if len(requireJSON) > 0 && requireJSON[0] {
+		appendContent("response_format", `{"type":"json_object"}`)
 	}
 	return result
 }

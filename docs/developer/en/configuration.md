@@ -65,6 +65,11 @@ Execution private keys, database passwords, gateway tokens, Runner tokens and pr
 | `PLATFORM_MODEL_ENDPOINTS_JSON` | empty | Operator JSON allowlist mapping service:// references to model endpoints; no API keys. |
 | `PLATFORM_MODEL_SECRET_DIR` | `./.local-secrets/model-providers` | Host model-secret directory mounted read-only into the platform. |
 | `PLATFORM_MODEL_SECRET_ROOT` | `/run/secrets/model-providers` | Model-secret root for non-Compose processes; root Compose fixes /run/secrets/model-providers. |
+| `PLATFORM_MODEL_DNS_OVER_HTTPS_HOSTS_JSON` | empty | Optional model-host list for Google HTTPS IPv4 DNS; blank keeps ordinary DNS, `[]` disables the extension; TLS and address checks remain enabled. |
+| `PLATFORM_EXTERNAL_KNOWLEDGE_URL` | empty | Independent external knowledge endpoint; blank retains native platform knowledge. |
+| `PLATFORM_EXTERNAL_KNOWLEDGE_BASE_IDS` | empty | Allowed external knowledge-base IDs, constrained together with published policy. |
+| `PLATFORM_EXTERNAL_KNOWLEDGE_API_KEY_FILE` | empty | Container path to a read-only platform credential file; do not distribute it to agents. |
+| `AGENT_PLATFORM_CAPABILITY_TIMING` | unset | Set `1` on the relevant agent process for capability timing without bodies or credentials; the platform does not propagate it automatically. |
 | `PLATFORM_WORKLOAD_SECRET_DIR` | `./.local-secrets/agent-workloads` | Host credential directory for indexing workloads; distinct from provider secrets. |
 | `PLATFORM_POLICY_BOOTSTRAP_JSON` | empty | Direct policy injection for isolated development; normally empty, forbidden in production. |
 | `PLATFORM_PROMPT_TEMPLATES_JSON` | empty | Prompt-body map for isolated development; production uses published assets and forbids injection. |
@@ -105,7 +110,10 @@ Execution private keys, database passwords, gateway tokens, Runner tokens and pr
 | Variable | Template default / empty | Purpose and timing |
 | --- | --- | --- |
 | `PLATFORM_CONVERSATION_ERASURE_ENABLED` | `true` | Conversation erasure worker; pause and reconcile during controlled restoration. |
-| `PLATFORM_CANCELLATION_COMPENSATION_ENABLED` | `false` | Explicit cancellation-compensation rollout; base stack does not add compensation services. |
+| `PLATFORM_CANCELLATION_COMPENSATION_ENABLED` | `false` | Explicit compensation switch; configure migrations, trusted stop evidence and historical recovery protection before enabling. |
+| `PLATFORM_RUNTIME_CONTROL_DIR` | `./.local-secrets/runtime-control` | Independent host directory mounted read-only at `/run/secrets/runtime-control`. |
+| `PLATFORM_AUTOMATIC_RECOVERY_HOLD_FILE` | empty | Absolute container path to the SHA-bound historical recovery hold file; configure together with its digest. |
+| `PLATFORM_AUTOMATIC_RECOVERY_HOLD_SHA256` | empty | Lowercase SHA-256 of the exact hold-file bytes; invalid or mismatched configuration prevents startup. |
 | `PLATFORM_REVERSIBLE_API_BINDINGS_FILE` | empty | Container path to reversible API bindings; consumed by the relevant extension. |
 | `PLATFORM_REVERSIBLE_API_CA_FILE` | empty | Reversible API TLS CA file; requires private mounts. |
 | `PLATFORM_LEGACY_MODEL_ACCOUNTING_RESERVATIONS` | empty | Selected historical reservations for accounting; original evidence required, no resend. |

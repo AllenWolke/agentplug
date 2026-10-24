@@ -120,6 +120,7 @@ func (s *SQLSkillStore) Transact(ctx context.Context, scope sharedkernel.Scope, 
 // transactIn performs the complete skill operation and final authority pass in
 // the caller's transaction. The caller remains responsible for its outcome.
 func (s *SQLSkillStore) transactIn(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope, operation func(SkillTransaction) error) error {
+	ctx = sqlutil.WithContinuityTransaction(ctx, s.db, tx)
 	namespace := skillNamespace(scope)
 	// Acquire IAM/Run continuity before the namespace lock. This keeps standalone
 	// skill transactions in the same lock order as callers that already own a

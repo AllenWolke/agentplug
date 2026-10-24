@@ -26,6 +26,7 @@ def main() -> int:
     parser.add_argument("--suite", choices=("interop", "models"), required=True)
     parser.add_argument("--batch-id", required=True)
     parser.add_argument("--model-metadata", type=Path)
+    parser.add_argument("--race", action="store_true", help="enable the Go race detector")
     args = parser.parse_args()
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,79}", args.batch_id):
         parser.error("safe batch id required")
@@ -38,6 +39,7 @@ def main() -> int:
     private = ROOT / ".local-secrets/test-evidence" / owner
     private.mkdir(parents=True, exist_ok=False)
     record = {"schema": "agentplug-optional-tests/v1", "owner": owner, "suite": args.suite,
+              "race_detector_enabled": args.race,
               "complete": False, "packages": [], "credentials_logged": False,
               "project_database_used": False, "real_external_model_calls": args.suite == "models"}
     try:
@@ -80,7 +82,7 @@ def main() -> int:
             print(json.dumps({"package": package, "expected": len(expected), "status": "running"}), flush=True)
             start = time.monotonic()
             with log.open("xb") as stream:
-                process = subprocess.run(["go", "test", "-json", "-p=1", "-parallel=1", "-count=1", "-timeout=5m", "-run",
+                process = subprocess.run(["go", "test", *(["-race"] if args.race else []), "-json", "-p=1", "-parallel=1", "-count=1", "-timeout=5m", "-run",
                                           "^(" + "|".join(expected) + ")$", "./internal/" + package],
                                          cwd=ROOT / "platform", env=env, stdout=stream, stderr=subprocess.STDOUT, timeout=330)
             states = {}

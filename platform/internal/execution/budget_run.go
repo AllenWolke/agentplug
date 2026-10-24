@@ -45,7 +45,11 @@ func (s *SQLStore) BudgetRunContext(ctx context.Context, id string) (BudgetRunFa
 	if s == nil || s.db == nil {
 		return BudgetRunFacts{}, platformruntime.ErrRunNotFound
 	}
-	return s.readBudgetRun(ctx, s.db, id, "")
+	reader, err := sqlutil.ContinuityReader(ctx, s.db)
+	if err != nil {
+		return BudgetRunFacts{}, err
+	}
+	return s.readBudgetRun(ctx, reader, id, "")
 }
 
 func (s *SQLStore) BudgetRunTx(ctx context.Context, tx *sql.Tx, id string) (BudgetRunFacts, error) {

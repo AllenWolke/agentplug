@@ -24,7 +24,7 @@ public final class TicketAgent {
         }
         var business = new TicketAssistant();
         return new ExecutionServer(ServerConfig.builder().publicKey(key).issuer(issuer).audience(audience)
-                .agentId(AGENT_ID).agentVersion("0.2.7").manifest(publishedManifest()).store(new MemoryRunStore())
+                .agentId(AGENT_ID).agentVersion("0.3.0").manifest(publishedManifest()).store(new MemoryRunStore())
                 .capabilities(List.of("invoke", "run", "resume", "cancel", "events"))
                 .capability(capability).invoke(business::invoke).run(business::run)
                 .recoveryCheckpointSelector(business::recoveryPlan).build());

@@ -91,7 +91,8 @@ func recoveryPlanCheckpoint(request ExecuteRequest, step RecoveryCheckpointStep,
 	expires, expiryOK := header["expires_at"].(string)
 	expiresAt, err := time.Parse(time.RFC3339Nano, expires)
 	value, valueOK := header["value"].(map[string]any)
-	if !revisionOK || revision == 0 || revision > 64 || !executionOK || executionRevision == 0 ||
+	limit, capacityError := checkpointReplyLimit(loaded)
+	if capacityError != nil || !revisionOK || revision == 0 || revision > limit || !executionOK || executionRevision == 0 ||
 		!hashOK || !validHandoffDigest(hash) || !expiryOK || err != nil || !expiresAt.After(time.Now()) || !valueOK ||
 		step.ValidateCheckpoint(request, header) != nil {
 		return nil, false, ErrInvalidTransition

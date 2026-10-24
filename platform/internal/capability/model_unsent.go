@@ -10,6 +10,9 @@ func unsentDecision(r ModelInvocation, token string) (BillingDecision, error) {
 	if token == "" || r.Recovery == nil || r.Recovery.AttemptToken != token || r.Status != "reconcile" || r.Response != nil || r.Recovery.Event != nil {
 		return BillingDecision{}, ErrModelInvocationConflict
 	}
+	if !r.Recovery.AdmissionUntil.IsZero() && (r.Recovery.AdmissionUntil.After(time.Now()) || !r.Recovery.SendDeadline.IsZero()) {
+		return BillingDecision{}, ErrModelInvocationConflict
+	}
 	d := BillingDecision{ID: "unsent-" + token, ActorID: "system:model-gateway", ActorTenant: r.Recovery.Reservation.Scope.TenantID, ReservationID: r.Recovery.Reservation.ReservationID, Outcome: "no_charge", Reason: "adapter confirmed failure before generation request send", ProviderRef: "system:adapter-confirmed-not-sent:" + r.Recovery.Reservation.ReservationID}
 	if !validBillingDecision(d) {
 		return BillingDecision{}, ErrModelInvocationConflict
@@ -31,7 +34,16 @@ func (s *SQLModelInvocationStore) PersistUnsent(ctx context.Context, scope, key,
 	if err != nil {
 		return r, err
 	}
-	if err := s.acceptBillingDecision(ctx, scope, key, fingerprint, d, "inflight", token); err != nil {
+	expectedState := "inflight"
+	if !r.Recovery.AdmissionUntil.IsZero() {
+		expectedState = "admitted"
+	} else if r.Recovery.SendDeadline.IsZero() {
+		// Expiry may have promoted this exact attempt to manual while its
+		// owner paused before persisting an adapter's positive no-send proof.
+		// A late trusted proof can close it; expiry alone still cannot.
+		expectedState = "manual"
+	}
+	if err := s.acceptBillingDecision(ctx, scope, key, fingerprint, d, expectedState, token); err != nil {
 		return r, err
 	}
 	return s.GetBillingRecord(ctx, scope, key)
@@ -63,6 +75,7 @@ func (s *memoryModelInvocationStore) PersistUnsent(_ context.Context, scope, key
 	}
 	r.Recovery.Decision = &d
 	r.Recovery.Unsent = true
+	r.Recovery.AdmissionUntil = time.Time{}
 	r.Recovery.SendDeadline = time.Time{}
 	r.RetryAt = time.Time{}
 	s.records[compound] = r

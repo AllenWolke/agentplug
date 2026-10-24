@@ -10,11 +10,62 @@
 
 使用 `https://api.deepseek.com` 时，应明确发布思考配置。本教程的短输出演示使用 `reasoning_mode: "disabled"`；公开复现脚本对该正式端点自动生成此字段。需要推理时，模型资产可发布 `reasoning_mode: "enabled"` 和 `reasoning_effort: "low" | "high" | "max"`，平台按审核后的资产传递，业务 Agent 不能覆盖。强度为空时由厂商使用默认值；强度必须与开启思考同时配置，Embedding 不携带这些字段。查询改写与 Function Calling 预检仍受既定输出和预算限制，思考输出也会消耗厂商计量的输出额度。首次接入先做有界连通性检查，再验证实际业务。已发布资产通过新 Draft 修订、独立管理员发布和快照 CAS 更新；保留原修订、预算和 `max_tokens` 上限。[DeepSeek 思考模式与参数](https://api-docs.deepseek.com/guides/thinking_mode/)。
 
+## SDK 2.1 公共能力接入
+
+当前仓库公共 SDK 为 **2.1.0**、六种模板为 **1.1.0**、三个示例为 **0.3.0**。完整功能变化见[更新说明](../releases/public-capabilities-2.1.zh.md)，方法对应见[三语言公共接口](../developer/zh/capabilities.md#三语言接口对应)。Go/Java 现在提供与 Python 对应的模型、Embedding、Prompt、记忆和知识便捷接口，统一处理签名、幂等身份和元数据，不再要求业务代码手工拼接公共请求。
+
+下面是业务处理器中的结构化最终生成片段。`client` 已由 SDK 校验执行上下文并注入；Go 的导入别名 `sdk` 指向 `github.com/lexagent/agent-platform-sdk-go/agentplatform`，Java 导入 `com.lexagent.sdk.PublicCapabilities`、`java.util.Map` 和 `java.util.List`。示例输出限制仍须在已发布策略和剩余预算允许范围内。
+
+Python：
+
+```python
+schema = {"type": "object", "properties": {"summary": {"type": "string"}},
+          "required": ["summary"], "additionalProperties": False}
+result = await client.chat(
+    [{"role": "user", "content": "根据已提供证据生成摘要。"}],
+    max_tokens=256, step_name="answer.final", require_json=True,
+    response_schema=schema, response_schema_mode="required",
+)
+```
+
+Go：
+
+```go
+schema := map[string]any{
+    "type": "object", "properties": map[string]any{"summary": map[string]any{"type": "string"}},
+    "required": []string{"summary"}, "additionalProperties": false,
+}
+result, err := client.Chat(ctx, []map[string]any{
+    {"role": "user", "content": "根据已提供证据生成摘要。"},
+}, sdk.ChatOptions{
+    MaxTokens: 256, StepName: "answer.final", RequireJSON: true,
+    ResponseSchema: schema, ResponseSchemaMode: "required",
+})
+// 在处理 result 前按业务入口约定返回或分类处理 err。
+```
+
+Java：
+
+```java
+Map<String, Object> schema = Map.of(
+    "type", "object", "properties", Map.of("summary", Map.of("type", "string")),
+    "required", List.of("summary"), "additionalProperties", false);
+Map<String, Object> result = client.capabilities().chat(
+    List.of(Map.of("role", "user", "content", "根据已提供证据生成摘要。")),
+    new PublicCapabilities.ChatOptions(0.3, 256, "answer.final", true, schema, "required"));
+```
+
+三个片段均调用普通生成接口；Function Calling 阶段应独立执行。按各语言惯用方式处理失败、解析返回正文并保留平台实际提供的模型、路由、缓存和计费元数据。`required` 需要模型与发布策略支持；业务允许兼容输出时才使用 `prefer_supported`，仍须校验返回内容。
+
+持久化知识流程的 `as_of`、`source_ids`、查询和检查点键一起绑定操作身份；恢复不能更换筛选参数。使用和返回缓存或冻结知识前调用 `AuthorizeCachedResult` / `authorize_cached_result` / `authorizeCachedResult`。Python 使用 `from agent_platform_sdk.reference_authorization import authorize_cached_result` 并执行 `await authorize_cached_result(client, result, knowledge_scope)`。步骤工作流、`DurableStageClient` 和检查点游标恢复时读取原回执，保留原截止时间、批处理窗口和作用域；已提交或结果未知不等于允许重试。
+
+Python FastAPI 入口按需安装 `python -m pip install -e './sdk/python[grpc,asgi]' fastapi`；命令从仓库根执行。`asgi` 提供 Uvicorn 启动依赖，gRPC 仅对应相应传输。LangGraph 专用集成继续使用 Python 模板的依赖文件，通用工作流接口不要求 Go/Java 使用 LangGraph。
+
 ## 1. 选择示例与开发环境
 
 | 语言 | 业务目录 | 仓库 SDK | 开发环境 | 固定 Agent ID |
 |---|---|---|---|---|
-| Go | `examples/go-operations` | `sdk/go` | Go 1.25 | `example-go-operations` |
+| Go | `examples/go-operations` | `sdk/go` | Go 1.26.10（仓库构建工具链） | `example-go-operations` |
 | Python | `examples/python-documents` | `sdk/python` | Python 3.12 及以上 | `example-python-documents` |
 | Java | `examples/java-tickets` | `sdk/java/agent-platform-sdk` | JDK 21、Maven | `example-java-tickets` |
 
@@ -22,7 +73,7 @@ Go 的 `go.mod` 使用 `replace` 指向仓库 SDK；Python 先安装仓库 SDK�
 
 ## 2. 先定义业务协议
 
-每个示例目录包含 `manifest.json`、`input.schema.json` 和 `output.schema.json`。当前三个示例的业务输入输出使用独立的 `schema://<agent_id>/input/v2` 和 `schema://<agent_id>/output/v2` 标识；修改不兼容字段时发布新的 Schema 和不可变 Agent 版本。业务 Schema 版本与执行协议 v2 分别管理。业务输入仅包括业务参数，身份、模型、工具、知识库及策略版本由平台发布的策略快照决定。
+每个示例目录包含 `manifest.json`、`input.schema.json` 和 `output.schema.json`。当前三个示例的业务输入输出使用独立的 `schema://<agent_id>/input/v3` 和 `schema://<agent_id>/output/v3` 标识，v3 输出增加 `model_metadata`；执行协议保持 `agent-execution/v2`。旧 v2 文件、历史 Manifest 和对应恢复指纹保留，Java 另保留原 v1 路径。修改不兼容字段时发布新的 Schema 和不可变 Agent 版本，不原地覆盖历史 Catalog 或策略。业务输入仅包括业务参数，身份、模型、工具、知识库及策略版本由平台发布的策略快照决定。
 
 三个有效业务输入如下：
 
@@ -68,6 +119,8 @@ docker build -f examples/python-documents/Dockerfile -t agentplug:example-python
 公共知识能力在平台 PostgreSQL + pgvector 内执行查询改写、Embedding、双身份权限与 Metadata Filter、BM25 + Vector Search、融合 Top-K、重排和引用回答。文档助手只请求固定的 `python-documents` 知识范围，不访问向量数据库。
 
 `cache_mode` 可取 `use`、`cold`、`bypass`。缓存命中仍须检查当前权限、源版本、索引代际与预算；查看平台账本核实整个运行的 Token 和费用，不能只把答案生成的 `saved_usage` 当成全运行节省。
+
+文档示例 v3 另外接受可选 `as_of`（规范 `YYYY-MM-DD` 日期）和 `source_ids`（获准来源标识列表）。这两个字段参与业务幂等与恢复指纹，不能在续接时更换。默认 `direct` 流程保持不变；显式选择 `tool_loop` 才进入前置工具循环，通知和沙箱仍需对应工具策略、人工批准及双身份授权。
 
 `use` 支持同一用户、同一会话中不同运行的重复提问复用，缓存键保留安装、Agent版本、权限版本、策略和知识版本。不同用户或会话不共享缓存。当前完整运行上下文每次仍通过校验，旧签名或撤权不能因缓存命中而放行。普通模型账本使用实际执行 Run ID。评测子运行保留可信产品父 Run 归属，以每个 Case 的实际执行 Run 作为有限预算根和计费主体，再汇总实际用量；实际评测已验证执行、结算及制品归属。执行成功与质量门禁分别判断：教学样本的 Recall/MRR/NDCG/Citation 已通过，但 Grounding 仍按实际评分返回 blocked，不应降低阈值或将其写成质量通过。
 

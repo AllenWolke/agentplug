@@ -19,7 +19,7 @@ type identityExecutionBrowserControl struct {
 }
 
 func (a identityExecutionBrowserControl) Authorize(ctx context.Context, owner sharedkernel.Scope, actor execution.BrowserRunActor, action string) error {
-	if a.store == nil || actor.Scope.PrincipalType != "user" || actor.Scope.Validate() != nil || actor.Scope.TenantID != owner.TenantID || actor.Scope.DepartmentID != owner.DepartmentID || actor.Scope.ApplicationID != owner.ApplicationID || action != "history.read" && action != "cancel" {
+	if a.store == nil || actor.Scope.PrincipalType != "user" || actor.Scope.Validate() != nil || actor.Scope.TenantID != owner.TenantID || actor.Scope.DepartmentID != owner.DepartmentID || actor.Scope.ApplicationID != owner.ApplicationID || action != "history.read" && action != "cancel" && action != "history.continue" {
 		return execution.ErrRunPermissionDenied
 	}
 	validator, ok := a.store.(interface {

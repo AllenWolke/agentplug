@@ -19,7 +19,7 @@ func (d *Dispatcher) prepareResumeRenewal(ctx context.Context, running platformr
 	}
 	if len(running.ResumeInputJSON) > 0 {
 		var durable map[string]any
-		if json.Unmarshal(running.ResumeInputJSON, &durable) != nil || durable == nil {
+		if contract.DecodeJSONPreservingNumbers(running.ResumeInputJSON, &durable) != nil || durable == nil {
 			return errors.New("execution resume contract unavailable")
 		}
 		request.ResumeInput = durable

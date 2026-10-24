@@ -110,6 +110,9 @@ type metricRunnerResponse struct {
 }
 
 func (e RemoteMetricEvaluator) EvaluateMetric(ctx context.Context, metric MetricSnapshot, input, output json.RawMessage) (MetricOutcome, error) {
+	if metric.Kind == "independent_verdict" {
+		return EvaluateIndependentVerdict(metric, input, output)
+	}
 	if metric.Kind == "agent_assertions" {
 		return EvaluateAgentAssertions(ctx, metric, input, output)
 	}

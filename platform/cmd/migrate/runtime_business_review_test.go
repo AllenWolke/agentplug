@@ -21,26 +21,12 @@ import (
 func assertRuntimeVersionedBusinessReview(t *testing.T, ctx context.Context, client *http.Client, address, dsn string, db *sql.DB, sessionID, reviewerID string) {
 	t.Helper()
 	const tenant, department, application = "session-fixture", "session-fixture-dept", "session-fixture-app"
-	scope := sharedkernel.Scope{TenantID: tenant, DepartmentID: department, ApplicationID: application, AgentInstanceID: "fixture-review-installation", InstallationID: "fixture-review-installation", AgentID: "document-assistant", AgentVersionID: "fixture-review-version", PrincipalType: "user", PrincipalID: "fixture-run-initiator", RunID: "fixture-business-review-run", SessionID: "fixture-business-session", AuthorizationEpoch: 1, TraceID: strings.Repeat("f", 32)}
+	scope := runtimeReviewHistoryScope()
 	store, err := execution.ConnectSQLStore(ctx, "pgx", dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	created, err := store.Create(platformruntime.CreateRequest{ID: scope.RunID, Scope: scope, AgentVersionID: scope.AgentVersionID, IdempotencyKey: "fixture-review-create", Fingerprint: "fixture-review-create-fingerprint", RequestJSON: []byte(`{"operation":"run","input":{"question":"fixture question"}}`), AgentEndpoint: "http://127.0.0.1:1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.Transition(scope.RunID, platformruntime.StatusAccepted, platformruntime.StatusRunning, created.Run.Revision); err != nil {
-		t.Fatal(err)
-	}
-	lease, err := store.AcquireLease(scope.RunID, "fixture-review-lease", time.Now().UTC(), time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.FinalizeLeased(scope.RunID, platformruntime.StatusWaiting, lease.Revision, lease.LeaseToken, map[string]any{"stage": "waiting_review", "review": map[string]any{"schema_version": "agent-review/v1", "title": "Fixture review", "summary": "fixture protected review draft"}, "references": []map[string]string{{"doc_id": "fixture-document", "title": "fixture title", "content": "private citation body"}}}, map[string]any{"source": "fixture"}); err != nil {
-		t.Fatal(err)
-	}
 	// Deliberately preserve the old roles: they must never qualify v2 review.
 	if _, err := db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_identity_principal SET roles_json='["admin","reviewer"]' WHERE principal_type='user' AND id=?`), reviewerID); err != nil {
 		t.Fatal(err)
@@ -106,4 +92,36 @@ func assertRuntimeVersionedBusinessReview(t *testing.T, ctx context.Context, cli
 		t.Fatal(err)
 	}
 	invoke(http.MethodGet, "review", "", http.StatusForbidden)
+}
+
+func runtimeReviewHistoryScope() sharedkernel.Scope {
+	const tenant, department, application = "session-fixture", "session-fixture-dept", "session-fixture-app"
+	return sharedkernel.Scope{TenantID: tenant, DepartmentID: department, ApplicationID: application, AgentInstanceID: "fixture-review-installation", InstallationID: "fixture-review-installation", AgentID: "document-assistant", AgentVersionID: "fixture-review-version", PrincipalType: "user", PrincipalID: "fixture-run-initiator", RunID: "fixture-business-review-run", SessionID: "fixture-business-session", AuthorizationEpoch: 1, TraceID: strings.Repeat("f", 32)}
+}
+
+// Build immutable browser-history facts before the lifecycle worker starts.
+// These tests observe historical permissions; dispatcher lease races belong to
+// the dedicated execution tests and must not mutate this fixture during setup.
+func seedRuntimeReviewHistory(t *testing.T, ctx context.Context, dsn string) {
+	t.Helper()
+	scope := runtimeReviewHistoryScope()
+	store, err := execution.ConnectSQLStore(ctx, "pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	created, err := store.Create(platformruntime.CreateRequest{ID: scope.RunID, Scope: scope, AgentVersionID: scope.AgentVersionID, IdempotencyKey: "fixture-review-create", Fingerprint: "fixture-review-create-fingerprint", RequestJSON: []byte(`{"operation":"run","input":{"question":"fixture question"}}`), AgentEndpoint: "http://127.0.0.1:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Transition(scope.RunID, platformruntime.StatusAccepted, platformruntime.StatusRunning, created.Run.Revision); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := store.AcquireLease(scope.RunID, "fixture-review-lease", time.Now().UTC(), time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.FinalizeLeased(scope.RunID, platformruntime.StatusWaiting, lease.Revision, lease.LeaseToken, map[string]any{"stage": "waiting_review", "review": map[string]any{"schema_version": "agent-review/v1", "title": "Fixture review", "summary": "fixture protected review draft"}, "references": []map[string]string{{"doc_id": "fixture-document", "title": "fixture title", "content": "private citation body"}}}, map[string]any{"source": "fixture"}); err != nil {
+		t.Fatal(err)
+	}
 }

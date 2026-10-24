@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,12 +23,15 @@ import (
 // outcomes. The controller stop/coverage callbacks are fixtures; a passing
 // result must not be presented as actual deployed Agent/tree shutdown proof.
 type cancellationFixture struct {
-	ctx         context.Context
-	runs        *SQLStore
-	coordinator compensation.Coordinator
-	coverage    bool
-	settled     bool
-	id          string
+	ctx             context.Context
+	runs            *SQLStore
+	coordinator     compensation.Coordinator
+	coverage        bool
+	settled         bool
+	coverageChecks  atomic.Int64
+	progressEnabled bool
+	progressChecks  atomic.Int64
+	id              string
 }
 
 func newCancellationFixture(t *testing.T, cancellationFences ...func(context.Context, *sql.Tx, sharedkernel.Scope) error) *cancellationFixture {
@@ -63,6 +67,22 @@ func newCancellationFixture(t *testing.T, cancellationFences ...func(context.Con
 		}
 	}
 	f.coordinator, err = runs.EnableCancellationCompensation(ctx, CancellationCompensationPorts{
+		ProgressFenceTx: func(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope) error {
+			if !f.progressEnabled {
+				return runs.checkCancellationFenceTx(ctx, tx, scope)
+			}
+			f.progressChecks.Add(1)
+			return runs.terminalOutcomeFence(ctx, tx, scope)
+		},
+		BuildCoordinator: func(ctx context.Context, authority compensation.Authority) (compensation.Coordinator, error) {
+			if err := compensation.CheckSchema(ctx, runs.DB()); err != nil {
+				return nil, err
+			}
+			if err := compensation.CheckEnrollmentSchema(ctx, runs.DB()); err != nil {
+				return nil, err
+			}
+			return compensation.NewSQLStore(runs.DB(), authority)
+		},
 		ValidateStepTx: func(_ context.Context, _ *sql.Tx, step compensation.Step) error {
 			if step.Root != step.Scope {
 				return compensation.ErrConflict
@@ -70,6 +90,7 @@ func newCancellationFixture(t *testing.T, cancellationFences ...func(context.Con
 			return nil
 		},
 		ValidateCoverageTx: func(context.Context, *sql.Tx, sharedkernel.Scope) error {
+			f.coverageChecks.Add(1)
 			if !f.coverage {
 				return compensation.ErrPending
 			}

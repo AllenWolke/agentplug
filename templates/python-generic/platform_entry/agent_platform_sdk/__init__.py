@@ -1,5 +1,9 @@
 """Language-neutral Agent Platform protocol helpers for Python."""
 
+__version__ = "2.1.0"
+
+from .checkpoint_cursor import CheckpointCursor
+
 from .lifecycle import (
     EVENT_ACCEPTED,
     EVENT_ARTIFACT,
@@ -53,6 +57,7 @@ from .capability_client import CapabilityGatewayClient, GatewayError
 from .coordination import agent_group_plan_input_hash
 from .run_models import ExecutionOutcome
 from .cancellation import CancellationState, CancellationEvidenceError, read_cancellation_state
+from .step_workflow import StepExecutor, StepRuntime, run_step_workflow
 from .tool_client import (
     ToolGatewayError,
     invoke_tool,
@@ -82,6 +87,8 @@ __all__ = [
     "CapabilityGatewayClient", "GatewayError",
     "agent_group_plan_input_hash",
     "ExecutionOutcome",
-	"CancellationState", "CancellationEvidenceError", "read_cancellation_state",
+    "CancellationState", "CancellationEvidenceError", "read_cancellation_state",
+    "StepExecutor", "StepRuntime", "run_step_workflow",
+    "CheckpointCursor",
     "ToolGatewayError", "invoke_tool",
 ]

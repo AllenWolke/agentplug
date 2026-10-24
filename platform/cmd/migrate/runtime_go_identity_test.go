@@ -33,6 +33,9 @@ func seedRuntimeGoIdentityForMachine(t *testing.T, ctx context.Context, db *sql.
 	if s.AgentID == "example-python-documents" {
 		knowledgeScope = "python-documents"
 	}
+	if s.AgentID == "example-java-tickets" {
+		knowledgeScope = "java-tickets"
+	}
 	member := identity.Membership{ID: s.PrincipalID + "-member", SubjectID: s.PrincipalID, Scope: app, Status: "active", Revision: 1}
 	raw, _ := json.Marshal(member)
 	if _, err := db.ExecContext(ctx, `INSERT INTO platform_identity_membership(id,subject_id,tenant_id,department_id,application_id,status,revision,payload,scope_hash) VALUES($1,$2,$3,$4,$5,'active',1,$6,$1)`, member.ID, s.PrincipalID, s.TenantID, s.DepartmentID, s.ApplicationID, string(raw)); err != nil {
@@ -71,6 +74,9 @@ func seedRuntimeGoIdentityForMachine(t *testing.T, ctx context.Context, db *sql.
 		skillID := "example.operations.guidance"
 		if s.AgentID == "example-python-documents" {
 			skillID = "example.documents.guidance"
+		}
+		if s.AgentID == "example-java-tickets" {
+			skillID = "example.tickets.guidance"
 		}
 		for _, resource := range []struct{ action, kind, id string }{{"model.generate", "model", "go-process-models"}, {"model.embed", "model", "go-process-models"}, {"tool.invoke", "tool", "runtime.inspect"}, {"knowledge.search", "knowledge", knowledgeScope}, {"memory.read", "memory", "go-process-memory"}, {"memory.write", "memory", "go-process-memory"}, {"skill.load", "skill", skillID}} {
 			add(subject.id, subject.kind, resource.action, resource.kind, resource.id)

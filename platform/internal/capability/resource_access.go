@@ -33,7 +33,7 @@ func resourceAccessForRoute(path string, op envelope) (CapabilityResourceAccess,
 			return access, errors.New("invalid skill input")
 		}
 		access = CapabilityResourceAccess{"skill.load", "skill", input.SkillID}
-	case "/internal/knowledge/search", "/internal/knowledge/answer", "/internal/knowledge/answer/recovery":
+	case "/internal/knowledge/search", "/internal/knowledge/search/recovery", "/internal/knowledge/answer", "/internal/knowledge/answer/recovery", "/internal/knowledge/references/authorize":
 		var input struct {
 			Scope string `json:"knowledge_scope"`
 		}

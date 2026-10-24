@@ -16,11 +16,13 @@ import (
 // ToolReceiptQuery contains immutable bindings, not an instruction to execute.
 // 提交回执查询只包含不可变绑定，不包含重新执行副作用的指令。
 type ToolReceiptQuery struct {
-	Scope        sharedkernel.Scope
-	CallID       string
-	Name         string
-	Fingerprint  string
-	RuntimeAudit *ToolRuntimeAuditBinding `json:",omitempty"`
+	Scope          sharedkernel.Scope
+	CallID         string
+	Name           string
+	Fingerprint    string
+	RuntimeAudit   *ToolRuntimeAuditBinding `json:",omitempty"`
+	InputEvidence  *ToolInputEvidence       `json:",omitempty"`
+	RemoteContract *RemoteToolContract      `json:",omitempty"`
 }
 
 type BusinessToolReceiptPort interface {
@@ -30,6 +32,24 @@ type BusinessToolReceiptPort interface {
 // Recovery is read-only at the business Port, followed by ledger-only repair.
 // 业务 Port 只查回执，随后只修复调用账本；禁止重跑副作用。
 func (m *Module) restoreBusinessTool(ctx context.Context, q ToolReceiptQuery) (map[string]any, bool, error) {
+	// Reload the original contract instead of inferring it from today's tool
+	// registration. This also covers immediate receipt recovery after HTTP loss.
+	if read, ok := m.toolStore.(toolReceiptReadStore); ok {
+		saved, found, err := read.LookupToolInvocation(ctx, ToolReceiptScopeHash(q.Scope), q.CallID)
+		if err != nil {
+			return nil, false, err
+		}
+		if found && saved.Fingerprint != q.Fingerprint {
+			return nil, false, ErrToolInvocationConflict
+		}
+		if found && saved.ReceiptQuery != nil {
+			original := saved.ReceiptQuery
+			if ToolReceiptScopeHash(original.Scope) != ToolReceiptScopeHash(q.Scope) || original.Name != q.Name || original.CallID != q.CallID || original.Fingerprint != q.Fingerprint {
+				return nil, false, ErrToolInvocationConflict
+			}
+			q = *original
+		}
+	}
 	port, ok := m.tools.(BusinessToolReceiptPort)
 	if isNotificationTool(q.Name) {
 		port, ok = m.notifications.(BusinessToolReceiptPort)

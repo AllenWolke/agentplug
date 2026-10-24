@@ -136,6 +136,9 @@ func planMembershipMutations(ctx context.Context, tx *sql.Tx, actor sharedkernel
 		changes = append(changes, member)
 	}
 	preservedCoverage := func(scope ManagementScope) bool {
+		if removedDepartmentContains(command, scope) {
+			return false
+		}
 		for _, m := range projected {
 			if reactivated[m.ID] {
 				continue
@@ -147,6 +150,9 @@ func planMembershipMutations(ctx context.Context, tx *sql.Tx, actor sharedkernel
 		return false
 	}
 	affected := func(scope ManagementScope) bool {
+		if removedDepartmentContains(command, scope) {
+			return true
+		}
 		for _, m := range changed {
 			if m.Scope.Contains(scope) {
 				return true

@@ -52,6 +52,9 @@ func (s *ToolApprovalSigner) Issue(ctx context.Context, scope sharedkernel.Scope
 // dispatch composition may use it, after current dual-identity authorization;
 // tokens must remain transient and must not enter durable Run/event records.
 func (s *ToolApprovalSigner) ReissueApproved(ctx context.Context, scope sharedkernel.Scope, claims ToolConfirmationClaims) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", errors.Join(ErrToolApprovalDenied, err)
+	}
 	if s == nil || s.store == nil || ctx.Err() != nil || scope.ValidateTrusted() != nil || scope.PrincipalType != "user" || claims.Version != "tool-confirmation/v1" || claims.ActorID != scope.PrincipalID || claims.ScopeHash != ToolReceiptScopeHash(scope) || claims.AuthorizationEpoch != scope.AuthorizationEpoch || claims.PendingKey == "" || !validPendingConfirmationReference(claims) || claims.PolicyHash == "" || claims.ToolName == "" || claims.CallID == "" || claims.Fingerprint == "" {
 		return "", ErrToolApprovalDenied
 	}
@@ -63,8 +66,11 @@ func (s *ToolApprovalSigner) ReissueApproved(ctx context.Context, scope sharedke
 	if err != nil || len(body) > 4096 {
 		return "", ErrToolApprovalDenied
 	}
-	if s.store.CheckApproval(ctx, claims) != nil || ctx.Err() != nil {
-		return "", ErrToolApprovalDenied
+	if err := s.store.CheckApproval(ctx, claims); err != nil {
+		return "", err
+	}
+	if err := ctx.Err(); err != nil {
+		return "", errors.Join(ErrToolApprovalDenied, err)
 	}
 	signature := ed25519.Sign(s.privateKey, append([]byte(toolConfirmationDomain), body...))
 	return base64.RawURLEncoding.EncodeToString(body) + "." + base64.RawURLEncoding.EncodeToString(signature), nil

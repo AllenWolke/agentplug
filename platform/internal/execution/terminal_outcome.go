@@ -23,7 +23,14 @@ func (s *SQLStore) CheckRetryOutcomeQuiescence(ctx context.Context, scope shared
 		return err
 	}
 	defer tx.Rollback()
-	run, err := readExecutionRun(ctx, tx, scope.RunID, " FOR UPDATE")
+	// The fence is a read-only consistency check. It takes the same per-Run
+	// shared advisory as capability state saves instead of a row FOR UPDATE, so
+	// a concurrent heartbeat/transition does not turn a legitimate check into a
+	// false "effects unconfirmed" that cancels the run.
+	if err := lockExecutionAdvisory(ctx, tx, scope.RunID, true); err != nil {
+		return err
+	}
+	run, err := readExecutionRun(ctx, tx, scope.RunID, "")
 	if err != nil {
 		return err
 	}

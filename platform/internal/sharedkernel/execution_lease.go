@@ -7,6 +7,9 @@ import (
 )
 
 // ExecutionLeaseBinding is signed proof of the current worker generation.
+// Revision is the Run execution generation, not a business checkpoint revision,
+// authorization epoch or tool attempt fence. Tokens are scoped to one Run and
+// may never be compared across Runs or used as external operation identities.
 // 执行租约绑定是当前 Worker 世代的签名证明，不向 Agent 暴露原始租约密钥。
 type ExecutionLeaseBinding struct {
 	Revision  uint64

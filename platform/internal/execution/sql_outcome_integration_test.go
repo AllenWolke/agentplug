@@ -296,8 +296,13 @@ func TestSQLProjectionOutageRecoversWithoutAgentExecution(t *testing.T) {
 	creationRecorder := &postgresScopedCreationRecorder{runID: id}
 	restarted.conversation, restarted.taskRecorder = creationRecorder, creationRecorder
 	restarted.reconcile(context.Background())
+	for len(restarted.queue) > 0 {
+		if queued := <-restarted.queue; queued == id {
+			t.Fatal("completed Agent was dispatched during projection repair")
+		}
+	}
 	finalOutcome, err := reopened.GetOutcome(id)
-	if err != nil || finalOutcome.ProjectionPending || recorder.calls != 2 || recorder.answer != "durable result" || len(restarted.queue) != 0 {
+	if err != nil || finalOutcome.ProjectionPending || recorder.calls != 2 || recorder.answer != "durable result" {
 		t.Fatalf("reconciliation lost result or replayed Agent: outcome=%+v calls=%d answer=%q err=%v", finalOutcome, recorder.calls, recorder.answer, err)
 	}
 	creation, err := reopened.GetCreation(id)

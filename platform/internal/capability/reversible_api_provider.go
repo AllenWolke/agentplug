@@ -208,11 +208,11 @@ func (p *ReversibleAPIToolProvider) Invoke(ctx context.Context, c ToolCommand) (
 
 type reversibleAPICancellationPort struct {
 	provider *ReversibleAPIToolProvider
-	ledger   compensation.EffectRegistry
+	ledger   compensation.EffectLedger
 	tools    *SQLToolInvocationStore
 }
 
-func (p *ReversibleAPIToolProvider) CancellationBinding(ledger compensation.EffectRegistry, tools *SQLToolInvocationStore) (RuntimeCancellationBinding, error) {
+func (p *ReversibleAPIToolProvider) CancellationBinding(ledger compensation.EffectLedger, tools *SQLToolInvocationStore) (RuntimeCancellationBinding, error) {
 	if p == nil || ledger == nil || tools == nil {
 		return RuntimeCancellationBinding{}, compensation.ErrUnavailable
 	}

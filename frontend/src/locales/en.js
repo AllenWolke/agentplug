@@ -1,6 +1,18 @@
 import permissionBatchMessages from "./permission-batch.en.js";
 
 export default Object.freeze({
+ "费用已确认":"Cost confirmed", "尚未开始":"Not started", "模型选择状态尚未确认，请重新读取":"Model selection is unconfirmed. Read it again.", "模型调用回执尚未确认，请重新读取":"The model invocation receipt is unconfirmed. Read it again.",
+ "管理部门智能体使用":"Manage department Agent access",
+  "自动选择模型": "Choose a model automatically",
+  "平台在已发布且获授权的候选模型中选择。": "The platform selects from published, authorized models.",
+  "使用该 Agent 已配置的模型。": "Use the model configured for this Agent.",
+  "模型调用信息": "Model invocation details",
+  "模型选择：": "Model selection: ",
+  "自动选择": "Automatic",
+  "指定模型": "Configured model",
+  "结果待核对": "Reconciliation pending",
+  "费用待确认": "Cost unconfirmed",
+
   ...permissionBatchMessages,
   "部门可用 Agent 配置": "Department agent access",
   "先确认管理职责，再为部门和成员开通合适的使用范围。": "Confirm your administrative responsibilities, then enable appropriate access for departments and members.",

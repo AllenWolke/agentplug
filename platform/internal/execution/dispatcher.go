@@ -55,6 +55,8 @@ type Dispatcher struct {
 	creationScanMu            sync.Mutex
 	cancellationScanMu        sync.Mutex
 	cancellationCursor        string
+	recoveryHolds             sharedkernel.RecoveryHolds
+	cancellationRetries       map[string]cancellationRetry // guarded by cancellationScanMu
 	outcomeCursor             string
 	creationCursor            string
 	inflight                  map[string]context.CancelFunc
@@ -88,7 +90,12 @@ type dispatchPolicy struct {
 }
 
 func policyFromRequest(raw []byte) dispatchPolicy {
-	policy := dispatchPolicy{MaxAttempts: 1, Timeout: 5 * time.Minute, Lease: dispatcherLeaseTTL}
+	// A 100-issue validation run measured 213s on the single-run r7 baseline. The
+	// 1000-tier geometry runs five such runs per group at concurrency four, so the
+	// per-run wall time can exceed the old 5-minute attempt bound. The attempt
+	// bound is a dispatcher operational limit, not an acceptance threshold: the
+	// per-item 30s contract and the group observation limit are unchanged.
+	policy := dispatchPolicy{MaxAttempts: 1, Timeout: 25 * time.Minute, Lease: dispatcherLeaseTTL}
 	var envelope struct {
 		Input struct {
 			PolicySnapshot struct {
@@ -145,7 +152,7 @@ func newDispatcher(repository Repository, token string, gateway agentGateway, wo
 	return &Dispatcher{
 		repository: repository,
 		token:      token,
-		client:     &http.Client{Timeout: 5 * time.Minute},
+		client:     &http.Client{Timeout: time.Hour},
 		gateway:    gateway,
 		queue:      make(chan string, workers*4),
 		stop:       make(chan struct{}),
@@ -266,7 +273,10 @@ type expiredRunningRepository interface {
 	ListRunningExpired(time.Time, int) ([]platformruntime.Run, error)
 }
 
-const dispatcherLeaseTTL = 5 * time.Minute
+// dispatcherLeaseTTL bounds how long a dispatched run keeps its worker lease.
+// It matches the attempt bound so a run that is still executing under the
+// 1000-tier group load is not reaped mid-flight by lease expiry.
+const dispatcherLeaseTTL = 25 * time.Minute
 
 func (d *Dispatcher) reconcile(ctx context.Context) {
 	if d.coordinatedReconcile != nil {
@@ -470,7 +480,7 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 		endpointSuffix = "/internal/agent-execution/v2/runs/" + run.ID + "/resume"
 		var body map[string]any
 		var decision map[string]any
-		if json.Unmarshal(requestBody, &body) != nil || json.Unmarshal(run.ResumeInputJSON, &decision) != nil || decision == nil {
+		if contract.DecodeJSONPreservingNumbers(requestBody, &body) != nil || contract.DecodeJSONPreservingNumbers(run.ResumeInputJSON, &decision) != nil || decision == nil {
 			return d.failDispatch(ctx, run.ID, running, "INVALID_RESUME_INPUT", "invalid resume body")
 		}
 		if decision["version"] == "harness-tool-resume/v1" {
@@ -490,7 +500,7 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+envelope.ContextToken)
 	var compatibilityRequest contract.ExecuteRequest
-	if err := json.Unmarshal(requestBody, &compatibilityRequest); err != nil || (compatibilityRequest.Operation != "invoke" && compatibilityRequest.Operation != "run" && compatibilityRequest.Operation != "resume") {
+	if err := contract.DecodeJSONPreservingNumbers(requestBody, &compatibilityRequest); err != nil || (compatibilityRequest.Operation != "invoke" && compatibilityRequest.Operation != "run" && compatibilityRequest.Operation != "resume") {
 		return d.failDispatch(ctx, run.ID, running, "AGENT_CONTRACT_INVALID", "Agent request operation is invalid")
 	}
 	bodyDigest := sha256.Sum256(requestBody)
@@ -544,6 +554,7 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 					return nil
 				}
 			}
+			lastErr = requestErr
 			lastCode, _ = classifyDispatchFailure(0, requestErr)
 			if eventErr := d.recordDispatchFailure(ctx, run.ID, attempt, lastCode, false, 0); eventErr != nil {
 				return eventErr
@@ -556,6 +567,7 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 		cancel()
 		if status >= 200 && status < 300 {
 			if readErr != nil {
+				lastErr = fmt.Errorf("read agent response: %w", readErr)
 				lastCode, _ = classifyDispatchFailure(status, readErr)
 				if eventErr := d.recordDispatchFailure(ctx, run.ID, attempt, lastCode, false, status); eventErr != nil {
 					return eventErr
@@ -573,6 +585,7 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 				Output map[string]any `json:"output"`
 			}
 			if len(body) > 0 && json.Unmarshal(body, &result) != nil {
+				lastErr = errors.New("agent returned malformed execution response")
 				lastCode = "AGENT_CONTRACT_INVALID"
 				if eventErr := d.recordDispatchFailure(ctx, run.ID, attempt, lastCode, false, status); eventErr != nil {
 					return eventErr
@@ -598,6 +611,7 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 			case "succeeded":
 				// Only explicit terminal success is accepted. / 只接受明确成功终态。
 			default:
+				lastErr = fmt.Errorf("agent returned unsupported status %q", result.Status)
 				lastCode = "AGENT_CONTRACT_INVALID"
 				if eventErr := d.recordDispatchFailure(ctx, run.ID, attempt, lastCode, false, status); eventErr != nil {
 					return eventErr
@@ -608,6 +622,7 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 		}
 		// Untrusted response bodies must not enter durable events or error logs.
 		// 不可信上游响应正文不得进入持久化事件或错误日志。
+		lastErr = fmt.Errorf("agent returned HTTP %d", status)
 		lastCode, _ = classifyDispatchFailure(status, nil)
 		if eventErr := d.recordDispatchFailure(ctx, run.ID, attempt, lastCode, false, status); eventErr != nil {
 			return eventErr
@@ -632,11 +647,14 @@ func (d *Dispatcher) dispatchAtDepth(ctx context.Context, run platformruntime.Ru
 // 但生产 Agent 调用统一经过语言无关的 AgentGateway Port。
 func (d *Dispatcher) dispatchThroughGateway(ctx context.Context, run platformruntime.Run, running platformruntime.Run, policy dispatchPolicy) error {
 	var request contract.ExecuteRequest
-	if err := json.Unmarshal(run.RequestJSON, &request); err != nil {
+	if err := contract.DecodeJSONPreservingNumbers(run.RequestJSON, &request); err != nil {
 		return d.failDispatch(ctx, run.ID, running, "INVALID_REQUEST", "platform worker received an invalid execution contract")
 	}
+	if d.signer != nil && bindRunAuthorization(run, &request) != nil {
+		return d.failDispatch(ctx, run.ID, running, "AUTHORIZATION_SCOPE_INVALID", "persisted execution authorization differs")
+	}
 	if len(run.ResumeInputJSON) > 0 {
-		if err := json.Unmarshal(run.ResumeInputJSON, &request.ResumeInput); err != nil || request.ResumeInput == nil {
+		if err := contract.DecodeJSONPreservingNumbers(run.ResumeInputJSON, &request.ResumeInput); err != nil || request.ResumeInput == nil {
 			return d.failDispatch(ctx, run.ID, running, "INVALID_RESUME_INPUT", "invalid signed resume decision")
 		}
 		request.Operation = "resume"
@@ -880,6 +898,29 @@ func (d *Dispatcher) finish(running platformruntime.Run, status platformruntime.
 	}
 	if _, err := d.repository.FinalizeLeased(running.ID, status, running.Revision, running.LeaseToken, output, payload); err != nil {
 		if errors.Is(err, ErrExecutionOutcomeUnconfirmed) {
+			// A model/tool settlement can still be converging when the Agent
+			// reports its terminal result. Retry this exact bounded finalize for a
+			// bounded window (40s) so a converging tail settlement does not cancel
+			// the run. An outcome that never converges is still never treated as
+			// success; the total wait stays finite and below the group observation
+			// window.
+			log.Printf("execution finalize converging run_id=%q revision=%d retry_window=40s detail=%v", running.ID, running.Revision, err)
+			var lastRetry error
+			for attempt := 0; attempt < 40; attempt++ {
+				time.Sleep(1 * time.Second)
+				if _, retryErr := d.repository.FinalizeLeased(running.ID, status, running.Revision, running.LeaseToken, output, payload); retryErr == nil {
+					log.Printf("execution finalize converged run_id=%q attempt=%d", running.ID, attempt)
+					d.reconcileOutcomes(context.Background())
+					return nil
+				} else if !errors.Is(retryErr, ErrExecutionOutcomeUnconfirmed) {
+					return retryErr
+				} else {
+					lastRetry = retryErr
+				}
+			}
+			// Persist the classified reason: an unconfirmed finalize must be
+			// auditable by code and detail instead of inferred after the fact.
+			log.Printf("execution finalize unconfirmed run_id=%q revision=%d status=%s detail=%v last_retry=%v", running.ID, running.Revision, status, err, lastRetry)
 			return d.stopUncertainExecution(running, "AGENT_EFFECTS_UNCONFIRMED")
 		}
 		return err
@@ -1037,7 +1078,7 @@ func (d *Dispatcher) fail(runID string, running platformruntime.Run, code, messa
 	}
 	// A completed handler can still leave a provider charge or tool receipt
 	// unknown. Do not release FIFO as ordinary failure before reconciliation.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if d.checkRetryEffectQuiescence(ctx, running) != nil {
 		return d.stopUncertainExecution(running, "AGENT_EFFECTS_UNCONFIRMED")
@@ -1049,7 +1090,7 @@ func (d *Dispatcher) checkRetryEffectQuiescence(ctx context.Context, running pla
 	if guard, ok := d.repository.(interface {
 		CheckRetryOutcomeQuiescence(context.Context, sharedkernel.Scope) error
 	}); ok {
-		checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		return guard.CheckRetryOutcomeQuiescence(checkCtx, running.Scope)
 	}

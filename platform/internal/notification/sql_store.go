@@ -31,7 +31,9 @@ func (s *SQLStore) EnsureSchema(ctx context.Context) error {
 		status VARCHAR(32) NOT NULL, attempts INT NOT NULL DEFAULT 0,
 		next_attempt_at TIMESTAMPTZ(6) NOT NULL, claim_owner VARCHAR(128) NOT NULL DEFAULT '',
 		claim_until TIMESTAMPTZ(6) NULL);
-CREATE INDEX IF NOT EXISTS idx_platform_notification_ready ON platform_notification_outbox (status,next_attempt_at);`))
+CREATE INDEX IF NOT EXISTS idx_platform_notification_ready ON platform_notification_outbox (status,next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_notification_active_ready ON platform_notification_outbox (next_attempt_at,event_id)
+ WHERE status IN ('pending','failed','publishing');`))
 	if err != nil {
 		return fmt.Errorf("notification schema: %w", err)
 	}
@@ -162,24 +164,39 @@ func (s *SQLStore) Claim(owner string, limit int, now time.Time, lease time.Dura
 	if owner == "" || limit <= 0 || lease <= 0 {
 		return nil, ErrInvalidEvent
 	}
-	rows, err := s.db.Query(sqlutil.Bind(`SELECT event_id,tenant_id,department_id,application_id,topic,event_type,partition_key,payload_json,status,attempts,next_attempt_at,claim_owner,claim_until FROM platform_notification_outbox WHERE next_attempt_at<=? AND (status=? OR status=? OR (status=? AND claim_until<=?)) ORDER BY next_attempt_at,event_id LIMIT ?`), now, Pending, Failed, Publishing, now, limit)
+	// Fixed protocol states make the active partial index usable even with a
+	// generic prepared plan; eligibility and the subsequent per-event CAS stay
+	// identical to ClaimID. Published history is never part of this read.
+	rows, err := s.db.Query(sqlutil.Bind(`SELECT event_id,tenant_id,department_id,application_id,topic,event_type,partition_key,payload_json,status,attempts,next_attempt_at,claim_owner,claim_until FROM platform_notification_outbox WHERE next_attempt_at<=? AND status IN ('pending','failed','publishing') AND (status IN ('pending','failed') OR (status='publishing' AND claim_until<=?)) ORDER BY next_attempt_at,event_id LIMIT ?`), now, now, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	result := make([]Event, 0, limit)
+	selected := make([]Event, 0, limit)
 	for rows.Next() {
 		event, err := scanEvent(rows)
 		if err != nil {
 			return nil, err
 		}
+		selected = append(selected, event)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	// Release the SELECT connection before per-event CAS writes. With a one-
+	// connection pool, invoking ClaimID while rows remain open deadlocks.
+	if err = rows.Close(); err != nil {
+		return nil, err
+	}
+	result := make([]Event, 0, len(selected))
+	for _, event := range selected {
 		claimed, err := s.ClaimID(event.ID, owner, now, lease)
 		if err != nil {
 			continue
 		}
 		result = append(result, claimed)
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 func (s *SQLStore) ClaimID(id, owner string, now time.Time, lease time.Duration) (Event, error) {

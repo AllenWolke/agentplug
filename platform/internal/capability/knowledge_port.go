@@ -6,12 +6,38 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
+	"github.com/lexagent/platform/internal/modelgateway"
 	"github.com/lexagent/platform/internal/policyasset"
 	"github.com/lexagent/platform/internal/sharedkernel"
 )
 
 var ErrKnowledgePortUnavailable = errors.New("governed knowledge port unavailable")
+
+// Shape check only. Routed versions additionally require the trusted current
+// ModelReceiptCheck callback; this function never grants model access itself.
+func KnowledgeModelVersionAllowed(p policyasset.Snapshot, version string, embedding, verifiedRouting bool) bool {
+	if version == "" {
+		return false
+	}
+	if embedding {
+		model, err := p.Model.ForEmbedding()
+		return err == nil && version == model.ModelVersionID
+	}
+	if p.Model.Routing == nil || !verifiedRouting {
+		return version == p.Model.ModelVersionID
+	}
+	if p.Model.ValidateRouting() != nil || p.Model.Routing.ExecutionContextSHA256 != policyasset.RoutingExecutionContextSHA256(p) {
+		return false
+	}
+	for _, candidate := range p.Model.Routing.Candidates {
+		if candidate.ModelVersionID == version {
+			return true
+		}
+	}
+	return false
+}
 
 // KnowledgeSearchPort permits composition-owned implementations without
 // exporting authentication envelopes or giving business Agents storage access.
@@ -20,19 +46,34 @@ type KnowledgeSearchPort interface {
 }
 
 type KnowledgeSearchRequest struct {
-	Query          string
-	SkillContext   string `json:"skill_context,omitempty"`
-	Answer         bool
-	KnowledgeScope string
-	TopK           int
-	AsOf           string
-	CacheMode      string
-	RequestID      string
-	IdempotencyKey string
-	Documents      []policyasset.KnowledgeDocumentBinding
-	Policy         policyasset.Snapshot
-	ModelCall      KnowledgeModelCall  `json:"-"`
-	ModelCheck     KnowledgeModelCheck `json:"-"`
+	Query                string
+	SkillContext         string `json:"skill_context,omitempty"`
+	Answer               bool
+	KnowledgeScope       string
+	TopK                 int
+	AsOf                 string
+	CacheMode            string
+	RequestID            string
+	IdempotencyKey       string
+	Documents            []policyasset.KnowledgeDocumentBinding
+	Policy               policyasset.Snapshot
+	ModelCall            KnowledgeModelCall                                               `json:"-"`
+	ModelCheck           KnowledgeModelCheck                                              `json:"-"`
+	ModelReceiptCheck    KnowledgeModelReceiptCheck                                       `json:"-"`
+	ModelCacheBinding    func(context.Context) (string, error)                            `json:"-"`
+	ModelInputFits       func([]modelgateway.Message, bool) bool                          `json:"-"`
+	ModelSchemaInputFits func([]modelgateway.Message, bool, json.RawMessage, string) bool `json:"-"`
+	ModelParallelism     func(context.Context) (int, error)                               `json:"-"`
+	ObservePerformance   func(context.Context, KnowledgeQueryObservation)                 `json:"-"`
+}
+
+// Only the platform's in-process native knowledge implementation supplies
+// these measured counters. This callback is never part of an HTTP envelope.
+type KnowledgeQueryObservation struct {
+	StartedAt, FinishedAt   time.Time
+	CacheMode               string
+	Lookups, Hits, Failures int64
+	Err                     error
 }
 
 type governedKnowledgeProvider struct{ backend KnowledgeSearchPort }
@@ -76,5 +117,11 @@ func (p governedKnowledgeProvider) Search(ctx context.Context, caller harnessCon
 	}
 	detached.ModelCall = input.ModelCall
 	detached.ModelCheck = input.ModelCheck
+	detached.ModelReceiptCheck = input.ModelReceiptCheck
+	detached.ModelCacheBinding = input.ModelCacheBinding
+	detached.ModelInputFits = input.ModelInputFits
+	detached.ModelSchemaInputFits = input.ModelSchemaInputFits
+	detached.ModelParallelism = input.ModelParallelism
+	detached.ObservePerformance = input.ObservePerformance
 	return p.backend.SearchKnowledge(ctx, scope, detached)
 }

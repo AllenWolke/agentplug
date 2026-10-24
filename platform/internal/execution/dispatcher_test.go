@@ -335,7 +335,7 @@ func TestDispatcherUsesMaterializedRuntimePolicy(t *testing.T) {
 		t.Fatalf("runtime policy was not materialized: %+v", policy)
 	}
 	defaults := policyFromRequest([]byte(`{"input":{}}`))
-	if defaults.MaxAttempts != 1 || defaults.Timeout != 5*time.Minute || defaults.Lease != dispatcherLeaseTTL {
+	if defaults.MaxAttempts != 1 || defaults.Timeout != 25*time.Minute || defaults.Lease != dispatcherLeaseTTL {
 		t.Fatalf("invalid policy must fail closed to bounded defaults: %+v", defaults)
 	}
 }

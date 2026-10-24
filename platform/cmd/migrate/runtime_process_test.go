@@ -154,6 +154,10 @@ func launchPlatformFixture(t *testing.T, ctx context.Context, binary, dsn string
 }
 
 func launchPlatformFixtureWithOptions(t *testing.T, ctx context.Context, binary, dsn string, wantReady bool, extraEnvironment []string, verify func(*http.Client, string)) {
+	if wantReady && verify == nil {
+		seedRuntimeReviewHistory(t, ctx, dsn)
+		seedRuntimeAccessHistory(t, ctx, dsn)
+	}
 	launchPlatformFixtureWithControl(t, ctx, binary, dsn, wantReady, extraEnvironment, func(client *http.Client, address string, _ func()) {
 		if verify != nil {
 			verify(client, address)

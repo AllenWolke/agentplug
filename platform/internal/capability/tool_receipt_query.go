@@ -29,12 +29,25 @@ func (s *memoryToolInvocationStore) LookupToolInvocation(_ context.Context, scop
 func (s *SQLToolInvocationStore) LookupToolInvocation(ctx context.Context, scope, id string) (ToolInvocation, bool, error) {
 	record := ToolInvocation{ScopeHash: scope, CallID: id}
 	var result sql.NullString
-	err := s.db.QueryRowContext(ctx, sqlutil.Bind(`SELECT fingerprint,status,result_json FROM platform_tool_invocation WHERE scope_hash=? AND call_id=?`), scope, id).Scan(&record.Fingerprint, &record.Status, &result)
+	var query sql.NullString
+	err := s.db.QueryRowContext(ctx, sqlutil.Bind(`SELECT fingerprint,status,result_json,recovery_query FROM platform_tool_invocation WHERE scope_hash=? AND call_id=?`), scope, id).Scan(&record.Fingerprint, &record.Status, &result, &query)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ToolInvocation{}, false, nil
 	}
 	if err != nil {
 		return ToolInvocation{}, false, err
+	}
+	if query.Valid {
+		var original *ToolReceiptQuery
+		if len(query.String) > 65536 || json.Unmarshal([]byte(query.String), &original) != nil {
+			return ToolInvocation{}, false, ErrToolInvocationConflict
+		}
+		// Standalone ledger calls persist JSON null. It is absence, not an
+		// invalid object, and cannot authorize remote reconciliation on its own.
+		if original != nil && (original.CallID != id || original.Fingerprint != record.Fingerprint || ToolReceiptScopeHash(original.Scope) != scope) {
+			return ToolInvocation{}, false, ErrToolInvocationConflict
+		}
+		record.ReceiptQuery = original
 	}
 	if record.Status == "completed" && (!result.Valid || decodeToolStoredResult([]byte(result.String), &record.Result) != nil) {
 		return ToolInvocation{}, false, errors.New("invalid stored tool receipt")
@@ -85,7 +98,10 @@ func (m *Module) toolReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if m.runtimeConfirmationRequired(op.Policy.Tool.RequireConfirmation, input.Name) {
-		if m.checkToolConfirmation(r.Context(), input.ConfirmationToken, scopeFromHarness(op.Context), op.Policy.Hash, input.Name, input.CallID, fingerprint) != nil {
+		if err := m.checkToolConfirmation(r.Context(), input.ConfirmationToken, scopeFromHarness(op.Context), op.Policy.Hash, input.Name, input.CallID, fingerprint); err != nil {
+			if m.capabilityCheckUnavailable(w, op, err) {
+				return
+			}
 			m.error(w, 403, "TOOL_CONFIRMATION_REQUIRED", "valid operation-bound confirmation required", op.Context.TraceID)
 			return
 		}

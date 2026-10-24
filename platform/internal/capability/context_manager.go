@@ -12,6 +12,7 @@ import (
 
 	"github.com/lexagent/platform/internal/modelgateway"
 	"github.com/lexagent/platform/internal/policyasset"
+	"github.com/lexagent/platform/internal/prompt"
 )
 
 var errContextLimit = errors.New("context exceeds approved input bounds")
@@ -27,14 +28,15 @@ type preparedContext struct {
 	SummarySourceHash    string                 `json:"summary_source_hash,omitempty"`
 	Strategy             string                 `json:"strategy"`
 	EstimatedInputTokens int                    `json:"estimated_input_tokens"`
+	ModelRouteExecution  string                 `json:"model_route_execution,omitempty"`
 }
 
 // Conservative byte-based admission includes message serialization and full
 // approved function schemas. It is an upper-bound estimate, not vendor usage.
 // Vendor receipts remain the only source for actual usage and cost settlement.
-func contextInputEstimate(messages []modelgateway.Message, toolPolicy policyasset.ToolPolicy, names []string) int {
+func contextInputEstimate(messages []modelgateway.Message, toolPolicy policyasset.ToolPolicy, names []string, requireJSON ...bool) int {
 	total := 512
-	for _, message := range modelBudgetMessages(messages, toolPolicy, names) {
+	for _, message := range modelBudgetMessages(messages, toolPolicy, names, requireJSON...) {
 		encoded, _ := json.Marshal(message)
 		total += len(encoded) + 16
 	}
@@ -72,6 +74,18 @@ func prepareModelContext(snapshot policyasset.Snapshot, messages []modelgateway.
 			return preparedContext{}, errContextInvalid
 		}
 	}
+	// Admission measures the same versioned rendering used at the provider
+	// boundary; the returned transcript still pins the full published template.
+	if _, err := prompt.InvocationMessages(snapshot.Prompt.Template, append([]modelgateway.Message{{Role: "system", Content: snapshot.Prompt.Template}}, messages...)); err != nil {
+		return preparedContext{}, errContextInvalid
+	}
+	estimate := func(candidate []modelgateway.Message) int {
+		rendered, err := prompt.InvocationMessages(snapshot.Prompt.Template, candidate)
+		if err != nil {
+			return inputLimit + 1
+		}
+		return contextInputEstimate(rendered, snapshot.Tool, names)
+	}
 	raw, err := json.Marshal(struct {
 		Messages      []modelgateway.Message
 		FunctionNames []string
@@ -82,6 +96,9 @@ func prepareModelContext(snapshot policyasset.Snapshot, messages []modelgateway.
 	}
 	transcriptHash := sha256.Sum256(raw)
 	result := preparedContext{FunctionNames: names, PromptTemplateHash: snapshot.Prompt.TemplateHash, PolicySnapshotHash: snapshot.Hash, SourceHash: fmt.Sprintf("%x", transcriptHash), Strategy: "unchanged"}
+	if snapshot.Model.Routing != nil && snapshot.Model.Routing.Availability != nil && snapshot.Model.Routing.Availability.Version == "model-route-availability/v2" && snapshot.Model.Routing.Availability.Validate() == nil {
+		result.ModelRouteExecution = "model-route-execution/v1"
+	}
 	// User turns are atomic: an assistant's calls and all corresponding tool
 	// observations stay together. The latest user turn is never truncated.
 	starts := []int{0}
@@ -100,7 +117,7 @@ func prepareModelContext(snapshot policyasset.Snapshot, messages []modelgateway.
 	}
 	for {
 		result.Messages = build("")
-		if len(result.Messages) <= maxMessages && contextInputEstimate(result.Messages, snapshot.Tool, names) <= inputLimit {
+		if len(result.Messages) <= maxMessages && estimate(result.Messages) <= inputLimit {
 			break
 		}
 		if mode == "reject" || len(starts) <= 1 {
@@ -143,7 +160,7 @@ func prepareModelContext(snapshot policyasset.Snapshot, messages []modelgateway.
 						for !utf8.ValidString(part) {
 							part = part[:len(part)-1]
 						}
-						if contextInputEstimate(build(part), snapshot.Tool, names) <= inputLimit {
+						if estimate(build(part)) <= inputLimit {
 							best = part
 							low = middle + 1
 						} else {
@@ -161,7 +178,7 @@ func prepareModelContext(snapshot policyasset.Snapshot, messages []modelgateway.
 			}
 		}
 	}
-	result.EstimatedInputTokens = contextInputEstimate(result.Messages, snapshot.Tool, names)
+	result.EstimatedInputTokens = estimate(result.Messages)
 	if modelgateway.ValidateFunctionRequest(snapshot.Tool, names, result.Messages) != nil || result.EstimatedInputTokens > inputLimit {
 		return preparedContext{}, errContextInvalid
 	}
@@ -199,11 +216,18 @@ func (m *Module) prepareContext(w http.ResponseWriter, r *http.Request) {
 	m.currentResult(w, r, op, result)
 }
 
-func validateModelContextLimit(policy policyasset.ModelPolicy, messages []modelgateway.Message, tools policyasset.ToolPolicy, names []string) error {
+func validateModelContextLimit(policy policyasset.ModelPolicy, messages []modelgateway.Message, tools policyasset.ToolPolicy, names []string, requireJSON ...bool) error {
+	return ValidateModelContextLimit(policy, messages, tools, names, requireJSON...)
+}
+
+// ValidateModelContextLimit lets platform-owned stages pack inputs under the
+// same conservative bound as the model gateway, without sending or reserving
+// usage. It neither truncates evidence nor changes the published policy.
+func ValidateModelContextLimit(policy policyasset.ModelPolicy, messages []modelgateway.Message, tools policyasset.ToolPolicy, names []string, requireJSON ...bool) error {
 	if policy.ValidateInputLimit() != nil {
 		return errContextInvalid
 	}
-	if policy.MaxInputTokens > 0 && contextInputEstimate(messages, tools, names) > policy.MaxInputTokens {
+	if policy.MaxInputTokens > 0 && contextInputEstimate(messages, tools, names, requireJSON...) > policy.MaxInputTokens {
 		return errContextLimit
 	}
 	return nil

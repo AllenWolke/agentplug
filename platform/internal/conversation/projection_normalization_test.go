@@ -40,7 +40,7 @@ func (projectionReplayConn) QueryContext(_ context.Context, query string, _ []dr
 }
 func (r *projectionReplayRows) Columns() []string {
 	if r.session {
-		return []string{"id", "kind", "agent_id", "agent_version_id", "installation_id", "title", "preview", "owner_id", "status", "message_count", "can_continue"}
+		return []string{"id", "kind", "agent_id", "agent_version_id", "installation_id", "title", "preview", "owner_id", "status", "message_count", "can_continue", "updated_at"}
 	}
 	return []string{"content"}
 }
@@ -51,7 +51,7 @@ func (r *projectionReplayRows) Next(values []driver.Value) error {
 	}
 	r.done = true
 	if r.session {
-		copy(values, []driver.Value{"session", "qa", "qa", "v1", "installation", "test", "", "user", "active", int64(1), true})
+		copy(values, []driver.Value{"session", "qa", "qa", "v1", "installation", "test", "", "user", "active", int64(1), true, time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)})
 		return nil
 	}
 	values[0] = truncate(strings.Repeat("a", 32769), 32768)

@@ -124,6 +124,11 @@ func (m *Module) Handler() http.Handler {
 	mux.HandleFunc("/applications/", m.application)
 	mux.HandleFunc("/principals", m.principals)
 	mux.HandleFunc("/membership-candidates", m.membershipCandidates)
+	mux.HandleFunc("/member-candidates", m.membershipCandidates)
+	mux.HandleFunc("/authorization-changes/receipt", m.permissionReceipt)
+	mux.HandleFunc("/department-agent-packages:inspect", m.departmentAgentPackages)
+	mux.HandleFunc("/department-agent-packages:preview", m.departmentAgentPackages)
+	mux.HandleFunc("/department-agent-packages:commit", m.departmentAgentPackages)
 	mux.HandleFunc("/principals/", m.permissionProfile)
 	mux.HandleFunc("/me/workspaces", m.permissionMe)
 	mux.HandleFunc("/me/permissions", m.permissionMe)
@@ -241,6 +246,10 @@ func (m *Module) tenant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) listTenants(w http.ResponseWriter, r *http.Request, id string) {
+	if r.URL.Query().Get("view") == "management-targets" {
+		m.companyManagementDirectory(w, r, id)
+		return
+	}
 	scope, err := identityScopeFromRequest(r)
 	if err != nil {
 		m.error(w, http.StatusBadRequest, "INVALID_SCOPE")
@@ -291,9 +300,15 @@ func (m *Module) departments(w http.ResponseWriter, r *http.Request) {
 		m.error(w, http.StatusBadRequest, "INVALID_REQUEST")
 		return
 	}
-	if actor.Browser && value.TenantID != actor.Scope.TenantID || !actor.canManage(value.TenantID, "", "") {
+	if actor.Browser && value.TenantID != actor.Scope.TenantID && actor.Policy == nil || !actor.canManage(value.TenantID, "", "") {
 		m.error(w, http.StatusForbidden, "FORBIDDEN")
 		return
+	}
+	if actor.Browser && value.TenantID != actor.Scope.TenantID {
+		if _, supported := m.store.(DepartmentAdministrationCreationRepository); !supported {
+			m.error(w, http.StatusForbidden, "COMPANY_ADMINISTRATION_NOT_AVAILABLE")
+			return
+		}
 	}
 	var err error
 	if actor.Browser {
@@ -333,9 +348,9 @@ func (m *Module) listDepartments(w http.ResponseWriter, r *http.Request, id stri
 		m.error(w, http.StatusBadRequest, "INVALID_SCOPE")
 		return
 	}
-	if value := strings.TrimSpace(r.URL.Query().Get("tenant_id")); value != "" && value != scope.TenantID {
-		m.error(w, http.StatusBadRequest, "SCOPE_MISMATCH")
-		return
+	targetTenant := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
+	if targetTenant == "" {
+		targetTenant = scope.TenantID
 	}
 	departmentID := strings.TrimSpace(r.URL.Query().Get("department_id"))
 	if departmentID == "" {
@@ -345,6 +360,16 @@ func (m *Module) listDepartments(w http.ResponseWriter, r *http.Request, id stri
 	if !ok {
 		return
 	}
+	if r.URL.Query().Get("view") == "member-targets" && actor.Policy != nil {
+		actor.ManagementAction = "membership.manage"
+	}
+	if targetTenant != scope.TenantID {
+		if actor.Policy == nil || !actor.canManage(targetTenant, "", "") {
+			m.error(w, http.StatusForbidden, "FORBIDDEN")
+			return
+		}
+	}
+	scope.TenantID = targetTenant
 	if actor.Browser && actor.Policy != nil {
 		if departmentID != "" && departmentID != actor.Scope.DepartmentID && !actor.canManage(scope.TenantID, departmentID, "") {
 			m.error(w, http.StatusForbidden, "FORBIDDEN")
@@ -438,9 +463,9 @@ func (m *Module) listApplications(w http.ResponseWriter, r *http.Request, id str
 		m.error(w, http.StatusBadRequest, "INVALID_SCOPE")
 		return
 	}
-	if value := strings.TrimSpace(r.URL.Query().Get("tenant_id")); value != "" && value != scope.TenantID {
-		m.error(w, http.StatusBadRequest, "SCOPE_MISMATCH")
-		return
+	targetTenant := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
+	if targetTenant == "" {
+		targetTenant = scope.TenantID
 	}
 	departmentID := strings.TrimSpace(r.URL.Query().Get("department_id"))
 	applicationID := strings.TrimSpace(r.URL.Query().Get("application_id"))
@@ -451,6 +476,16 @@ func (m *Module) listApplications(w http.ResponseWriter, r *http.Request, id str
 	if !ok {
 		return
 	}
+	if r.URL.Query().Get("view") == "member-targets" && actor.Policy != nil {
+		actor.ManagementAction = "membership.manage"
+	}
+	if targetTenant != scope.TenantID {
+		if actor.Policy == nil || !actor.canManage(targetTenant, "", "") {
+			m.error(w, http.StatusForbidden, "FORBIDDEN")
+			return
+		}
+	}
+	scope.TenantID = targetTenant
 	if actor.Browser && actor.Policy != nil {
 		tenantManaged := actor.canManage(scope.TenantID, "", "")
 		if !tenantManaged && (departmentID != "" && departmentID != actor.Scope.DepartmentID && !actor.canManage(scope.TenantID, departmentID, applicationID) || applicationID != "" && applicationID != actor.Scope.ApplicationID && !actor.canManage(scope.TenantID, departmentID, applicationID)) {
@@ -458,7 +493,9 @@ func (m *Module) listApplications(w http.ResponseWriter, r *http.Request, id str
 			return
 		}
 		if !tenantManaged {
-			departmentID = actor.Scope.DepartmentID
+			if departmentID == "" {
+				departmentID = actor.Scope.DepartmentID
+			}
 			if !actor.canManage(scope.TenantID, departmentID, "") {
 				applicationID = actor.Scope.ApplicationID
 			}
@@ -664,13 +701,20 @@ func (m *Module) listPrincipals(w http.ResponseWriter, r *http.Request) {
 		m.error(w, http.StatusBadRequest, "INVALID_SCOPE")
 		return
 	}
-	if value := strings.TrimSpace(r.URL.Query().Get("tenant_id")); value != "" && value != scope.TenantID {
-		m.error(w, http.StatusBadRequest, "SCOPE_MISMATCH")
-		return
-	}
 	actor, ok := m.loadBrowserActor(w, r)
 	if !ok {
 		return
+	}
+	if value := strings.TrimSpace(r.URL.Query().Get("tenant_id")); value != "" && value != scope.TenantID {
+		if actor.Policy == nil {
+			m.error(w, http.StatusBadRequest, "SCOPE_MISMATCH")
+			return
+		}
+		decision, err := EvaluatePermission(*actor.Policy, PermissionQuery{Action: "principal.read", Scope: ManagementScope{Type: "tenant", TenantID: value}, Now: time.Now().UTC()})
+		if err != nil || !decision.Allowed {
+			m.error(w, http.StatusForbidden, "FORBIDDEN")
+			return
+		}
 	}
 	if actor.Policy != nil {
 		m.permissionPrincipalDirectory(w, r, actor)

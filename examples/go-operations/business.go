@@ -8,8 +8,10 @@ import (
 	"github.com/lexagent/agent-platform-sdk-go/agentplatform"
 )
 
-const inputSchema = "schema://example-go-operations/input/v2"
-const outputSchema = "schema://example-go-operations/output/v2"
+const inputSchema = "schema://example-go-operations/input/v3"
+const legacyInputSchema = "schema://example-go-operations/input/v2"
+const outputSchema = "schema://example-go-operations/output/v3"
+const legacyOutputSchema = "schema://example-go-operations/output/v2"
 
 // Only this business workflow belongs to the Agent. Identity, policy, billing,
 // renewal and capability proofs belong to the repository SDK and platform.
@@ -68,6 +70,13 @@ func diagnose(ctx context.Context, request agentplatform.ExecuteRequest, client 
 		}
 		return client.Post(ctx, path, payload)
 	}
+	binding := request.Scope.RunID
+	if binding == "" {
+		binding = request.IdempotencyKey
+	}
+	common := agentplatform.NewPublicCapabilities(agentplatform.CapabilityPostFunc(func(callCtx context.Context, path string, payload map[string]any) (map[string]any, error) {
+		return call("public.capability", path, payload)
+	}), binding)
 	if groupResumeFirst {
 		collaboration, err = runOperationsGroup(ctx, request, input, client, call)
 		if err != nil {
@@ -95,11 +104,11 @@ func diagnose(ctx context.Context, request agentplatform.ExecuteRequest, client 
 			return nil, evidenceInvalid()
 		}
 	} else {
-		memory, err := call("memory.load", "/internal/memory/access", map[string]any{"operation": "load", "namespace": "operations", "key": "last-diagnosis"})
+		memory, err := common.MemoryLoad(ctx, "operations", "last-diagnosis")
 		if err != nil {
 			return nil, err
 		}
-		prompt, err := call("prompt.resolve", "/internal/prompt/resolve", map[string]any{})
+		prompt, err := common.ResolvePrompt(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -112,7 +121,7 @@ func diagnose(ctx context.Context, request agentplatform.ExecuteRequest, client 
 		if err != nil {
 			return nil, err
 		}
-		knowledge, err := call("knowledge.search", "/internal/knowledge/search", map[string]any{"query": service + ": " + symptom, "knowledge_scope": "go-operations", "top_k": 3, "cache_mode": "use"})
+		knowledge, err := common.SearchKnowledge(ctx, service+": "+symptom, "go-operations", agentplatform.KnowledgeOptions{TopK: 3, CacheMode: "use"})
 		if err != nil {
 			return nil, err
 		}
@@ -158,6 +167,9 @@ func diagnose(ctx context.Context, request agentplatform.ExecuteRequest, client 
 			return nil, err
 		}
 	}
+	if err := common.AuthorizeCachedResult(ctx, frozenBusinessEvidence.Knowledge, "go-operations"); err != nil {
+		return nil, err
+	}
 	harnessInput, harnessOptions, err := buildDiagnosisHarness(request, input, frozenBusinessEvidence)
 	if err != nil {
 		return nil, err
@@ -185,14 +197,26 @@ func diagnose(ctx context.Context, request agentplatform.ExecuteRequest, client 
 			return nil, err
 		}
 	}
-	_, err = call("memory.save", "/internal/memory/access", map[string]any{"operation": "save", "namespace": "operations", "key": "last-diagnosis", "value": map[string]any{"service": service, "symptom": symptom, "answer": answer}})
-	if err != nil {
+	if err := common.AuthorizeCachedResult(ctx, frozenBusinessEvidence.Knowledge, "go-operations"); err != nil {
 		return nil, err
 	}
+	if request.Operation != "resume" {
+		_, err = common.MemorySave(ctx, "operations", "last-diagnosis", map[string]any{"service": service, "symptom": symptom, "answer": answer})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	output := map[string]any{"schema": outputSchema, "service": service, "answer": answer, "knowledge": frozenBusinessEvidence.Knowledge, "context_checks": frozenBusinessEvidence.ContextChecks, "notify_me": notifyMe, "sandbox_check": sandboxCheck, "collaborate": input.Collaborate, "usage": model["usage"]}
 	if input.Collaborate {
 		output["collaboration"] = collaboration
 	}
+	if input.Legacy {
+		output["schema"] = legacyOutputSchema
+	} else {
+		output["model_metadata"] = agentplatform.ModelResultMetadata(model)
+	}
+
 	return output, nil
 }
 

@@ -10,6 +10,34 @@ import (
 	"time"
 )
 
+func TestToolRecoveryIdlePollingBacksOffAndBusyPagesReset(t *testing.T) {
+	interval := time.Second
+	want := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 30 * time.Second, 30 * time.Second}
+	for i, expected := range want {
+		interval = nextToolRecoveryInterval(interval, 0)
+		if interval != expected {
+			t.Fatalf("idle round %d interval=%s want %s", i+1, interval, expected)
+		}
+	}
+	if got := nextToolRecoveryInterval(interval, -1); got != 30*time.Second {
+		t.Fatalf("failed scans must remain bounded: %s", got)
+	}
+	if got := nextToolRecoveryInterval(interval, 1); got != toolRecoveryPollFloor {
+		t.Fatalf("due records must restore the responsive interval: %s", got)
+	}
+}
+
+func TestToolRecoveryLogRateLimit(t *testing.T) {
+	m := &Module{}
+	start := time.Now()
+	if !m.allowToolRecoveryLog(start) || m.allowToolRecoveryLog(start.Add(toolRecoveryLogInterval-time.Nanosecond)) {
+		t.Fatal("tool recovery logs were not rate limited")
+	}
+	if !m.allowToolRecoveryLog(start.Add(toolRecoveryLogInterval)) {
+		t.Fatal("tool recovery log did not reopen after its interval")
+	}
+}
+
 func TestToolRecoveryIsBoundedAndUnknownNeverExecutes(t *testing.T) {
 	s := newMemoryToolInvocationStore()
 	ctx := context.Background()
@@ -128,11 +156,25 @@ func TestSQLToolWorkerRecoversWithoutClientRetryAfterReopen(t *testing.T) {
 		}
 	}()
 	deadline := time.Now().Add(4 * time.Second)
-	for m.toolStats.Completed.Load()+m.toolStats.Failed.Load() < 3 && time.Now().Before(deadline) {
+	ready := 0
+	for time.Now().Before(deadline) {
+		// A real worker polls the whole database. Earlier integration tests may
+		// also own recoverable rows; global counters cannot identify our work.
+		// Require the three exact durable outcomes, without filtering its scan.
+		err = db.QueryRowContext(ctx, sqlutil.Bind(`SELECT count(*) FROM platform_tool_invocation WHERE scope_hash=? AND (
+ (call_id='committed' AND status='completed') OR
+ (call_id='preparing' AND status='failed') OR
+ (call_id='corrupt-query' AND status='unknown' AND retry_after>clock_timestamp()))`), hash).Scan(&ready)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ready == 3 {
+			break
+		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if m.toolStats.Completed.Load() != 2 || m.toolStats.Failed.Load() != 1 || port.calls != 0 {
-		t.Fatal("independent worker failed or executed business command")
+	if ready != 3 || m.toolStats.Completed.Load() < 2 || m.toolStats.Failed.Load() < 1 || port.calls != 0 {
+		t.Fatalf("independent worker outcomes=%d completed=%d failed=%d business_calls=%d", ready, m.toolStats.Completed.Load(), m.toolStats.Failed.Load(), port.calls)
 	}
 	got, replay, err := reopened.AcquireTool(ctx, hash, q.CallID, q.Fingerprint, "another", time.Minute)
 	if err != nil || !replay || got.Result["issue_id"] != "committed" {
@@ -160,5 +202,56 @@ func TestSQLToolWorkerRecoversWithoutClientRetryAfterReopen(t *testing.T) {
 	}
 	if badStatus != "unknown" || !deferred {
 		t.Fatal("corrupt query was released, retried or not deferred")
+	}
+}
+
+func TestSQLToolRecoveryBackoffScalesWithAgeAndStaysBounded(t *testing.T) {
+	dsn := os.Getenv("PUBLIC_TEST_POSTGRES_MIGRATION_DSN")
+	if dsn == "" {
+		t.Skip("isolated PostgreSQL fixture not configured")
+	}
+	db, err := sqlutil.OpenPostgres(context.Background(), dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	s, err := NewSQLToolInvocationStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	c := capabilityContext()
+	c.TaskID = fmt.Sprintf("tool-backoff-%d", time.Now().UnixNano())
+	scope := scopeFromHarness(c)
+	hash := ToolReceiptScopeHash(scope)
+	for _, tc := range []struct {
+		call     string
+		age      string
+		min, max time.Duration
+	}{{"fresh", "0 seconds", 4 * time.Second, 6 * time.Second}, {"ten-minutes", "10 minutes", 55 * time.Second, 65 * time.Second}, {"one-hour", "1 hour", 295 * time.Second, 305 * time.Second}} {
+		q := ToolReceiptQuery{Scope: scope, CallID: tc.call, Name: "fixture.write", Fingerprint: "fp"}
+		r, _, err := s.AcquireTool(context.WithValue(ctx, toolReceiptContextKey{}, q), hash, q.CallID, q.Fingerprint, "owner", time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_tool_invocation SET status='unknown',phase='executing',created_at=clock_timestamp()-CAST(? AS INTERVAL) WHERE scope_hash=? AND call_id=?`), tc.age, hash, tc.call); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.DeferToolRecovery(ctx, r.Lease); err != nil {
+			t.Fatal(err)
+		}
+		var status string
+		var wait float64
+		if err := db.QueryRowContext(ctx, sqlutil.Bind(`SELECT status,EXTRACT(EPOCH FROM retry_after-clock_timestamp()) FROM platform_tool_invocation WHERE scope_hash=? AND call_id=?`), hash, tc.call).Scan(&status, &wait); err != nil {
+			t.Fatal(err)
+		}
+		got := time.Duration(wait * float64(time.Second))
+		if status != "unknown" || got < tc.min || got > tc.max {
+			t.Fatalf("%s: status=%s backoff=%s want unknown within [%s,%s]", tc.call, status, got, tc.min, tc.max)
+		}
 	}
 }

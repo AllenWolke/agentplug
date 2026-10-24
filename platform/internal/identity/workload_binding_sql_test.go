@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/lexagent/platform/internal/sharedkernel"
 	"github.com/lexagent/platform/internal/sqlutil"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -49,7 +50,7 @@ func TestSQLWorkloadBindingCASAuditRetryAndRevocation(t *testing.T) {
 	}
 	applicationScope := ManagementScope{Type: "application", TenantID: a.TenantID, DepartmentID: a.DepartmentID, ApplicationID: a.ApplicationID}
 	listed, err := f.store.ListWorkloadBindings(f.ctx, a, applicationScope)
-	if err != nil || len(listed) != 1 || listed[0] != receipt.Binding {
+	if err != nil || len(listed) != 1 || !reflect.DeepEqual(listed[0], receipt.Binding) {
 		t.Fatal("scoped binding directory lost metadata", listed, err)
 	}
 	if _, err := f.store.ListWorkloadBindings(f.ctx, f.actors[2], applicationScope); !errors.Is(err, ErrPermissionDenied) {

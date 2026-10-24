@@ -8,6 +8,8 @@ import (
 	"io"
 	"regexp"
 	"strings"
+
+	agenteval "github.com/lexagent/agent-evaluation"
 )
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
@@ -17,11 +19,12 @@ var caseIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 // The runner must never hand expected labels to an Agent invocation.
 // evaluationCase 将 Agent 可见输入与人工金标隔离；Runner 绝不能把标准答案传给 Agent。
 type evaluationCase struct {
-	CaseID   string          `json:"case_id"`
-	Input    json.RawMessage `json:"input"`
-	Expected json.RawMessage `json:"expected"`
-	Split    string          `json:"split,omitempty"`
-	Weight   *float64        `json:"weight,omitempty"`
+	CaseID   string              `json:"case_id"`
+	Input    json.RawMessage     `json:"input"`
+	Expected json.RawMessage     `json:"expected"`
+	Split    string              `json:"split,omitempty"`
+	Weight   *float64            `json:"weight,omitempty"`
+	Reuse    *CaseReuseReference `json:"reuse,omitempty"`
 }
 
 func decodeEvaluationCase(raw json.RawMessage) (evaluationCase, error) {
@@ -36,7 +39,8 @@ func decodeEvaluationCase(raw json.RawMessage) (evaluationCase, error) {
 	if decoder.Decode(&extra) != io.EOF || !caseIDPattern.MatchString(sample.CaseID) ||
 		len(input) == 0 || len(expected) == 0 || input[0] != '{' || expected[0] != '{' ||
 		(sample.Split != "" && sample.Split != "train" && sample.Split != "dev" && sample.Split != "test" && sample.Split != "frozen") ||
-		(sample.Weight != nil && *sample.Weight <= 0) {
+		(sample.Weight != nil && *sample.Weight <= 0) ||
+		(sample.Reuse != nil && !validCaseReuseReference(*sample.Reuse)) {
 		return evaluationCase{}, ErrInvalid
 	}
 	return sample, nil
@@ -102,13 +106,32 @@ func validateDataset(data DatasetData) error {
 		return ErrInvalid
 	}
 	seen := make(map[string]struct{}, len(data.Cases))
+	reused := 0
 	for _, raw := range data.Cases {
-		if len(raw) == 0 || len(raw) > 64<<10 || !json.Valid(raw) {
+		if len(raw) == 0 || len(raw) > (384+4)<<10 || !json.Valid(raw) {
 			return ErrInvalid
 		}
 		sample, err := decodeEvaluationCase(raw)
 		if err != nil {
 			return err
+		}
+		if sample.Reuse != nil {
+			reused++
+			if reused > 1000 {
+				return ErrInvalid
+			}
+		}
+		// Preserve the original 64 KiB case contract. Only the existing bounded
+		// versioned judge inputs may use their own envelope, with <=4 KiB labels.
+		if len(raw) > 64<<10 {
+			var judge agenteval.JudgeInput
+			decoder := json.NewDecoder(bytes.NewReader(sample.Input))
+			decoder.DisallowUnknownFields()
+			if len(raw)-len(sample.Input) > 4<<10 || decoder.Decode(&judge) != nil || decoder.Decode(new(any)) != io.EOF ||
+				(judge.Version != agenteval.JudgeInputV2 && judge.Version != agenteval.JudgeInputV3) ||
+				judge.Validate() != nil || data.SourceType != "imported_redacted" {
+				return ErrInvalid
+			}
 		}
 		if _, duplicated := seen[sample.CaseID]; duplicated {
 			return ErrInvalid
@@ -123,9 +146,14 @@ func validateMetric(data MetricData) error {
 		return ErrInvalid
 	}
 	switch data.Kind {
-	case "agent_assertions", "exact_match", "contains", "numeric_tolerance", "recall_at_k", "precision_at_k", "mrr", "ndcg", "citation_accuracy", "grounding", "custom_deterministic":
+	case "agent_assertions", "independent_verdict", "exact_match", "contains", "numeric_tolerance", "recall_at_k", "precision_at_k", "mrr", "ndcg", "citation_accuracy", "grounding", "custom_deterministic":
 	default:
 		return ErrInvalid
+	}
+	if data.Kind == "independent_verdict" {
+		if _, err := parseIndependentVerdictFormula(data.Formula); err != nil {
+			return ErrInvalid
+		}
 	}
 	if data.Kind == "custom_deterministic" {
 		if !validID(data.PluginID) || strings.TrimSpace(data.PluginVersion) == "" || len(data.PluginVersion) > 64 || !validSHA256(data.PluginDigest) {

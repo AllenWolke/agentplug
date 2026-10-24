@@ -6,6 +6,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
+	"os"
 	"strconv"
 	"strings"
 
@@ -23,13 +25,43 @@ func OpenPostgres(ctx context.Context, dsn string) (*sql.DB, error) {
 		return nil, errors.New("invalid PostgreSQL connection configuration")
 	}
 	db := stdlib.OpenDB(*config)
-	db.SetMaxOpenConns(32)
-	db.SetMaxIdleConns(8)
+	maxOpen, maxIdle := postgresPoolSizes()
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(maxIdle)
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, errors.New("PostgreSQL connection unavailable")
 	}
 	return db, nil
+}
+
+// Pool sizing stays explicit: the compiled defaults preserve the historical
+// 32/8 behaviour, and only an explicit environment override changes them. A
+// capacity deployment (100/1000 anomaly batches queue many long IAM-fence
+// transactions) raises the ceiling without a rebuild. An invalid or partial
+// override falls back to the default, never to an unbounded pool, and idle is
+// clamped to open.
+func postgresPoolSizes() (int, int) {
+	const defaultMaxOpen, defaultMaxIdle = 32, 8
+	maxOpen, maxIdle := defaultMaxOpen, defaultMaxIdle
+	if value := strings.TrimSpace(os.Getenv("PLATFORM_PG_MAX_OPEN_CONNS")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && 1 <= parsed && parsed <= 1024 {
+			maxOpen = parsed
+		} else {
+			log.Printf("postgres pool override ignored PLATFORM_PG_MAX_OPEN_CONNS must be an integer 1..1024")
+		}
+	}
+	if value := strings.TrimSpace(os.Getenv("PLATFORM_PG_MAX_IDLE_CONNS")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && 0 <= parsed && parsed <= 1024 {
+			maxIdle = parsed
+		} else {
+			log.Printf("postgres pool override ignored PLATFORM_PG_MAX_IDLE_CONNS must be an integer 0..1024")
+		}
+	}
+	if maxIdle > maxOpen {
+		maxIdle = maxOpen
+	}
+	return maxOpen, maxIdle
 }
 
 func SQLState(err error) string {

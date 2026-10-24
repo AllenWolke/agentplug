@@ -26,33 +26,56 @@ func verifyRuntimeGoExample(t *testing.T, ctx context.Context, db *sql.DB, clien
 	if f.answerCache {
 		expectedModels = 6
 	}
+	if f.toolLoop {
+		expectedModels++
+	}
 	_, port, err := net.SplitHostPort(f.address)
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := exec.CommandContext(ctx, f.binary)
-	command.Env = append(os.Environ(), "PORT="+port, "AGENT_HTTP_ADDR="+f.address, "AGENT_PLATFORM_PUBLIC_KEY_BASE64="+base64.StdEncoding.EncodeToString(f.public), "AGENT_PLATFORM_ISSUER=platform", "AGENT_PLATFORM_AUDIENCE=agent-runtime", "AGENT_PLATFORM_AGENT_ID="+f.scope.AgentID, "PLATFORM_CAPABILITY_URL="+f.capabilityURL, "INTERNAL_TOKEN=fixture-internal-token-with-32-bytes", "INTERNAL_SIGNING_SECRET=fixture-signing-secret-with-32-bytes", "AGENT_CLIENT_ID="+f.machine, "AGENT_CLIENT_SECRET="+f.secret, "OTEL_EXPORTER_OTLP_ENDPOINT=")
+	var command *exec.Cmd
+	var done chan struct{}
 	var output bytes.Buffer
-	command.Stdout = &output
-	command.Stderr = &output
-	if err := command.Start(); err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan struct{})
 	var processErr error
-	go func() { processErr = command.Wait(); close(done) }()
-	defer func() {
-		select {
-		case <-done:
-			return
-		default:
-			_ = command.Process.Kill()
-			<-done
+	if f.java {
+		config := map[string]string{
+			"PORT": port, "APP_ENV": "production", "AGENT_PLATFORM_PUBLIC_KEY_BASE64": base64.StdEncoding.EncodeToString(f.public),
+			"AGENT_PLATFORM_ISSUER": "platform", "AGENT_PLATFORM_AUDIENCE": "agent-runtime",
+			"PLATFORM_CAPABILITY_URL": f.capabilityURL, "INTERNAL_TOKEN": "fixture-internal-token-with-32-bytes",
+			"INTERNAL_SIGNING_SECRET": "fixture-signing-secret-with-32-bytes", "AGENT_CLIENT_ID": f.machine, "AGENT_CLIENT_SECRET": f.secret,
+			"OTEL_EXPORTER_OTLP_ENDPOINT": "",
 		}
-	}()
+		raw, err := json.Marshal(config)
+		path := os.Getenv("PLATFORM_TEST_JAVA_RUNTIME_CONFIG")
+		if err != nil || os.WriteFile(path+".pending", raw, 0600) != nil || os.Rename(path+".pending", path) != nil {
+			t.Fatal("private Java runtime handoff failed")
+		}
+	} else {
+		command = exec.CommandContext(ctx, f.binary)
+		command.Env = append(os.Environ(), "PORT="+port, "AGENT_HTTP_ADDR="+f.address, "AGENT_PLATFORM_PUBLIC_KEY_BASE64="+base64.StdEncoding.EncodeToString(f.public), "AGENT_PLATFORM_ISSUER=platform", "AGENT_PLATFORM_AUDIENCE=agent-runtime", "AGENT_PLATFORM_AGENT_ID="+f.scope.AgentID, "PLATFORM_CAPABILITY_URL="+f.capabilityURL, "INTERNAL_TOKEN=fixture-internal-token-with-32-bytes", "INTERNAL_SIGNING_SECRET=fixture-signing-secret-with-32-bytes", "AGENT_CLIENT_ID="+f.machine, "AGENT_CLIENT_SECRET="+f.secret, "OTEL_EXPORTER_OTLP_ENDPOINT=")
+		command.Stdout = &output
+		command.Stderr = &output
+		if err := command.Start(); err != nil {
+			t.Fatal(err)
+		}
+		done = make(chan struct{})
+		go func() { processErr = command.Wait(); close(done) }()
+		defer func() {
+			select {
+			case <-done:
+				return
+			default:
+				_ = command.Process.Kill()
+				<-done
+			}
+		}()
+	}
 	c := *client
 	c.Timeout = 5 * time.Second
 	deadline := time.Now().Add(10 * time.Second)
+	if f.java {
+		deadline = time.Now().Add(30 * time.Second)
+	}
 	for {
 		response, err := c.Get("http://" + f.address + "/health/ready")
 		if err == nil {
@@ -97,13 +120,17 @@ func verifyRuntimeGoExample(t *testing.T, ctx context.Context, db *sql.DB, clien
 			t.Fatal("invalid Go flow response")
 		}
 	}
-	body, err := os.ReadFile(filepath.Join("..", "..", "..", "examples", "go-operations", "knowledge", "runbook.md"))
+	knowledgeScope, sourceFile := "go-operations", "runbook.md"
+	if f.java {
+		knowledgeScope, sourceFile = "java-tickets", "handbook.md"
+	}
+	body, err := os.ReadFile(filepath.Join("..", "..", "..", "examples", knowledgeScope, "knowledge", sourceFile))
 	if err != nil {
 		t.Fatal(err)
 	}
-	invoke("PUT", "knowledge/sources/go-operations/documents/runbook", map[string]any{"expected_source_revision": 0, "expected_document_version": 0, "idempotency_key": "go-process-source", "body": string(body), "acl": knowledge.DocumentACL{OwnerPrincipalID: base.scope.PrincipalID, Readers: []string{f.scope.PrincipalID, f.machine}}}, base.scope.PrincipalID, base.session, 200, nil)
+	invoke("PUT", "knowledge/sources/"+knowledgeScope+"/documents/runbook", map[string]any{"expected_source_revision": 0, "expected_document_version": 0, "idempotency_key": "go-process-source", "body": string(body), "acl": knowledge.DocumentACL{OwnerPrincipalID: base.scope.PrincipalID, Readers: []string{f.scope.PrincipalID, f.machine}}}, base.scope.PrincipalID, base.session, 200, nil)
 	var index knowledge.IndexTaskReceipt
-	invoke("POST", "knowledge/indexes/go-operations/tasks", knowledge.IndexTaskRequest{InstallationID: f.scope.InstallationID, IdempotencyKey: "go-process-index", Mode: "full", Config: knowledge.IndexSettings{Dimensions: f.dimensions, WindowRunes: 4096, OverlapRunes: 64, MaximumDocuments: 10, MaximumChunks: 100}}, base.scope.PrincipalID, base.session, 202, &index)
+	invoke("POST", "knowledge/indexes/"+knowledgeScope+"/tasks", knowledge.IndexTaskRequest{InstallationID: f.scope.InstallationID, IdempotencyKey: "go-process-index", Mode: "full", Config: knowledge.IndexSettings{Dimensions: f.dimensions, WindowRunes: 4096, OverlapRunes: 64, MaximumDocuments: 10, MaximumChunks: 100}}, base.scope.PrincipalID, base.session, 202, &index)
 	// Poll through the task's published deadline plus outcome projection time;
 	// a cold valid execution must not fail before its configured runtime limit.
 	indexWait, runWait := 15*time.Second, time.Duration(f.taskTimeoutSeconds)*time.Second+5*time.Second
@@ -113,7 +140,7 @@ func verifyRuntimeGoExample(t *testing.T, ctx context.Context, db *sql.DB, clien
 	deadline = time.Now().Add(indexWait)
 	for {
 		var detail knowledge.IndexTaskDetail
-		invoke("GET", "knowledge/indexes/go-operations/tasks/"+index.RunID, nil, base.scope.PrincipalID, base.session, 200, &detail)
+		invoke("GET", "knowledge/indexes/"+knowledgeScope+"/tasks/"+index.RunID, nil, base.scope.PrincipalID, base.session, 200, &detail)
 		if detail.Status == "succeeded" {
 			break
 		}
@@ -127,6 +154,9 @@ func verifyRuntimeGoExample(t *testing.T, ctx context.Context, db *sql.DB, clien
 	}
 	invoke("POST", "conversation/sessions", map[string]any{"id": "go-process-session", "kind": "qa", "agent_id": f.scope.AgentID, "agent_version_id": f.scope.AgentVersionID, "title": "Operations diagnosis", "status": "active", "can_continue": true}, f.scope.PrincipalID, f.session, 201, nil)
 	runRequest := map[string]any{"run_id": "go-process-run", "idempotency_key": "go-process-command", "request": map[string]any{"service": "api", "symptom": "latency increased", "observations": "p95=2s"}}
+	if f.java {
+		runRequest["request"] = map[string]any{"ticket_id": "T-100", "summary": "latency increased", "details": "p95=2s; draft read-only advice"}
+	}
 	invoke("POST", "conversation/sessions/go-process-session/runs", runRequest, f.scope.PrincipalID, f.session, 202, nil)
 	deadline = time.Now().Add(runWait)
 	for {
@@ -182,6 +212,8 @@ func verifyRuntimeGoExample(t *testing.T, ctx context.Context, db *sql.DB, clien
 		Schema      string         `json:"schema"`
 		Service     string         `json:"service"`
 		Answer      string         `json:"answer"`
+		TicketID    string         `json:"ticket_id"`
+		Draft       string         `json:"draft"`
 		Context     map[string]any `json:"context_checks"`
 		NotifyMe    bool           `json:"notify_me"`
 		Sandbox     bool           `json:"sandbox_check"`
@@ -192,15 +224,20 @@ func verifyRuntimeGoExample(t *testing.T, ctx context.Context, db *sql.DB, clien
 	}
 	var outputFields map[string]json.RawMessage
 	resultErr, fieldsErr := json.Unmarshal(raw, &result), json.Unmarshal(raw, &outputFields)
-	requiredFields := []string{"schema", "service", "answer", "knowledge", "context_checks", "notify_me", "sandbox_check", "collaborate"}
+	requiredFields := []string{"schema", "service", "answer", "knowledge", "context_checks", "notify_me", "sandbox_check", "collaborate", "model_metadata"}
+	wantSchema, businessFieldsOK := "schema://example-go-operations/output/v3", result.Service == "api" && strings.TrimSpace(result.Answer) != ""
+	if f.java {
+		requiredFields = []string{"schema", "ticket_id", "draft", "knowledge", "context_checks", "notify_me", "sandbox_check", "collaborate", "model_metadata"}
+		wantSchema, businessFieldsOK = "schema://example-java-tickets/output/v3", result.TicketID == "T-100" && strings.TrimSpace(result.Draft) != ""
+	}
 	requiredFieldsPresent := fieldsErr == nil
 	for _, key := range requiredFields {
 		if _, ok := outputFields[key]; !ok {
 			requiredFieldsPresent = false
 		}
 	}
-	if resultErr != nil || result.Schema != "schema://example-go-operations/output/v2" || result.Service != "api" || strings.TrimSpace(result.Answer) == "" || result.Context == nil || result.NotifyMe || result.Sandbox || result.Collaborate || len(result.Knowledge.References) != 1 || !requiredFieldsPresent {
-		t.Fatalf("Go output v2 contract invalid: schema=%q answer_present=%t references=%d context_present=%t required_fields_present=%t option_echoes_false=%t", result.Schema, strings.TrimSpace(result.Answer) != "", len(result.Knowledge.References), result.Context != nil, requiredFieldsPresent, !result.NotifyMe && !result.Sandbox && !result.Collaborate)
+	if resultErr != nil || result.Schema != wantSchema || !businessFieldsOK || result.Context == nil || result.NotifyMe || result.Sandbox || result.Collaborate || len(result.Knowledge.References) != 1 || !requiredFieldsPresent {
+		t.Fatalf("Go output v3 contract invalid: schema=%q answer_present=%t references=%d context_present=%t required_fields_present=%t option_echoes_false=%t", result.Schema, strings.TrimSpace(result.Answer) != "", len(result.Knowledge.References), result.Context != nil, requiredFieldsPresent, !result.NotifyMe && !result.Sandbox && !result.Collaborate)
 	}
 	before := f.calls.Load()
 	if f.live {
@@ -244,6 +281,12 @@ func verifyRuntimeGoExample(t *testing.T, ctx context.Context, db *sql.DB, clien
 	if f.answerCache {
 		expectedInput, expectedOutput, expectedCost = 120, 40, 16000
 	}
+	if f.toolLoop {
+		expectedInput += 20
+		expectedOutput += 10
+		expectedCost += 3000
+		assertRuntimeToolLoopReceipt(t, ctx, db)
+	}
 	if !f.live && (inputTokens != expectedInput || outputTokens != expectedOutput || costMicros != expectedCost) {
 		t.Fatal("loopback fixture usage changed")
 	}
@@ -255,7 +298,11 @@ func verifyRuntimeGoExample(t *testing.T, ctx context.Context, db *sql.DB, clien
 		t.Fatal("RAG cache repeat did not hit all three stages without model sends")
 	}
 	var count int
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM platform_memory_entry WHERE value_json::jsonb->>'service'='api'`).Scan(&count); err != nil || count != 1 {
+	memoryKey, memoryValue := "service", "api"
+	if f.java {
+		memoryKey, memoryValue = "ticket_id", "T-100"
+	}
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM platform_memory_entry WHERE value_json::jsonb->>$1=$2`, memoryKey, memoryValue).Scan(&count); err != nil || count != 1 {
 		t.Fatal("Go memory not persisted", err, count)
 	}
 	// Directly changing a fixture's Grant is not the public authorization API.
@@ -275,16 +322,27 @@ func verifyRuntimeGoExample(t *testing.T, ctx context.Context, db *sql.DB, clien
 	if after != before {
 		t.Fatal("revoked replay reached model")
 	}
-	if err := command.Process.Signal(os.Interrupt); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-done:
-		if processErr != nil {
-			t.Fatal("Go example graceful shutdown failed", processErr)
+	if !f.java {
+		if err := command.Process.Signal(os.Interrupt); err != nil {
+			t.Fatal(err)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Go example did not stop")
+		select {
+		case <-done:
+			if processErr != nil {
+				t.Fatal("Go example graceful shutdown failed", processErr)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("Go example did not stop")
+		}
+	} else {
+		proof := map[string]any{"result": "PASS", "agent_id": f.scope.AgentID, "output_schema": result.Schema,
+			"model_invocations": countModels, "input_tokens": inputTokens, "output_tokens": outputTokens, "cost_micros": costMicros,
+			"usage_budget_ledger_exact": true, "current_authority_and_revoked_replay": true, "replay_model_sends": 0,
+			"retrieval_cache_verified": cacheOK, "memory_persisted": count == 1, "external_models": f.live}
+		raw, err := json.MarshalIndent(proof, "", "  ")
+		if err != nil || os.WriteFile(os.Getenv("PLATFORM_TEST_JAVA_EVIDENCE"), append(raw, '\n'), 0600) != nil {
+			t.Fatal("Java process evidence write failed")
+		}
 	}
 	if f.live {
 		writeRuntimeLiveEvidence(t, inputTokens, outputTokens, costMicros, cacheInput, cacheOutput)
@@ -301,5 +359,20 @@ func verifyRuntimeGoExample(t *testing.T, ctx context.Context, db *sql.DB, clien
 		if err != nil || os.WriteFile(os.Getenv("PLATFORM_TEST_PUBLIC_ANSWER_EVIDENCE"), append(raw, '\n'), 0600) != nil {
 			t.Fatal("answer evidence write failed")
 		}
+	}
+}
+
+func assertRuntimeToolLoopReceipt(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
+	// SDKs namespace the provider's call ID before dispatch. Bind the actual
+	// completed ledger receipt to that original ID through the frozen Harness
+	// intent, rather than treating the untrusted provider ID as a platform ID.
+	var tools int
+	err := db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT (t.scope_hash,t.call_id)) FROM platform_tool_invocation t
+WHERE t.status='completed' AND EXISTS (SELECT 1 FROM platform_business_checkpoint c
+ WHERE c.value_json::jsonb->'pending' @> jsonb_build_array(jsonb_build_object(
+ 'call_id',t.call_id,'model_call_id','process-inspect-call','name','runtime.inspect')))`).Scan(&tools)
+	if err != nil || tools != 1 {
+		t.Fatal("exact original tool-loop receipt missing", err, tools)
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/lexagent/platform/internal/contract"
+	"github.com/lexagent/platform/internal/policyasset"
 	platformruntime "github.com/lexagent/platform/internal/runtime"
 	"github.com/lexagent/platform/internal/sharedkernel"
 	"github.com/lexagent/platform/internal/telemetry"
@@ -36,18 +37,31 @@ type Module struct {
 	machineTarget            MachineTargetResolver
 	machinePolicy            MachineRunPolicyResolver
 	machineSigner            MachineRunContextSigner
+	modelSelections          policyasset.ModelSelectionStore
+	modelRoutingSummary      policyasset.ModelRoutingSummaryReader
 	authorizationEpoch       func(context.Context, sharedkernel.Scope, string) (uint64, error)
 	reviewAuthorizer         func(context.Context, sharedkernel.Scope, string, string) error
 	reviewAudit              func(context.Context, sharedkernel.Scope, string, string) error
 	browserRunAuthorizer     BrowserRunAuthorizer
 	eventReadAuthority       func(context.Context, sharedkernel.Scope, string) error
+	pinnedRunTarget          func(context.Context, sharedkernel.Scope, string) error
 	synchronousRunAuthorizer func(context.Context, sharedkernel.Scope, string, contract.ExecuteRequest) error
 	synchronousRunAbortCheck func(context.Context, sharedkernel.Scope) (bool, error)
 	closeStore               bool
 	cancellationWorker       *cancellationWorkerLifecycle
+	recoveryHolds            sharedkernel.RecoveryHolds
+	recoveryHoldsConfigured  bool
 }
 
 var ErrReviewPermissionDenied = errors.New("business review permission denied")
+
+func (m *Module) SetModelSelectionStore(store policyasset.ModelSelectionStore) {
+	m.modelSelections = store
+}
+
+func (m *Module) SetModelRoutingSummaryReader(reader policyasset.ModelRoutingSummaryReader) {
+	m.modelRoutingSummary = reader
+}
 
 // MachineAccess is the verified scope returned by the Identity boundary.
 // MachineAccess 是 Identity 边界验证后返回的机器主体作用域。
@@ -511,13 +525,14 @@ type cancelRequest struct {
 }
 
 type runResponse struct {
-	RunID          string                  `json:"run_id"`
-	Status         string                  `json:"status"`
-	Revision       uint64                  `json:"revision"`
-	AgentVersionID string                  `json:"agent_version_id"`
-	Scope          scopeDTO                `json:"scope"`
-	Replayed       bool                    `json:"replayed,omitempty"`
-	Cancellation   *CancellationProjection `json:"cancellation,omitempty"`
+	ModelRouting   *policyasset.RunModelRoutingSummary `json:"model_routing,omitempty"`
+	RunID          string                              `json:"run_id"`
+	Status         string                              `json:"status"`
+	Revision       uint64                              `json:"revision"`
+	AgentVersionID string                              `json:"agent_version_id"`
+	Scope          scopeDTO                            `json:"scope"`
+	Replayed       bool                                `json:"replayed,omitempty"`
+	Cancellation   *CancellationProjection             `json:"cancellation,omitempty"`
 }
 
 type eventResponse struct {
@@ -605,6 +620,8 @@ func (m *Module) run(w http.ResponseWriter, r *http.Request) {
 		m.agentEvents(w, r, runID)
 	case "event-capability":
 		m.eventCapability(w, r, runID)
+	case "authorization-renewal":
+		m.renewWaitingAuthorization(w, r, runID)
 	case "transition":
 		m.transition(w, r, runID)
 	case "resume":
@@ -685,25 +702,34 @@ func (m *Module) cancelBrowser(w http.ResponseWriter, r *http.Request, runID str
 		m.writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED")
 		return
 	}
-	run, err := m.store.Get(runID)
-	if err != nil {
-		m.writeError(w, http.StatusNotFound, "RESOURCE_NOT_FOUND")
+	// Browsers do not supply a revision. Claim/heartbeat can change the server's
+	// read before BeginCancellation commits. Only a confirmed CAS conflict is
+	// retried, with fresh authorization; no business or provider call is replayed.
+	for attempt := 0; attempt < 3; attempt++ {
+		run, err := m.store.Get(runID)
+		if err != nil {
+			m.writeError(w, http.StatusNotFound, "RESOURCE_NOT_FOUND")
+			return
+		}
+		if err := m.checkBrowserRunAccess(r, run.Scope, "cancel"); err != nil {
+			m.writeBrowserRunPermissionError(w, err)
+			return
+		}
+		updated, err := m.requestCancellation(r.Context(), run, run.Revision)
+		if err != nil {
+			if errors.Is(err, platformruntime.ErrRevisionConflict) && attempt < 2 && r.Context().Err() == nil {
+				continue
+			}
+			m.writeRuntimeError(w, err)
+			return
+		}
+		status := http.StatusOK
+		if updated.Status == platformruntime.StatusCancelling {
+			status = http.StatusAccepted
+		}
+		m.writeCancellationAwareRun(w, r, status, updated, false)
 		return
 	}
-	if err := m.checkBrowserRunAccess(r, run.Scope, "cancel"); err != nil {
-		m.writeBrowserRunPermissionError(w, err)
-		return
-	}
-	updated, err := m.requestCancellation(r.Context(), run, run.Revision)
-	if err != nil {
-		m.writeRuntimeError(w, err)
-		return
-	}
-	status := http.StatusOK
-	if updated.Status == platformruntime.StatusCancelling {
-		status = http.StatusAccepted
-	}
-	m.writeCancellationAwareRun(w, r, status, updated, false)
 }
 
 type resumeRequest struct {

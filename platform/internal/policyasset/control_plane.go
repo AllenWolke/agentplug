@@ -180,6 +180,7 @@ func (m *Module) Handler() http.Handler {
 	mux.HandleFunc("/assets", m.assets)
 	mux.HandleFunc("/assets/", m.asset)
 	mux.HandleFunc("/snapshots/current", m.currentSnapshot)
+	mux.HandleFunc("/snapshots/routing-context", m.routingContext)
 	mux.HandleFunc("/snapshots/publish", m.publishSnapshot)
 	return mux
 }
@@ -378,6 +379,14 @@ func (m *Module) publishSnapshot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) currentSnapshot(w http.ResponseWriter, r *http.Request) {
+	m.currentSnapshotView(w, r, false)
+}
+
+func (m *Module) routingContext(w http.ResponseWriter, r *http.Request) {
+	m.currentSnapshotView(w, r, true)
+}
+
+func (m *Module) currentSnapshotView(w http.ResponseWriter, r *http.Request, routingOnly bool) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED")
 		return
@@ -393,6 +402,25 @@ func (m *Module) currentSnapshot(w http.ResponseWriter, r *http.Request) {
 	snapshot, err := m.store.GetSnapshot(r.Context(), scope)
 	if err != nil {
 		m.writeStoreError(w, err)
+		return
+	}
+	if routingOnly {
+		if r.URL.Query().Get("include_qualification_profile") == "true" {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"version": "model-routing-context-receipt/v2", "scope": scope,
+				"snapshot_hash": snapshot.Hash, "snapshot_revision": snapshot.Revision,
+				"execution_context_sha256":     RoutingExecutionContextSHA256(snapshot),
+				"behavior_context_sha256":      RoutingBehaviorContextSHA256(snapshot),
+				"qualification_profile_sha256": RoutingQualificationProfileSHA256(snapshot),
+			})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"version": "model-routing-context-receipt/v1", "scope": scope,
+			"snapshot_hash": snapshot.Hash, "snapshot_revision": snapshot.Revision,
+			"execution_context_sha256": RoutingExecutionContextSHA256(snapshot),
+			"behavior_context_sha256":  RoutingBehaviorContextSHA256(snapshot),
+		})
 		return
 	}
 	writeJSON(w, http.StatusOK, snapshot)
@@ -569,7 +597,7 @@ func validateAssetContent(t AssetType, raw json.RawMessage) error {
 		if decoder.Decode(&policy) != nil || strings.TrimSpace(policy.Provider) == "" || strings.TrimSpace(policy.Model) == "" || policy.MaxTokens < 1 || policy.BudgetCents < 0 || policy.InputMicrosPer1KTokens < 0 || policy.OutputMicrosPer1KTokens < 0 || math.IsNaN(policy.Temperature) || math.IsInf(policy.Temperature, 0) || policy.Temperature < 0 || policy.Temperature > 2 {
 			return ErrInvalidAsset
 		}
-		if policy.ValidateEmbeddingTarget() != nil || policy.ValidateReasoningMode() != nil || policy.ValidateInputLimit() != nil {
+		if policy.ValidateEmbeddingTarget() != nil || policy.ValidateReasoningMode() != nil || policy.ValidateInputLimit() != nil || policy.ValidateRouting() != nil || policy.ValidateContextCache() != nil {
 			return ErrInvalidAsset
 		}
 	case AssetPrompt:
@@ -584,7 +612,7 @@ func validateAssetContent(t AssetType, raw json.RawMessage) error {
 		}
 	case AssetMemory:
 		var policy MemoryPolicy
-		if decoder.Decode(&policy) != nil || policy.MaxEntries < 1 || policy.WorkingTTLSeconds < 0 || policy.SessionTTLSeconds < 0 || policy.TaskTTLSeconds < 0 {
+		if decoder.Decode(&policy) != nil || policy.MaxEntries < 1 || policy.ValidateCheckpointHistory() != nil || policy.ValidateCheckpointAdmission() != nil || policy.WorkingTTLSeconds < 0 || policy.SessionTTLSeconds < 0 || policy.TaskTTLSeconds < 0 {
 			return ErrInvalidAsset
 		}
 	case AssetKnowledge:

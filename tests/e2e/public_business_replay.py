@@ -27,7 +27,9 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
-def build_plan(project, scope, versions, scenario_batch=None):
+def build_plan(project, scope, versions, scenario_batch=None, output_version=3):
+    if type(output_version) is not int or output_version not in (2, 3):
+        raise ValueError("published output schema v2 or v3 required")
     if not re.fullmatch(r"agentplug-test-public-[a-f0-9]{12}", project) or set(scope) != {"tenant_id", "department_id", "application_id"} or any(not isinstance(v, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", v) for v in scope.values()):
         raise ValueError("isolated owner and exact scope required")
     if not isinstance(versions, dict) or set(versions) != set(DIRECTORIES) or any(not isinstance(v, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", v) for v in versions.values()):
@@ -54,7 +56,7 @@ def build_plan(project, scope, versions, scenario_batch=None):
             cases.append({"language": language, "case": case, "owner": "demo." + language + ".user",
                           "agent_id": "example-" + directory, "agent_version_id": versions[language],
                           "installation_id": "example-" + directory + "-installation",
-                          "output_schema": "schema://example-" + directory + "/output/v2",
+                          "output_schema": "schema://example-" + directory + "/output/v" + str(output_version),
                           "session_id": identifier + "-session", "run_id": identifier + "-run", "request": deepcopy(inputs[language])})
     plan = {"schema": "public-business-replay/v1", "owner_project": project, "scope": deepcopy(scope), "cases": cases}
     if scenario_batch is not None:
@@ -66,7 +68,9 @@ def validate_plan(plan, project, scope):
     if not isinstance(plan, dict) or not isinstance(plan.get("cases"), list) or len(plan["cases"]) != 6:
         raise ValueError("six independently owned baseline/cancel cases required")
     versions = {row.get("language"): row.get("agent_version_id") for row in plan["cases"] if isinstance(row, dict) and row.get("case") == "baseline"}
-    if plan != build_plan(project, scope, versions, plan.get("scenario_batch")):
+    schemas = {row.get("output_schema") for row in plan["cases"] if isinstance(row, dict)}
+    output_version = 2 if schemas == {"schema://example-"+directory+"/output/v2" for directory in DIRECTORIES.values()} else 3
+    if plan != build_plan(project, scope, versions, plan.get("scenario_batch"), output_version):
         raise ValueError("business identity, input, schema or version differs from frozen plan")
     return deepcopy(plan)
 

@@ -23,7 +23,7 @@ type postgresKnowledgeBackend struct {
 	cache      *knowledge.StageCache
 }
 
-const knowledgeQueryPipelineVersion = "hybrid-bm25-pgvector-rerank-purpose-v2"
+const knowledgeQueryPipelineVersion = "hybrid-bm25-pgvector-bounded-rerank-v6-routed-receipts"
 
 func (p postgresKnowledgeBackend) SearchKnowledge(ctx context.Context, scope sharedkernel.Scope, request capability.KnowledgeSearchRequest) (response map[string]any, returnedErr error) {
 	defer func() {
@@ -39,7 +39,26 @@ func (p postgresKnowledgeBackend) SearchKnowledge(ctx context.Context, scope sha
 			return nil, knowledge.ErrDocumentValidityUnavailable
 		}
 	}
+	if request.ObservePerformance != nil {
+		observedContext, measured := knowledge.WithCacheObservation(ctx)
+		ctx = observedContext
+		started := time.Now()
+		defer func() {
+			finished := time.Now()
+			lookups, hits, failures := measured.Snapshot()
+			mode := request.CacheMode
+			if mode == "" {
+				mode = "use"
+			}
+			request.ObservePerformance(ctx, capability.KnowledgeQueryObservation{StartedAt: started, FinishedAt: finished,
+				CacheMode: mode, Lookups: lookups, Hits: hits, Failures: failures, Err: returnedErr})
+		}()
+	}
 	var models knowledge.GovernedQueryModels = knowledgeQueryModels{scope: scope, request: request}
+	pipelineVersion := knowledgeQueryPipelineVersion
+	if (knowledgeQueryModels{request: request}).scoreVectorEnabled() {
+		pipelineVersion = "hybrid-bm25-pgvector-score-vector-v7-routed-receipts"
+	}
 	authority := sourceKnowledgeAuthority{source: knowledge.PostgresSource{DB: p.source}, iam: p.authority, scope: scope, knowledgeID: request.KnowledgeScope, documents: request.Documents, asOf: request.AsOf}
 	cache := p.cache
 	var cacheBoundary knowledge.CacheBoundary
@@ -84,7 +103,14 @@ func (p postgresKnowledgeBackend) SearchKnowledge(ctx context.Context, scope sha
 		if err != nil {
 			return nil, knowledge.ErrInvalidQueryStage
 		}
-		cacheBoundary = knowledge.CacheBoundary{Scope: scope, PolicyFingerprint: knowledge.CacheKey(policyJSON), CorpusFingerprint: knowledge.CacheKey(corpusJSON), PipelineVersion: knowledgeQueryPipelineVersion}
+		cacheBoundary = knowledge.CacheBoundary{Scope: scope, PolicyFingerprint: knowledge.CacheKey(policyJSON), CorpusFingerprint: knowledge.CacheKey(corpusJSON), PipelineVersion: pipelineVersion}
+		if request.ModelCacheBinding != nil {
+			binding, err := request.ModelCacheBinding(ctx)
+			if err != nil {
+				return nil, err
+			}
+			cacheBoundary.SelectionFingerprint = binding
+		}
 		models = knowledge.CachedQueryModels{Models: models, Cache: cache, Boundary: cacheBoundary, Check: func(ctx context.Context, current sharedkernel.Scope, stage string) error {
 			if current != scope {
 				return knowledge.ErrInvalidQueryStage
@@ -94,11 +120,17 @@ func (p postgresKnowledgeBackend) SearchKnowledge(ctx context.Context, scope sha
 				operation = "embed"
 			}
 			return request.ModelCheck(ctx, operation)
+		}, CheckReceipt: func(ctx context.Context, current sharedkernel.Scope, stage string, receipt knowledge.QueryStageReceipt) error {
+			if current != scope {
+				return knowledge.ErrInvalidQueryStage
+			}
+			return knowledgeCachedReceiptCheck(ctx, request, stage == "embedding", receipt)
 		}}
 	}
 	retriever := knowledge.GovernedProjectionRetriever{Projection: knowledge.PostgresProjection{DB: p.projection}, Authority: authority, MaximumCorpus: 10000}
 	if cache != nil && request.ModelCheck != nil {
 		retriever.Cache, retriever.CacheBoundary = cache, cacheBoundary
+		retriever.CacheBoundary.SelectionFingerprint = ""
 	}
 	query := knowledge.QueryPipeline{Models: models, Retriever: retriever}
 	candidates := request.TopK * 5
@@ -117,13 +149,17 @@ func (p postgresKnowledgeBackend) SearchKnowledge(ctx context.Context, scope sha
 			"clause_or_chunk_id": chunk.ID, "content": chunk.Text, "title": chunk.DocumentID, "status": "effective",
 			"kb_version": result.Generation.ID, "index_revision": strconv.FormatInt(result.Revision, 10), "document_version": chunk.DocumentVersion,
 			"retrieval_score": chunk.Score, "reranking_score": result.RerankingScores[chunk.ID], "lexical_rank": chunk.LexicalRank, "vector_rank": chunk.VectorRank,
-			"retriever_version": knowledgeQueryPipelineVersion,
+			"retriever_version": pipelineVersion,
 			"rewrite_cache_hit": result.RewriteReceipt.CacheHit, "embedding_cache_hit": result.EmbeddingReceipt.CacheHit,
 			"reranking_cache_hit":   result.RerankingReceipt.CacheHit,
 			"retrieval_cache_hit":   result.CacheHit,
 			"rewrite_model_version": result.RewriteReceipt.ModelVersionID, "embedding_model_version": result.EmbeddingReceipt.ModelVersionID, "reranking_model_version": result.RerankingReceipt.ModelVersionID,
 			"rewrite_invocation_id": result.RewriteReceipt.InvocationID, "embedding_invocation_id": result.EmbeddingReceipt.InvocationID, "reranking_invocation_id": result.RerankingReceipt.InvocationID,
 		})
+		if len(result.RerankingReceipt.InvocationIDs) > 1 {
+			references[len(references)-1]["reranking_invocation_ids"] = append([]string(nil), result.RerankingReceipt.InvocationIDs...)
+			references[len(references)-1]["reranking_model_versions"] = append([]string(nil), result.RerankingReceipt.ModelVersionIDs...)
+		}
 	}
 	if err := enrichKnowledgeReferences(ctx, knowledge.PostgresSource{DB: p.source}, knowledge.ProjectionScope{TenantID: scope.TenantID, DepartmentID: scope.DepartmentID, ApplicationID: scope.ApplicationID, KnowledgeID: request.KnowledgeScope}, references); err != nil {
 		return nil, err

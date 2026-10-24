@@ -31,7 +31,7 @@ type knowledgeAnswerValue struct {
 	Billing     knowledgeAnswerBilling
 }
 
-const knowledgeAnswerPipelineVersion = "cited-answer-v3-authorized-parent"
+const knowledgeAnswerPipelineVersion = "cited-answer-v4-authorized-routed-model"
 
 func (p postgresKnowledgeBackend) answerKnowledge(ctx context.Context, scope sharedkernel.Scope, request capability.KnowledgeSearchRequest, retrieved knowledge.QueryPipelineResult, authority knowledge.RetrievalAuthority, cache *knowledge.StageCache, boundary knowledge.CacheBoundary) (map[string]any, error) {
 	if request.ModelCall == nil || request.ModelCheck == nil || authority == nil || len(retrieved.Chunks) == 0 {
@@ -96,7 +96,7 @@ func (p postgresKnowledgeBackend) answerKnowledge(ctx context.Context, scope sha
 	}
 	// The cache mode chooses cache storage, never permissions, model limits or
 	// billing. A miss uses the same approved model invocation as every Agent.
-	encoded, hit, err := cache.Do(ctx, knowledge.CacheKey(key), func(ctx context.Context) ([]byte, error) {
+	encoded, hit, err := cache.DoValidated(ctx, knowledge.CacheKey(key), func(ctx context.Context) ([]byte, error) {
 		if err := check(ctx); err != nil {
 			return nil, err
 		}
@@ -125,6 +125,12 @@ func (p postgresKnowledgeBackend) answerKnowledge(ctx context.Context, scope sha
 			return nil, err
 		}
 		return json.Marshal(value)
+	}, func(ctx context.Context, raw []byte) error {
+		var value knowledgeAnswerValue
+		if json.Unmarshal(raw, &value) != nil || !validKnowledgeAnswer(value, request, retrieved.Chunks) {
+			return knowledge.ErrInvalidQueryStage
+		}
+		return knowledgeCachedReceiptCheck(ctx, request, false, value.Receipt)
 	})
 	if err != nil {
 		return nil, err
@@ -193,7 +199,7 @@ func parseKnowledgeAnswer(models knowledgeQueryModels, result map[string]any, ch
 }
 
 func validKnowledgeAnswer(value knowledgeAnswerValue, request capability.KnowledgeSearchRequest, chunks []knowledge.HybridChunk) bool {
-	if strings.TrimSpace(value.Text) == "" || len(value.Text) > 32768 || !utf8.ValidString(value.Text) || len(value.CitationIDs) < 1 || len(value.CitationIDs) > len(chunks) || value.Receipt.ModelVersionID != request.Policy.Model.ModelVersionID || value.Receipt.PromptVersionID != request.Policy.PromptVersionID || value.Receipt.InvocationID == "" || value.Usage.InputTokens < 0 || value.Usage.OutputTokens < 0 || value.Billing.CostMicros < 0 || value.Billing.PriceVersionID == "" || value.Billing.Currency == "" {
+	if strings.TrimSpace(value.Text) == "" || len(value.Text) > 32768 || !utf8.ValidString(value.Text) || len(value.CitationIDs) < 1 || len(value.CitationIDs) > len(chunks) || !capability.KnowledgeModelVersionAllowed(request.Policy, value.Receipt.ModelVersionID, false, request.ModelReceiptCheck != nil) || value.Receipt.PromptVersionID != request.Policy.PromptVersionID || value.Receipt.InvocationID == "" || value.Usage.InputTokens < 0 || value.Usage.OutputTokens < 0 || value.Billing.CostMicros < 0 || value.Billing.PriceVersionID == "" || value.Billing.Currency == "" {
 		return false
 	}
 	known, seen := map[string]bool{}, map[string]bool{}

@@ -539,34 +539,34 @@ def main() -> int:
     templates = [
         (
             "python-generic",
-            "1.0.0",
+            "1.1.0",
             lambda agent, port, key: python_command("python-generic", agent, port, key),
         ),
         (
             "python-langgraph",
-            "1.0.0",
+            "1.1.0",
             lambda agent, port, key: python_command(
                 "python-langgraph", agent, port, key
             ),
         ),
         (
             "go-generic",
-            "1.0.0",
+            "1.1.0",
             lambda agent, port, key: go_command("go-generic", agent, port, key),
         ),
         (
             "go-eino",
-            "1.0.0",
+            "1.1.0",
             lambda agent, port, key: go_command("go-eino", agent, port, key),
         ),
         (
             "java-generic",
-            "1.0.0",
+            "1.1.0",
             lambda agent, port, key: java_generic_command(agent, port, key),
         ),
         (
             "java-spring-ai",
-            "1.0.0",
+            "1.1.0",
             lambda agent, port, key: java_spring_command(agent, port, key),
         ),
     ]

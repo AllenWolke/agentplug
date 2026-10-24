@@ -39,7 +39,7 @@ CREATE TRIGGER index_effect_stamp_trigger BEFORE UPDATE ON knowledge.active_gene
 // The local owner restores only the activity pointer, never deletes generations,
 // embeddings, source versions, authorization changes or incurred model fees.
 type IndexCompensation struct {
-	ledger compensation.LocalEffectRecorder
+	ledger compensation.LocalEffects
 	record func(context.Context, *sql.Tx, sharedkernel.Scope, ProjectionScope, string) error
 }
 type IndexCancellation struct {
@@ -55,7 +55,7 @@ type indexBeforeImage struct {
 	ForwardGeneration string          `json:"forward_generation"`
 }
 
-func NewIndexCompensation(ledger compensation.LocalEffectRecorder, record func(context.Context, *sql.Tx, sharedkernel.Scope, ProjectionScope, string) error) (*IndexCompensation, error) {
+func NewIndexCompensation(ledger compensation.LocalEffects, record func(context.Context, *sql.Tx, sharedkernel.Scope, ProjectionScope, string) error) (*IndexCompensation, error) {
 	if ledger == nil || record == nil {
 		return nil, compensation.ErrInvalid
 	}
@@ -71,7 +71,7 @@ func (s *IndexCompensation) Registration() (compensation.Registration, error) {
 	if s == nil {
 		return compensation.Registration{}, compensation.ErrInvalid
 	}
-	port, err := s.ledger.Port(IndexCompensationProvider, IndexCompensationVersion, s)
+	port, err := s.ledger.BindOwner(IndexCompensationProvider, IndexCompensationVersion, s)
 	return compensation.Registration{Provider: IndexCompensationProvider, Version: IndexCompensationVersion, Timeout: 5 * time.Second, Port: port}, err
 }
 func indexEffectStep(owner sharedkernel.Scope, plan *IndexPlan, generation string) (compensation.Step, error) {

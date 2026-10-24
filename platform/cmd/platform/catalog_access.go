@@ -132,14 +132,16 @@ func (a identityCatalogControl) AuthorizeCatalogControl(ctx context.Context, act
 		permissionAction = "machine.manage"
 	case catalog.ControlDelegationTargets:
 		permissionAction = "delegation.manage"
+	case catalog.ControlDepartmentAgentTargets:
+		permissionAction = "department.agent_access.manage"
 	}
-	if (action == catalog.ControlAuthorizationTargets || action == catalog.ControlWorkloadTargets || action == catalog.ControlDelegationTargets) && (tenantID == "" || departmentID == "" || applicationID == "") {
+	if (action == catalog.ControlAuthorizationTargets || action == catalog.ControlWorkloadTargets || action == catalog.ControlDelegationTargets || action == catalog.ControlDepartmentAgentTargets) && (tenantID == "" || departmentID == "" || applicationID == "") {
 		return catalog.ErrCatalogForbidden
 	}
 	if handled, err := authorizeVersionedControl(ctx, a.store, actor.PrincipalID, permissionAction, tenantID, departmentID, applicationID); handled {
 		return controlPermissionError(err, catalog.ErrCatalogForbidden)
 	}
-	if action == catalog.ControlAuthorizationTargets || action == catalog.ControlWorkloadTargets || action == catalog.ControlDelegationTargets {
+	if action == catalog.ControlAuthorizationTargets || action == catalog.ControlWorkloadTargets || action == catalog.ControlDelegationTargets || action == catalog.ControlDepartmentAgentTargets {
 		return catalog.ErrCatalogForbidden
 	}
 	if action == catalog.ControlRequestable {

@@ -108,7 +108,7 @@ class RecoveryCheckpointReference(StrictModel):
     """Public six-field reference to one current, bounded State checkpoint."""
 
     state_key: str = Field(pattern=r"^[a-f0-9]{64}$")
-    revision: int = Field(ge=1, le=64, strict=True)
+    revision: int = Field(ge=1, le=4096, strict=True)
     schema_id: Literal["schema://agentplug/agent-group/v1"]
     content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     execution_revision: int = Field(ge=1, lt=1 << 53, strict=True)

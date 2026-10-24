@@ -150,8 +150,9 @@ func (l *Ledger) Snapshot(scope Scope) Snapshot {
 // immutable idempotency records; the snapshot is updated in the same
 // transaction so budget checks cannot race concurrent model calls.
 type SQLStore struct {
-	db  *sql.DB
-	now func() time.Time
+	db            *sql.DB
+	now           func() time.Time
+	priceCurrency EvaluationPriceCurrencyReader
 }
 
 func NewSQLStore(db *sql.DB) *SQLStore { return &SQLStore{db: db} }
@@ -230,7 +231,11 @@ CREATE INDEX IF NOT EXISTS idx_model_budget_window_end ON platform_model_budget_
 			CONSTRAINT uq_model_budget_idempotency UNIQUE(window_id,request_id));
 CREATE INDEX IF NOT EXISTS idx_model_budget_expiry ON platform_model_budget_reservation (window_id,status,expires_at);
 CREATE INDEX IF NOT EXISTS idx_model_budget_run ON platform_model_budget_reservation (tenant_id,department_id,application_id,run_id);
-CREATE INDEX IF NOT EXISTS idx_model_budget_reconcile ON platform_model_budget_reservation (status,updated_at);`,
+CREATE INDEX IF NOT EXISTS idx_model_budget_reconcile ON platform_model_budget_reservation (status,updated_at);
+CREATE INDEX IF NOT EXISTS idx_model_budget_active ON platform_model_budget_reservation (run_id,reservation_id)
+ WHERE status NOT IN ('settled','released');
+CREATE INDEX IF NOT EXISTS idx_model_budget_settled_event ON platform_model_budget_reservation (event_id,settled_micros)
+ WHERE status='settled';`,
 		`CREATE TABLE IF NOT EXISTS platform_model_budget_settlement (
 			reservation_id VARCHAR(32) PRIMARY KEY, event_id VARCHAR(128) NOT NULL,
 			price_version_id VARCHAR(128) NOT NULL, settled_micros BIGINT NOT NULL,
@@ -305,6 +310,7 @@ func (s *SQLStore) Apply(ctx context.Context, event Event) (Snapshot, error) {
 	err = tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT tenant_id,department_id,application_id,agent_id,agent_version_id,run_id,provider,model,input_tokens,output_tokens,cost_micros,step_id FROM platform_usage_event WHERE event_id=? FOR UPDATE`), event.ID).Scan(
 		&existing.Scope.TenantID, &existing.Scope.DepartmentID, &existing.Scope.ApplicationID, &existing.Scope.AgentID, &existing.Scope.AgentVersionID, &existing.Scope.RunID, &existing.Provider, &existing.Model, &existing.InputTokens, &existing.OutputTokens, &existing.CostMicros, &existingStepID)
 	if err == nil {
+		existing.ID = event.ID
 		if existingStepID.Valid {
 			existing.StepID = &existingStepID.String
 		}

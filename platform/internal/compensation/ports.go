@@ -7,19 +7,19 @@ import (
 	"github.com/lexagent/platform/internal/sharedkernel"
 )
 
-// EffectRegistry admits and fences only registered effects. Owner modules
-// share their existing transaction; this port exposes no arbitrary SQL.
-type EffectRegistry interface {
+// EffectLedger 只公开副作用登记及事务围栏，不公开连接、迁移或 SQL 实现。
+// 调用者的业务写入和这些操作必须使用同一个事务。
+type EffectLedger interface {
 	RegisterTx(context.Context, *sql.Tx, Step) error
 	GuardRegisteredStopTx(context.Context, *sql.Tx, Step) error
 	GuardLeaseTx(context.Context, *sql.Tx, Lease) error
 	ReadEffectReferenceTx(context.Context, *sql.Tx, string, string) (Step, error)
 }
 
-// Coordinator is the execution-facing cancellation protocol. The storage
-// implementation and schema checks remain owned by the compensation module.
+// Coordinator 是组合根注入执行模块的补偿端口。数据库构造和只读启动
+// 检查属于组合根；执行模块仅提交控制意图、核对覆盖及读取完成证明。
 type Coordinator interface {
-	EffectRegistry
+	EffectLedger
 	Queue
 	WorkerStore
 	BeginTx(context.Context, *sql.Tx, sharedkernel.Scope, uint64) (string, error)
@@ -28,34 +28,21 @@ type Coordinator interface {
 	Progress(context.Context, sharedkernel.Scope) (Progress, bool, error)
 	ProgressTx(context.Context, *sql.Tx, sharedkernel.Scope) (Progress, bool, error)
 	CompletionProofTx(context.Context, *sql.Tx, sharedkernel.Scope) (StopProof, error)
-	RecordedEffectsTx(context.Context, *sql.Tx, sharedkernel.Scope) ([]Step, error)
 	EnrollStoppedTreeTx(context.Context, *sql.Tx, sharedkernel.Scope, []sharedkernel.Scope) error
 	VerifyStoppedTreeCoverageTx(context.Context, *sql.Tx, sharedkernel.Scope, []sharedkernel.Scope) error
-	EnrollRecordedTx(context.Context, *sql.Tx, sharedkernel.Scope, string) error
 }
 
-// LocalEffectRecorder lets an owner record its before-image and provide its
-// inverse. It cannot read another owner's state or execute arbitrary SQL.
-type LocalEffectRecorder interface {
+// LocalEffects 是资源所有者使用的前镜像端口。资源模块只能提供自己的
+// RestoreEffectTx，不能借用补偿仓储执行其他模块的 SQL。
+type LocalEffects interface {
 	AppliedTx(context.Context, *sql.Tx, Step) (bool, error)
 	RecordTx(context.Context, *sql.Tx, Step, LocalEffect) error
-	Port(string, string, LocalEffectOwner) (Port, error)
+	BindOwner(string, string, LocalEffectOwner) (Port, error)
 }
 
-// OpenCoordinator checks immutable migration markers before exposing the
-// protocol. Runtime startup never creates or repairs schema.
-func OpenCoordinator(ctx context.Context, db *sql.DB, authority Authority) (Coordinator, error) {
-	if ctx == nil || db == nil || authority == nil {
-		return nil, ErrInvalid
-	}
-	if err := CheckSchema(ctx, db); err != nil {
-		return nil, err
-	}
-	if err := CheckEnrollmentSchema(ctx, db); err != nil {
-		return nil, err
-	}
-	return NewSQLStore(db, authority)
+func (s *LocalEffectLedger) BindOwner(provider, version string, owner LocalEffectOwner) (Port, error) {
+	return s.Port(provider, version, owner)
 }
 
 var _ Coordinator = (*SQLStore)(nil)
-var _ LocalEffectRecorder = (*LocalEffectLedger)(nil)
+var _ LocalEffects = (*LocalEffectLedger)(nil)

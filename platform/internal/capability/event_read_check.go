@@ -83,8 +83,21 @@ func (m *Module) checkEventRead(w http.ResponseWriter, r *http.Request) {
 		RunID: s.RunID, ParentRunID: s.ParentRunID, SessionID: s.SessionID, TraceID: s.TraceID, AuthorizationEpoch: s.AuthorizationEpoch}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	if workload.AuthenticateWorkload(ctx, scope, r.Header.Get("X-Agent-Client-ID"), r.Header.Get("X-Agent-Client-Secret"), r.RemoteAddr) != nil || authority.AuthorizeEventRead(ctx, scope, request.PolicySnapshotHash) != nil {
+	if err := workload.AuthenticateWorkload(ctx, scope, r.Header.Get("X-Agent-Client-ID"), r.Header.Get("X-Agent-Client-Secret"), r.RemoteAddr); err != nil {
+		if m.capabilityCheckUnavailable(w, envelope{Context: c}, err) {
+			return
+		}
 		m.error(w, 403, "EVENT_AUTHORIZATION_DENIED", "current event read denied", s.TraceID)
+		return
+	}
+	if err := authority.AuthorizeEventRead(ctx, scope, request.PolicySnapshotHash); err != nil {
+		if m.capabilityCheckUnavailable(w, envelope{Context: c}, err) {
+			return
+		}
+		m.error(w, 403, "EVENT_AUTHORIZATION_DENIED", "current event read denied", s.TraceID)
+		return
+	}
+	if m.capabilityCheckUnavailable(w, envelope{Context: c}, ctx.Err()) {
 		return
 	}
 	if ctx.Err() != nil || m.validateContext(r, c) != nil {

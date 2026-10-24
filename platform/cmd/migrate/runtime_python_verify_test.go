@@ -110,6 +110,9 @@ func verifyRuntimePythonExample(t *testing.T, ctx context.Context, db *sql.DB, c
 	}
 	invoke("POST", "conversation/sessions", map[string]any{"id": "python-process-session", "kind": "qa", "agent_id": f.scope.AgentID, "agent_version_id": f.scope.AgentVersionID, "title": "Owned document teaching query", "status": "active", "can_continue": true}, f.scope.PrincipalID, f.session, 201, nil)
 	request := map[string]any{"run_id": "python-process-run", "idempotency_key": "python-process-command", "request": map[string]any{"question": "How are knowledge index versions and access permissions checked?", "top_k": 1, "cache_mode": "use"}}
+	if f.toolLoop {
+		request["request"].(map[string]any)["workflow_mode"] = "tool_loop"
+	}
 	invoke("POST", "conversation/sessions/python-process-session/runs", request, f.scope.PrincipalID, f.session, 202, nil)
 	deadline = time.Now().Add(runWait)
 	for {
@@ -155,7 +158,7 @@ func verifyRuntimePythonExample(t *testing.T, ctx context.Context, db *sql.DB, c
 	}
 	var outputFields map[string]json.RawMessage
 	resultErr, fieldsErr := json.Unmarshal(output, &result), json.Unmarshal(output, &outputFields)
-	requiredFields := []string{"schema", "question", "answer", "references", "retrieved_ids", "citation_ids", "evaluation_citations", "evaluation_claims", "answer_cache_hit", "usage", "billing", "collaborate"}
+	requiredFields := []string{"schema", "question", "answer", "references", "retrieved_ids", "citation_ids", "evaluation_citations", "evaluation_claims", "answer_cache_hit", "usage", "billing", "collaborate", "model_metadata"}
 	requiredFieldsPresent := fieldsErr == nil
 	for _, key := range requiredFields {
 		if _, ok := outputFields[key]; !ok {
@@ -165,8 +168,8 @@ func verifyRuntimePythonExample(t *testing.T, ctx context.Context, db *sql.DB, c
 	const expectedQuestion = "How are knowledge index versions and access permissions checked?"
 	citationMatchesRetrieved := len(result.CitationIDs) == 1 && len(result.RetrievedIDs) == 1 && result.CitationIDs[0] == result.RetrievedIDs[0]
 	claimMatchesAnswer := len(result.Claims) == 1 && result.Claims[0].Text == result.Answer
-	if resultErr != nil || result.Schema != "schema://example-python-documents/output/v2" || result.Question != expectedQuestion || strings.TrimSpace(result.Answer) == "" || len(result.References) != 1 || len(result.RetrievedIDs) != len(result.References) || len(result.CitationIDs) != 1 || len(result.Citations) != 1 || !citationMatchesRetrieved || !claimMatchesAnswer || result.AnswerCacheHit || result.Usage == nil || result.Billing == nil || result.Collaborate || !requiredFieldsPresent {
-		t.Fatalf("Python output v2 contract invalid: schema=%q answer_present=%t references=%d retrieved_ids=%d citation_ids=%d evaluation_citations=%d claims=%d citation_matches=%t claim_matches=%t answer_cache_hit=%t usage_object=%t billing_object=%t collaborate=%t required_fields_present=%t", result.Schema, strings.TrimSpace(result.Answer) != "", len(result.References), len(result.RetrievedIDs), len(result.CitationIDs), len(result.Citations), len(result.Claims), citationMatchesRetrieved, claimMatchesAnswer, result.AnswerCacheHit, result.Usage != nil, result.Billing != nil, result.Collaborate, requiredFieldsPresent)
+	if resultErr != nil || result.Schema != "schema://example-python-documents/output/v3" || result.Question != expectedQuestion || strings.TrimSpace(result.Answer) == "" || len(result.References) != 1 || len(result.RetrievedIDs) != len(result.References) || len(result.CitationIDs) != 1 || len(result.Citations) != 1 || !citationMatchesRetrieved || !claimMatchesAnswer || result.AnswerCacheHit || result.Usage == nil || result.Billing == nil || result.Collaborate || !requiredFieldsPresent {
+		t.Fatalf("Python output v3 contract invalid: schema=%q answer_present=%t references=%d retrieved_ids=%d citation_ids=%d evaluation_citations=%d claims=%d citation_matches=%t claim_matches=%t answer_cache_hit=%t usage_object=%t billing_object=%t collaborate=%t required_fields_present=%t", result.Schema, strings.TrimSpace(result.Answer) != "", len(result.References), len(result.RetrievedIDs), len(result.CitationIDs), len(result.Citations), len(result.Claims), citationMatchesRetrieved, claimMatchesAnswer, result.AnswerCacheHit, result.Usage != nil, result.Billing != nil, result.Collaborate, requiredFieldsPresent)
 	}
 	count, input, generated, cost, err := settledRuntimeModels(ctx, db, f.chatVersion, f.embeddingVersion)
 	runCount, runInput, runOutput, runCost, runErr := settledRuntimeModelsForRun(ctx, db, f.chatVersion, f.embeddingVersion, runtimeFixtureBillingRunID("python-process-run"))
@@ -183,7 +186,12 @@ func verifyRuntimePythonExample(t *testing.T, ctx context.Context, db *sql.DB, c
 	runUsageMatchesModels := runUsageEvents == runCount && runUsageInput == runInput && runUsageOutput == runOutput && runUsageCost == runCost
 	indexUsageMatchesModels := indexUsageEvents == indexCount && indexUsageInput == indexInput && indexUsageOutput == indexOutput && indexUsageCost == indexCost
 	snapshotMatchesAgentVersion := used.ScopeKey == usageScopeKey && used.InputTokens == runUsageInput+indexUsageInput && used.OutputTokens == runUsageOutput+indexUsageOutput && used.UsedMicros == runUsageCost+indexUsageCost
-	if err != nil || runErr != nil || indexErr != nil || snapshotErr != nil || runUsageErr != nil || indexUsageErr != nil || runBudgetErr != nil || indexBudgetErr != nil || count != 5 || runCount != 4 || indexCount != 1 || runReservations != runCount || indexReservations != indexCount || runReservedMicros != runCost || indexReservedMicros != indexCost || count != runCount+indexCount || input != runInput+indexInput || generated != runOutput+indexOutput || cost != runCost+indexCost || input < 1 || generated < 1 || !runUsageMatchesModels || !indexUsageMatchesModels || runUsageEvents+indexUsageEvents != count || !snapshotMatchesAgentVersion || runCost != 100*(runInput+runOutput) || cost != 100*(input+generated) || (!f.live && (input != 100 || generated != 30 || cost != 13000)) {
+	expectedModels, expectedInput, expectedOutput, expectedCost := int64(5), int64(100), int64(30), int64(13000)
+	if f.toolLoop {
+		expectedModels, expectedInput, expectedOutput, expectedCost = 7, 140, 50, 19000
+		assertRuntimeToolLoopReceipt(t, ctx, db)
+	}
+	if err != nil || runErr != nil || indexErr != nil || snapshotErr != nil || runUsageErr != nil || indexUsageErr != nil || runBudgetErr != nil || indexBudgetErr != nil || count != expectedModels || runCount != expectedModels-1 || indexCount != 1 || runReservations != runCount || indexReservations != indexCount || runReservedMicros != runCost || indexReservedMicros != indexCost || count != runCount+indexCount || input != runInput+indexInput || generated != runOutput+indexOutput || cost != runCost+indexCost || input < 1 || generated < 1 || !runUsageMatchesModels || !indexUsageMatchesModels || runUsageEvents+indexUsageEvents != count || !snapshotMatchesAgentVersion || runCost != 100*(runInput+runOutput) || cost != 100*(input+generated) || (!f.live && (input != expectedInput || generated != expectedOutput || cost != expectedCost)) {
 		t.Fatalf("Python model invocation scope mismatch: models_total=%d models_run=%d models_index=%d usage_events_run=%d usage_events_index=%d run_input=%d usage_run_input=%d index_input=%d usage_index_input=%d run_output=%d usage_run_output=%d index_output=%d usage_index_output=%d run_cost=%d usage_run_cost=%d index_cost=%d usage_index_cost=%d snapshot_input=%d snapshot_output=%d snapshot_cost=%d snapshot_scope_match=%t run_reservations=%d index_reservations=%d reads_ok=%t", count, runCount, indexCount, runUsageEvents, indexUsageEvents, runInput, runUsageInput, indexInput, indexUsageInput, runOutput, runUsageOutput, indexOutput, indexUsageOutput, runCost, runUsageCost, indexCost, indexUsageCost, used.InputTokens, used.OutputTokens, used.UsedMicros, used.ScopeKey == usageScopeKey, runReservations, indexReservations, err == nil && runErr == nil && indexErr == nil && snapshotErr == nil && runUsageErr == nil && indexUsageErr == nil && runBudgetErr == nil && indexBudgetErr == nil)
 	}
 	var memory int

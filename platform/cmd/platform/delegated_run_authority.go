@@ -14,15 +14,26 @@ import (
 	"github.com/lexagent/platform/internal/sharedkernel"
 )
 
-// epochMemo remembers authorization epochs already fenced in this context.
-// The first read holds the source share until the caller commits; repeating
-// that full snapshot is what made model admission consume its whole deadline.
+// epochMemo retains transaction-fenced source facts, not a timeless permission
+// decision. Every reuse recomputes effective temporal membership, so starts or
+// expiries can never be hidden by an earlier authorization in this transaction.
 type epochMemoKey struct{}
 
 type epochMemo struct {
 	tx   *sql.Tx
 	mu   sync.Mutex
-	hits map[string]uint64
+	hits map[string]epochMemoEntry
+}
+
+type epochMemoEntry struct {
+	epoch    uint64
+	snapshot identity.PermissionSnapshot
+	digest   string
+}
+
+func (e epochMemoEntry) current(now time.Time) bool {
+	digest, err := identity.EffectivePermissionSnapshotDigest(e.snapshot, now)
+	return err == nil && e.epoch > 0 && e.digest != "" && digest == e.digest
 }
 
 func withEpochMemo(ctx context.Context, tx *sql.Tx) context.Context {
@@ -32,7 +43,7 @@ func withEpochMemo(ctx context.Context, tx *sql.Tx) context.Context {
 	if memo, ok := ctx.Value(epochMemoKey{}).(*epochMemo); ok && memo.tx == tx {
 		return ctx
 	}
-	return context.WithValue(ctx, epochMemoKey{}, &epochMemo{tx: tx, hits: map[string]uint64{}})
+	return context.WithValue(ctx, epochMemoKey{}, &epochMemo{tx: tx, hits: map[string]epochMemoEntry{}})
 }
 
 func epochMemoFor(ctx context.Context, tx *sql.Tx) *epochMemo {
@@ -72,14 +83,20 @@ func (a agentRouteAuthority) currentPrincipalPermissionTx(ctx context.Context, t
 	if a.identity == nil || tx == nil || scope.Validate() != nil || action == "" {
 		return 0, agentcoordination.ErrDenied
 	}
+	if err := a.identity.AcquirePermissionReadContinuity(ctx, tx); err != nil {
+		return 0, ancestryDeny(err)
+	}
 	ctx = withEpochMemo(ctx, tx)
 	memoID := epochMemoID(scope, action)
 	if memo := epochMemoFor(ctx, tx); memo != nil {
 		memo.mu.Lock()
-		epoch, found := memo.hits[memoID]
+		entry, found := memo.hits[memoID]
 		memo.mu.Unlock()
 		if found {
-			return epoch, nil
+			if !entry.current(time.Now().UTC()) {
+				return 0, agentcoordination.ErrDenied
+			}
+			return entry.epoch, nil
 		}
 	}
 	snapshot, err := a.identity.PermissionSnapshot(ctx, identity.PrincipalType(scope.PrincipalType), scope.PrincipalID)
@@ -89,10 +106,15 @@ func (a agentRouteAuthority) currentPrincipalPermissionTx(ctx context.Context, t
 	if err != nil || snapshot.Mode != "v2" || snapshot.Principal.ID != scope.PrincipalID || string(snapshot.Principal.Type) != scope.PrincipalType {
 		return 0, agentcoordination.ErrDenied
 	}
+	observedAt := time.Now().UTC()
+	digest, err := identity.EffectivePermissionSnapshotDigest(snapshot, observedAt)
+	if err != nil {
+		return 0, agentcoordination.ErrDenied
+	}
 	decision, err := identity.EvaluatePermission(snapshot, identity.PermissionQuery{
 		Action:       action,
 		Scope:        identity.ManagementScope{Type: "agent_installation", TenantID: scope.TenantID, DepartmentID: scope.DepartmentID, ApplicationID: scope.ApplicationID, ResourceID: scope.InstallationID},
-		ResourceType: "agent_installation", ResourceID: scope.InstallationID, Now: time.Now().UTC(),
+		ResourceType: "agent_installation", ResourceID: scope.InstallationID, Now: observedAt,
 	})
 	if ancestryLockWait(err) {
 		return 0, err
@@ -107,9 +129,15 @@ func (a agentRouteAuthority) currentPrincipalPermissionTx(ctx context.Context, t
 	if err != nil || epoch == 0 {
 		return 0, agentcoordination.ErrDenied
 	}
+	entry := epochMemoEntry{epoch: epoch, snapshot: snapshot, digest: digest}
+	// An expiry may occur while the epoch is being read. Never stamp that
+	// older observation with a digest computed only after the boundary.
+	if !entry.current(time.Now().UTC()) {
+		return 0, agentcoordination.ErrDenied
+	}
 	if memo := epochMemoFor(ctx, tx); memo != nil {
 		memo.mu.Lock()
-		memo.hits[memoID] = epoch
+		memo.hits[memoID] = entry
 		memo.mu.Unlock()
 	}
 	return epoch, nil
@@ -121,11 +149,17 @@ func (a agentRouteAuthority) workloadMachine(ctx context.Context, scope sharedke
 		return identity.WorkloadBinding{}, agentcoordination.ErrDenied
 	}
 	binding, err := resolver.ResolveWorkloadIdentity(ctx, scope)
-	if err != nil || binding.Status != "active" || binding.Revision == 0 || binding.AgentID != scope.AgentID || binding.InstallationID != scope.InstallationID || binding.AgentVersionID != scope.AgentVersionID || binding.TenantID != scope.TenantID || binding.DepartmentID != scope.DepartmentID || binding.ApplicationID != scope.ApplicationID || binding.PrincipalID == "" {
+	if err != nil {
+		return identity.WorkloadBinding{}, err
+	}
+	if binding.Status != "active" || binding.Revision == 0 || binding.AgentID != scope.AgentID || binding.InstallationID != scope.InstallationID || binding.AgentVersionID != scope.AgentVersionID || binding.TenantID != scope.TenantID || binding.DepartmentID != scope.DepartmentID || binding.ApplicationID != scope.ApplicationID || binding.PrincipalID == "" {
 		return identity.WorkloadBinding{}, agentcoordination.ErrDenied
 	}
 	credential, err := a.identity.GetMachineCredential(ctx, scope.TenantID, binding.PrincipalID)
-	if err != nil || !workloadCredentialMatches(binding, credential) {
+	if err != nil {
+		return identity.WorkloadBinding{}, err
+	}
+	if !workloadCredentialMatches(binding, credential) {
 		return identity.WorkloadBinding{}, agentcoordination.ErrDenied
 	}
 	return binding, nil
@@ -145,11 +179,21 @@ func (a agentRouteAuthority) PinRootMachineAuthority(ctx context.Context, scope 
 		return err
 	}
 	run, err := a.runs.BudgetRunTx(ctx, tx, scope.RunID)
-	if err != nil || run.Scope != scope {
+	if err != nil {
+		return err
+	}
+	if run.Scope != scope {
 		return agentcoordination.ErrDenied
 	}
 	actorEpoch, err := a.currentPrincipalPermissionTx(ctx, tx, scope, "run")
-	if err != nil || actorEpoch != scope.AuthorizationEpoch {
+	if err != nil {
+		return err
+	}
+	expected, proofErr := a.runs.ExpectedAuthorizationEpochTx(ctx, tx, scope)
+	if proofErr != nil {
+		return proofErr
+	}
+	if actorEpoch != expected {
 		return agentcoordination.ErrDenied
 	}
 	machine, err := a.workloadMachine(ctx, scope)
@@ -162,7 +206,7 @@ func (a agentRouteAuthority) PinRootMachineAuthority(ctx context.Context, scope 
 	if err != nil {
 		return err
 	}
-	stamp := agentcoordination.RootMachineAuthorityStamp{RootRunID: scope.RunID, RootInstallationID: scope.InstallationID, RootPrincipalType: scope.PrincipalType, RootPrincipalID: scope.PrincipalID, RootAuthorizationEpoch: actorEpoch, MachinePrincipalID: machine.PrincipalID, MachineRunEpoch: machineEpoch}
+	stamp := agentcoordination.RootMachineAuthorityStamp{RootRunID: scope.RunID, RootInstallationID: scope.InstallationID, RootPrincipalType: scope.PrincipalType, RootPrincipalID: scope.PrincipalID, RootAuthorizationEpoch: scope.AuthorizationEpoch, MachinePrincipalID: machine.PrincipalID, MachineRunEpoch: machineEpoch}
 	if err = a.routes.PinRootMachineAuthorityTx(ctx, tx, stamp); err != nil {
 		return err
 	}

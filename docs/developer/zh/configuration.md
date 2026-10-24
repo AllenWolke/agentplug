@@ -65,6 +65,11 @@
 | `PLATFORM_MODEL_ENDPOINTS_JSON` | 空 | service:// 引用到真实模型端点的运维白名单 JSON；不包含 API Key。 |
 | `PLATFORM_MODEL_SECRET_DIR` | `./.local-secrets/model-providers` | 宿主机模型密钥目录；只读挂载到平台。 |
 | `PLATFORM_MODEL_SECRET_ROOT` | `/run/secrets/model-providers` | 非 Compose 进程的模型密钥解析根目录；根 Compose 固定为 /run/secrets/model-providers。 |
+| `PLATFORM_MODEL_DNS_OVER_HTTPS_HOSTS_JSON` | 空 | 可选 Google HTTPS IPv4 DNS 的模型域名列表；留空使用普通 DNS，`[]` 禁用扩展；不改变主机 DNS，保留 TLS 和地址安全校验。 |
+| `PLATFORM_EXTERNAL_KNOWLEDGE_URL` | 空 | 独立外部知识服务端点；留空沿用平台原生知识路径。 |
+| `PLATFORM_EXTERNAL_KNOWLEDGE_BASE_IDS` | 空 | 外部知识服务可使用的知识库标识；与本项目独立配置及已发布知识策略共同约束。 |
+| `PLATFORM_EXTERNAL_KNOWLEDGE_API_KEY_FILE` | 空 | 外部知识服务密钥文件的容器路径；文件由平台只读挂载，不下发给业务 Agent。 |
+| `AGENT_PLATFORM_CAPABILITY_TIMING` | 未设置 | 在对应 Agent 进程中设为 `1` 可开启公共调用耗时观测，不包含正文或凭据；平台环境不会自动下发此选项。 |
 | `PLATFORM_WORKLOAD_SECRET_DIR` | `./.local-secrets/agent-workloads` | 知识索引工作负载凭据的宿主目录；不是模型供应商目录。 |
 | `PLATFORM_POLICY_BOOTSTRAP_JSON` | 空 | 隔离开发的直接策略注入；通常空，生产禁止。 |
 | `PLATFORM_PROMPT_TEMPLATES_JSON` | 空 | 隔离开发的 Prompt 正文映射；生产使用发布资产，禁止直接注入。 |
@@ -105,7 +110,10 @@
 | 参数 | 模板默认 / 空值 | 用途和填写时机 |
 | --- | --- | --- |
 | `PLATFORM_CONVERSATION_ERASURE_ENABLED` | `true` | 会话擦除工作器开关；受控恢复期间暂停并核对队列。 |
-| `PLATFORM_CANCELLATION_COMPENSATION_ENABLED` | `false` | 取消补偿扩展的显式启用开关；基础栈不自动加入补偿服务。 |
+| `PLATFORM_CANCELLATION_COMPENSATION_ENABLED` | `false` | 取消补偿扩展的显式开关；启用前完成迁移、可信停止证明及历史恢复保护配置，见[运行说明](notification-cancellation-operations.md)。 |
+| `PLATFORM_RUNTIME_CONTROL_DIR` | `./.local-secrets/runtime-control` | 本项目运行控制文件目录，Compose 只读挂载到 `/run/secrets/runtime-control`；不得指向其他项目。 |
+| `PLATFORM_AUTOMATIC_RECOVERY_HOLD_FILE` | 空 | SHA 绑定的历史恢复保护清单在容器中的绝对路径；空文件路径与空 SHA 同时表示不配置。 |
+| `PLATFORM_AUTOMATIC_RECOVERY_HOLD_SHA256` | 空 | 清单原始字节的小写 SHA-256；缺失、内容不符或格式错误时启动失败，不静默取消保护。 |
 | `PLATFORM_REVERSIBLE_API_BINDINGS_FILE` | 空 | 可逆 API 绑定文件的容器路径；仅相应扩展使用。 |
 | `PLATFORM_REVERSIBLE_API_CA_FILE` | 空 | 可逆 API TLS CA 文件；需配套私有挂载。 |
 | `PLATFORM_LEGACY_MODEL_ACCOUNTING_RESERVATIONS` | 空 | 指定历史预留进行对账；需要原供应商证据，不允许重发。 |

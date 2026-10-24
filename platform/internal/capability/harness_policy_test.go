@@ -71,3 +71,68 @@ func TestHarnessPolicyDisclosureIsPinnedAndRechecksCurrentAuthority(t *testing.T
 		t.Fatal("revoked limits disclosed")
 	}
 }
+
+type windowAuthorityFixture struct {
+	contextPreparationAuthority
+	start time.Time
+}
+
+func (a windowAuthorityFixture) PublishedExecutionWindow(ctx context.Context, scope sharedkernel.Scope, operation, bodyHash, policyHash string, seconds int) (time.Time, time.Time, error) {
+	if _, ok := sharedkernel.ExecutionLeaseFromContext(ctx); !ok || scope.ValidateTrusted() != nil || operation == "" || bodyHash == "" || policyHash == "" || seconds != 1800 {
+		return time.Time{}, time.Time{}, errors.New("window not bound to live execution")
+	}
+	return a.start, a.start.Add(time.Duration(seconds) * time.Second), nil
+}
+
+func TestBatchDisclosureIsOptInAndRequiresAnOriginalExecutionWindow(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver := governedInvocationResolver()
+	resolver.snapshot.Hash = strings.Repeat("b", 64)
+	resolver.snapshot.Runtime.TaskTimeoutSeconds = 1800
+	resolver.snapshot.Runtime.Batch = &policyasset.BatchPolicy{MaxItems: 1000, ItemTimeoutSeconds: 30, ElapsedSeconds: 1800}
+	m := NewModuleWithKnowledgeAndPolicies("internal-token", "signing-secret", public, "platform", "agent-runtime", nil, resolver)
+	authority := contextPreparationAuthority{
+		testLiveAuthorityFunc: func(context.Context, sharedkernel.Scope, string, string, string) error { return nil },
+		resource:              func(CapabilityResourceAccess) error { return nil },
+	}
+	m.SetLiveExecutionAuthority(authority)
+	c := capabilityContext()
+	c.PlatformContextToken = signedContextToken(t, private, c, time.Now().Unix()-1, time.Now().Unix()+120)
+	if r := capabilityRequest(t, m, "/internal/runtime/harness-policy", c, map[string]any{"include_batch": true}); r.Code != http.StatusServiceUnavailable {
+		t.Fatal("missing original window replaced by a fresh clock", r.Code)
+	}
+	start := time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
+	m.SetLiveExecutionAuthority(windowAuthorityFixture{authority, start})
+	for _, include := range []bool{false, true} {
+		input := map[string]any{}
+		if include {
+			input["include_batch"] = true
+		}
+		r := capabilityRequest(t, m, "/internal/runtime/harness-policy", c, input)
+		var body struct {
+			Data map[string]json.RawMessage `json:"data"`
+		}
+		if r.Code != http.StatusOK || json.Unmarshal(r.Body.Bytes(), &body) != nil {
+			t.Fatal("policy read failed", r.Code)
+		}
+		if !include {
+			if len(body.Data) != 4 || string(body.Data["version"]) != `"harness-policy/v1"` {
+				t.Fatal("v1 contract changed")
+			}
+			continue
+		}
+		var execution struct {
+			Batch  policyasset.BatchPolicy `json:"batch"`
+			Window struct {
+				Start    int64 `json:"started_ms"`
+				Deadline int64 `json:"deadline_ms"`
+			} `json:"window"`
+		}
+		if json.Unmarshal(body.Data["execution"], &execution) != nil || execution.Batch != *resolver.snapshot.Runtime.Batch || execution.Window.Start != start.UnixMilli() || execution.Window.Deadline != start.Add(30*time.Minute).UnixMilli() {
+			t.Fatal("disclosed profile or original deadline changed")
+		}
+	}
+}

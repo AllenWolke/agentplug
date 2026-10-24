@@ -14,12 +14,13 @@ const runtimeRecoveryVersion = "runtime-recovery/v1"
 const runtimeRecoveryStopVersion = "runtime-recovery-stop/v1"
 
 type runtimeRecoveryCommand struct {
-	Version           string                       `json:"version"`
-	OriginOperation   string                       `json:"origin_operation"`
-	Reference         runtimeRecoveryStopReference `json:"reference"`
-	ConfirmationToken *string                      `json:"confirmation_token,omitempty"`
-	GroupResume       *agentGroupResumeCommand     `json:"group_resume,omitempty"`
-	BusinessReview    *runtimeBusinessReview       `json:"business_review,omitempty"`
+	maximumCheckpoints int
+	Version            string                       `json:"version"`
+	OriginOperation    string                       `json:"origin_operation"`
+	Reference          runtimeRecoveryStopReference `json:"reference"`
+	ConfirmationToken  *string                      `json:"confirmation_token,omitempty"`
+	GroupResume        *agentGroupResumeCommand     `json:"group_resume,omitempty"`
+	BusinessReview     *runtimeBusinessReview       `json:"business_review,omitempty"`
 }
 
 type runtimeBusinessReview struct {
@@ -55,16 +56,20 @@ type runtimeRecoveryCheckpoint struct {
 
 func isRuntimeRecoveryRequest(request ExecuteRequest) bool {
 	version, ok := request.ResumeInput["version"].(string)
-	return ok && version == runtimeRecoveryVersion
+	return ok && (version == runtimeRecoveryVersion || version == "runtime-recovery/v2")
 }
 
 func decodeRuntimeRecoveryCommand(request ExecuteRequest) (runtimeRecoveryCommand, error) {
+	return decodeRuntimeRecoveryCommandBounded(request, 1<<20)
+}
+
+func decodeRuntimeRecoveryCommandBounded(request ExecuteRequest, maximumBytes int) (runtimeRecoveryCommand, error) {
 	var command runtimeRecoveryCommand
 	if request.ResumeInput == nil || request.Operation != "resume" {
 		return command, ErrInvalidTransition
 	}
 	raw, err := json.Marshal(request.ResumeInput)
-	if err != nil || len(raw) == 0 || len(raw) > 1<<20 {
+	if err != nil || len(raw) == 0 || len(raw) > maximumBytes {
 		return command, ErrInvalidTransition
 	}
 	var outer map[string]json.RawMessage
@@ -219,13 +224,18 @@ func validRuntimeRecoveryCommand(command runtimeRecoveryCommand, request Execute
 	} else {
 		return false
 	}
-	if len(reference.Checkpoints) == 0 || len(reference.Checkpoints) > 128 {
+	if len(reference.Checkpoints) == 0 || len(reference.Checkpoints) > func() int {
+		if command.maximumCheckpoints == 8192 {
+			return 8192
+		}
+		return 128
+	}() {
 		return false
 	}
 	previousStateKey := ""
 	for _, checkpoint := range reference.Checkpoints {
 		if !validHandoffDigest(checkpoint.StateKey) || checkpoint.StateKey <= previousStateKey ||
-			checkpoint.Revision == 0 || checkpoint.Revision > 64 ||
+			checkpoint.Revision == 0 || checkpoint.Revision > 4096 ||
 			checkpoint.ExecutionRevision == 0 || checkpoint.ExecutionRevision > reference.StoppedRevision ||
 			!validHandoffDigest(checkpoint.ContentHash) ||
 			len(checkpoint.SchemaID) <= len("schema://") || len(checkpoint.SchemaID) > 256 ||
@@ -256,7 +266,7 @@ func validRuntimeRecoveryGroupResume(command agentGroupResumeCommand, request Ex
 	foundHandoffCheckpoint := false
 	for _, checkpoint := range command.Checkpoints {
 		if !validHandoffDigest(checkpoint.StateKey) || checkpoint.StateKey <= previousStateKey ||
-			checkpoint.Revision == 0 || checkpoint.Revision > 64 || !validGroupSchema(checkpoint.SchemaID) ||
+			checkpoint.Revision == 0 || checkpoint.Revision > 4096 || !validGroupSchema(checkpoint.SchemaID) ||
 			!validHandoffDigest(checkpoint.ContentHash) || checkpoint.ExecutionRevision == 0 ||
 			checkpoint.ExecutionRevision > handoff.ExecutionRevision || checkpoint.ExpiresAt.IsZero() {
 			return false
@@ -297,8 +307,9 @@ func validRecoveryCheckpointResponse(response map[string]any, expected runtimeRe
 	contentHash, hashOK := checkpoint["content_hash"].(string)
 	expiresRaw, expiresOK := checkpoint["expires_at"].(string)
 	expiresAt, expiresErr := time.Parse(time.RFC3339Nano, expiresRaw)
-	return revisionOK && executionRevisionOK && schemaOK && hashOK && expiresOK && expiresErr == nil &&
-		revision == expected.Revision && schemaID == expected.SchemaID && contentHash == expected.ContentHash &&
+	limit, capacityError := checkpointReplyLimit(response)
+	return capacityError == nil && revisionOK && executionRevisionOK && schemaOK && hashOK && expiresOK && expiresErr == nil &&
+		revision <= limit && revision == expected.Revision && schemaID == expected.SchemaID && contentHash == expected.ContentHash &&
 		executionRevision == expected.ExecutionRevision && expiresAt.Equal(expected.ExpiresAt) && expiresAt.After(now)
 }
 
@@ -394,7 +405,11 @@ func (s *ExecutionServer) resumeRuntimeRecovery(ctx context.Context, request Exe
 	if !ok || request.Operation != "resume" || s.cfg.Capability == nil {
 		return nil, false, ErrInvalidTransition
 	}
-	command, err := decodeRuntimeRecoveryCommand(request)
+	client, err := NewCapabilityClient(*s.cfg.Capability, request)
+	if err != nil {
+		return nil, false, ErrInvalidTransition
+	}
+	command, err := expandRuntimeRecovery(ctx, client, request)
 	businessHash, hashErr := executionBusinessHash(request)
 	if err != nil || hashErr != nil || !validRuntimeRecoveryCommand(command, request, claims, businessHash, s.now()) {
 		return nil, false, ErrInvalidTransition
@@ -407,7 +422,6 @@ func (s *ExecutionServer) resumeRuntimeRecovery(ctx context.Context, request Exe
 	if !replayCandidate && previous != nil && !recoveryOldExecutionStopped(previous, request, claims, command.Reference, businessHash) {
 		return nil, false, ErrInvalidTransition
 	}
-	client, err := NewCapabilityClient(*s.cfg.Capability, request)
 	if replayCandidate {
 		// This private Active was created only after full recovery admission.
 		// Its handler may have legitimately advanced the old checkpoint heads;

@@ -12,10 +12,11 @@ import (
 // allowlist. The full execution context is checked on every call; the cache
 // identity retains user/session/installation/version/epoch and policy/corpus.
 type CacheBoundary struct {
-	Scope             sharedkernel.Scope
-	PolicyFingerprint string
-	CorpusFingerprint string
-	PipelineVersion   string
+	Scope                sharedkernel.Scope
+	PolicyFingerprint    string
+	CorpusFingerprint    string
+	PipelineVersion      string
+	SelectionFingerprint string `json:",omitempty"`
 }
 
 // CacheIdentity is only a value-cache key, never an authorization scope.
@@ -34,7 +35,8 @@ type CachedQueryModels struct {
 	Boundary CacheBoundary
 	// Check revalidates signed/live execution AND independent model resource
 	// authorization and current approved model selection, without invoking it.
-	Check func(context.Context, sharedkernel.Scope, string) error
+	Check        func(context.Context, sharedkernel.Scope, string) error
+	CheckReceipt func(context.Context, sharedkernel.Scope, string, QueryStageReceipt) error
 }
 
 func (m CachedQueryModels) stage(ctx context.Context, scope sharedkernel.Scope, stage string, input any, load func(context.Context) ([]byte, error)) ([]byte, bool, error) {
@@ -44,15 +46,28 @@ func (m CachedQueryModels) stage(ctx context.Context, scope sharedkernel.Scope, 
 	if err := m.Check(ctx, scope, stage); err != nil {
 		return nil, false, err
 	}
+	boundary := m.Boundary.CacheIdentity()
+	if stage == "embedding" {
+		boundary.SelectionFingerprint = ""
+	}
 	encoded, err := json.Marshal(struct {
 		Boundary CacheBoundary
 		Stage    string
 		Input    any
-	}{m.Boundary.CacheIdentity(), stage, input})
+	}{boundary, stage, input})
 	if err != nil {
 		return nil, false, ErrInvalidQueryStage
 	}
-	value, hit, err := m.Cache.Do(ctx, CacheKey(encoded), load)
+	value, hit, err := m.Cache.DoValidated(ctx, CacheKey(encoded), load, func(ctx context.Context, value []byte) error {
+		var receipt QueryStageReceipt
+		if json.Unmarshal(value, &receipt) != nil || !validQueryReceipt(receipt, stage != "embedding") {
+			return ErrInvalidQueryStage
+		}
+		if m.CheckReceipt != nil {
+			return m.CheckReceipt(ctx, scope, stage, receipt)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, false, err
 	}
@@ -112,12 +127,34 @@ func (m CachedQueryModels) EmbedQuery(ctx context.Context, scope sharedkernel.Sc
 // Only scores/receipts are cached, never canonical document bodies. SQL
 // retrieval and current-source fences still run for every query.
 func (m CachedQueryModels) Rerank(ctx context.Context, scope sharedkernel.Scope, query string, chunks []HybridChunk) (QueryReranking, error) {
+	return m.rerank(ctx, scope, query, chunks, nil)
+}
+
+func (m CachedQueryModels) RerankWithCheck(ctx context.Context, scope sharedkernel.Scope, query string, chunks []HybridChunk, check func() error) (QueryReranking, error) {
+	if check == nil {
+		return QueryReranking{}, ErrInvalidQueryStage
+	}
+	return m.rerank(ctx, scope, query, chunks, check)
+}
+
+func (m CachedQueryModels) rerank(ctx context.Context, scope sharedkernel.Scope, query string, chunks []HybridChunk, check func() error) (QueryReranking, error) {
+	if check != nil {
+		if err := check(); err != nil {
+			return QueryReranking{}, err
+		}
+	}
 	var result QueryReranking
 	encoded, hit, err := m.stage(ctx, scope, "reranking", struct {
 		Query  string
 		Chunks []HybridChunk
 	}{query, chunks}, func(ctx context.Context) ([]byte, error) {
-		result, err := m.Models.Rerank(ctx, scope, query, append([]HybridChunk(nil), chunks...))
+		var result QueryReranking
+		var err error
+		if bounded, ok := m.Models.(FencedQueryReranker); ok && check != nil {
+			result, err = bounded.RerankWithCheck(ctx, scope, query, append([]HybridChunk(nil), chunks...), check)
+		} else {
+			result, err = m.Models.Rerank(ctx, scope, query, append([]HybridChunk(nil), chunks...))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -134,6 +171,11 @@ func (m CachedQueryModels) Rerank(ctx context.Context, scope sharedkernel.Scope,
 	}
 	if _, err := validatedRerankingScores(result, chunks); err != nil {
 		return QueryReranking{}, err
+	}
+	if check != nil {
+		if err := check(); err != nil {
+			return QueryReranking{}, err
+		}
 	}
 	result.CacheHit = hit
 	return result, nil

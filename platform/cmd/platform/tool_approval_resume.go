@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
@@ -37,18 +38,27 @@ func (a toolApprovalAdapter) Resume(r *http.Request, scope sharedkernel.Scope, o
 	var revision uint64
 	err = store.ResumeApproved(ctx, scope, claims,
 		func(ctx context.Context, tx *sql.Tx) error {
-			if a.identity.AcquirePermissionReadContinuity(ctx, tx) != nil || lockBudgetAncestors(ctx, tx, a.runSQL, scope) != nil {
-				return capability.ErrToolApprovalDenied
+			if err := a.identity.AcquirePermissionReadContinuity(ctx, tx); err != nil {
+				return errors.Join(capability.ErrToolApprovalDenied, err)
+			}
+			if err := lockBudgetAncestors(ctx, tx, a.runSQL, scope); err != nil {
+				return errors.Join(capability.ErrToolApprovalDenied, err)
 			}
 			// UPDATE first: never upgrade a shared target Run fence.
 			facts, err := a.runSQL.BudgetRunForUpdateTx(ctx, tx, scope.RunID)
+			if err != nil {
+				return errors.Join(capability.ErrToolApprovalDenied, err)
+			}
 			if err != nil || facts.Scope != scope || facts.Revision != bound.RunRevision {
 				return capability.ErrToolApprovalDenied
 			}
-			if a.fencePending(ctx, tx, scope, claims.ToolName, claims.CallID, claims.Fingerprint, "tool.approval.resume") != nil {
-				return capability.ErrToolApprovalDenied
+			if err := a.fencePending(ctx, tx, scope, claims.ToolName, claims.CallID, claims.Fingerprint, "tool.approval.resume"); err != nil {
+				return errors.Join(capability.ErrToolApprovalDenied, err)
 			}
 			actual, policy, err := a.resolve(ctx, browser, operation, true)
+			if err != nil {
+				return errors.Join(capability.ErrToolApprovalDenied, err)
+			}
 			if err != nil || actual != scope || policy != claims.PolicyHash {
 				return capability.ErrToolApprovalDenied
 			}
@@ -74,9 +84,12 @@ func (a toolApprovalAdapter) ResumeReplay(r *http.Request, operation capability.
 	}
 	scope, _, err := a.Resolve(r, operation)
 	if err != nil {
-		return nil, false, capability.ErrToolApprovalDenied
+		return nil, false, errors.Join(capability.ErrToolApprovalDenied, err)
 	}
 	run, err := a.runSQL.GetContext(r.Context(), scope.RunID)
+	if err != nil {
+		return nil, false, errors.Join(capability.ErrToolApprovalDenied, err)
+	}
 	if err != nil || run.Scope != scope {
 		return nil, false, capability.ErrToolApprovalDenied
 	}
@@ -97,8 +110,11 @@ func (a toolApprovalAdapter) ResumeReplay(r *http.Request, operation capability.
 	if run.Revision < persisted.WaitingRevision+1 {
 		return nil, false, capability.ErrToolApprovalDenied
 	}
-	if a.resources.AuthorizeCapabilityResource(r.Context(), scope, capability.CapabilityResourceAccess{Action: "history.read", ResourceType: "agent_installation", ResourceID: scope.InstallationID}) != nil || r.Context().Err() != nil {
-		return nil, false, capability.ErrToolApprovalDenied
+	if err := a.resources.AuthorizeCapabilityResource(r.Context(), scope, capability.CapabilityResourceAccess{Action: "history.read", ResourceType: "agent_installation", ResourceID: scope.InstallationID}); err != nil {
+		return nil, false, errors.Join(capability.ErrToolApprovalDenied, err)
+	}
+	if err := r.Context().Err(); err != nil {
+		return nil, false, errors.Join(capability.ErrToolApprovalDenied, err)
 	}
 	return map[string]any{"run_id": scope.RunID, "revision": persisted.WaitingRevision + 1, "resume_requested": true, "approval_id": claims.ApprovalID, "replayed": true}, true, nil
 }
@@ -117,6 +133,9 @@ func (a toolApprovalAdapter) resolveApprovedRenewal(ctx context.Context, scope s
 
 func (a toolApprovalAdapter) resolveApprovedResume(ctx context.Context, scope sharedkernel.Scope, raw json.RawMessage, signer *capability.ToolApprovalSigner, renewal bool) (map[string]any, error) {
 	deny := capability.ErrToolApprovalDenied
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Join(deny, err)
+	}
 	if len(raw) == 0 || len(raw) > 8192 || a.checkpoints == nil || a.runs == nil || signer == nil || ctx.Err() != nil {
 		return nil, deny
 	}
@@ -142,30 +161,42 @@ func (a toolApprovalAdapter) resolveApprovedResume(ctx context.Context, scope sh
 		return nil, deny
 	}
 	run, err := a.runs.ResolveToolApprovalRun(ctx, scope, scope.RunID)
+	if err != nil {
+		return nil, errors.Join(deny, err)
+	}
 	if err != nil || run.Scope != scope || !run.Active || run.Waiting {
 		return nil, deny
 	}
-	readAllowed := func() bool {
+	readAllowed := func() error {
 		for _, access := range []capability.CapabilityResourceAccess{
 			{Action: "history.read", ResourceType: "agent_installation", ResourceID: scope.InstallationID},
 			{Action: "memory.read", ResourceType: "memory", ResourceID: run.PolicyIDs["memory_policy_id"]},
 		} {
-			if access.ResourceID == "" || a.resources.AuthorizeCapabilityResource(ctx, scope, access) != nil {
-				return false
+			if access.ResourceID == "" {
+				return deny
+			}
+			if err := a.resources.AuthorizeCapabilityResource(ctx, scope, access); err != nil {
+				return errors.Join(deny, err)
 			}
 		}
-		return ctx.Err() == nil
+		return ctx.Err()
 	}
-	if !readAllowed() {
-		return nil, deny
+	if err := readAllowed(); err != nil {
+		return nil, errors.Join(deny, err)
 	}
 	checkpoint, operation, err := loadApprovedResumeCheckpoint(ctx, a.checkpoints, scope, reference, claims, run, renewal)
 	if err != nil {
-		return nil, deny
+		return nil, errors.Join(deny, err)
 	}
 	actual, policy, err := a.resolveExecution(ctx, scope, operation, true)
-	if err != nil || actual != scope || policy != claims.PolicyHash || !readAllowed() {
+	if err != nil {
+		return nil, errors.Join(deny, err)
+	}
+	if actual != scope || policy != claims.PolicyHash {
 		return nil, deny
+	}
+	if err := readAllowed(); err != nil {
+		return nil, errors.Join(deny, err)
 	}
 	// Dispatch remains pinned to the current approval_required head. Renewal
 	// re-reads the exact historical revision instead, while both paths recheck
@@ -175,15 +206,24 @@ func (a toolApprovalAdapter) resolveApprovedResume(ctx context.Context, scope sh
 		readRevision = 0
 	}
 	latestCheckpoint, present, err := a.checkpoints.Load(ctx, scope, "harness", claims.PendingKey, "schema://agentplug/harness-loop/v1", readRevision)
+	if err != nil {
+		return nil, errors.Join(deny, err)
+	}
 	latest, runErr := a.runs.ResolveToolApprovalRun(ctx, scope, scope.RunID)
+	if runErr != nil {
+		return nil, errors.Join(deny, runErr)
+	}
 	if err != nil || !present || latestCheckpoint.Revision != checkpoint.Revision || latestCheckpoint.ContentHash != checkpoint.ContentHash ||
 		latestCheckpoint.ExecutionRevision != checkpoint.ExecutionRevision || !latestCheckpoint.ExpiresAt.Equal(checkpoint.ExpiresAt) ||
-		runErr != nil || latest.Scope != scope || latest.Revision != run.Revision || !latest.Active || latest.Waiting || !readAllowed() {
+		runErr != nil || latest.Scope != scope || latest.Revision != run.Revision || !latest.Active || latest.Waiting {
 		return nil, deny
+	}
+	if err := readAllowed(); err != nil {
+		return nil, errors.Join(deny, err)
 	}
 	token, err := signer.ReissueApproved(ctx, scope, claims)
 	if err != nil || ctx.Err() != nil {
-		return nil, deny
+		return nil, errors.Join(deny, err, ctx.Err())
 	}
 	return map[string]any{"confirmation_token": token, "handoff": reference.Handoff,
 		"checkpoint": map[string]any{"namespace": "harness", "key": claims.PendingKey,
@@ -196,6 +236,9 @@ func (a toolApprovalAdapter) resolveApprovedResume(ctx context.Context, scope sh
 // live command renewal must re-read the exact immutable historical revision.
 func loadApprovedResumeCheckpoint(ctx context.Context, store capability.CheckpointStore, scope sharedkernel.Scope, reference execution.ApprovedToolResume, claims capability.ToolConfirmationClaims, run execution.ToolApprovalRun, renewal bool) (capability.Checkpoint, capability.ToolApprovalOperation, error) {
 	deny := capability.ErrToolApprovalDenied
+	if err := ctx.Err(); err != nil {
+		return capability.Checkpoint{}, capability.ToolApprovalOperation{}, errors.Join(deny, err)
+	}
 	if store == nil || ctx.Err() != nil || reference.WaitingRevision < 2 || reference.WaitingRevision >= 1<<63-2 ||
 		claims.CheckpointRevision == 0 || claims.CheckpointRevision > 64 || claims.PendingKey == "" ||
 		reference.CheckpointHash == "" || run.Scope != scope || !run.Active || run.Waiting || run.Revision < reference.WaitingRevision+2 ||
@@ -209,6 +252,9 @@ func loadApprovedResumeCheckpoint(ctx context.Context, store capability.Checkpoi
 		requestedRevision = claims.CheckpointRevision
 	}
 	checkpoint, found, err := store.Load(ctx, scope, "harness", claims.PendingKey, "schema://agentplug/harness-loop/v1", requestedRevision)
+	if err != nil {
+		return capability.Checkpoint{}, capability.ToolApprovalOperation{}, errors.Join(deny, err)
+	}
 	if err != nil || !found || checkpoint.Revision != claims.CheckpointRevision || checkpoint.ExecutionRevision != reference.WaitingRevision-1 || checkpoint.ContentHash != reference.CheckpointHash {
 		return capability.Checkpoint{}, capability.ToolApprovalOperation{}, deny
 	}

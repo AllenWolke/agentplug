@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/lexagent/platform/internal/contract"
 	platformruntime "github.com/lexagent/platform/internal/runtime"
 	"github.com/lexagent/platform/internal/sqlutil"
 )
@@ -65,7 +66,19 @@ func (s *SQLStore) CompleteRecoveryWithStopEvidence(id string, expected uint64, 
 }
 
 func (s *SQLStore) completeRecoveryWithEvidence(id string, expected uint64, proof *StopEvidence) (platformruntime.Run, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// The run's signed request is immutable. A preliminary bounded read selects
+	// capacity only; the transaction below still locks and validates the Run.
+	preliminary, preliminaryCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	initial, initialErr := s.GetContext(preliminary, id)
+	preliminaryCancel()
+	if initialErr != nil {
+		return platformruntime.Run{}, initialErr
+	}
+	maximumTime := 2 * time.Second
+	if usesPagedRecovery(initial) {
+		maximumTime = 10 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), maximumTime)
 	defer cancel()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -100,7 +113,13 @@ func (s *SQLStore) completeRecoveryWithEvidence(id string, expected uint64, proo
 			return platformruntime.Run{}, err
 		}
 		if s.recoveryCheckpoints != nil {
-			checkpoints, err := s.recoveryCheckpoints(ctx, tx, run.Scope, reference.StoppedRevision)
+			var checkpoints []contract.RecoveryCheckpointReference
+			paged := usesPagedRecovery(run)
+			if paged && s.recoveryCheckpointSet != nil {
+				checkpoints, err = s.recoveryCheckpointSet(ctx, tx, run.Scope, reference.StoppedRevision, contract.MaxRecoveryCheckpointSet)
+			} else {
+				checkpoints, err = s.recoveryCheckpoints(ctx, tx, run.Scope, reference.StoppedRevision)
+			}
 			if err != nil {
 				if s.recoveryStateLost != nil && s.recoveryStateLost(err) {
 					return s.failStoppedRecoveryTx(ctx, tx, run, reference, proof)
@@ -108,6 +127,13 @@ func (s *SQLStore) completeRecoveryWithEvidence(id string, expected uint64, proo
 				return platformruntime.Run{}, err
 			}
 			reference.Checkpoints = checkpoints
+			if len(checkpoints) > contract.MaxRecoveryCheckpoints {
+				set, setErr := contract.RecoveryCheckpointSet(checkpoints)
+				if !paged || setErr != nil {
+					return platformruntime.Run{}, platformruntime.ErrInvalidRequest
+				}
+				reference.Version, reference.CheckpointSet = "runtime-recovery-stop/v2", &set
+			}
 			if len(checkpoints) == 0 || !reference.valid() {
 				return platformruntime.Run{}, platformruntime.ErrInvalidRequest
 			}
@@ -161,4 +187,17 @@ func (s *SQLStore) completeRecoveryWithEvidence(id string, expected uint64, proo
 	run.LeaseUntil = time.Time{}
 	run.UpdatedAt = now
 	return run, nil
+}
+
+func usesPagedRecovery(run platformruntime.Run) bool {
+	var original contract.ExecuteRequest
+	if json.Unmarshal(run.RequestJSON, &original) != nil {
+		return false
+	}
+	policy, ok := original.Input["policy_snapshot"].(map[string]any)
+	if !ok {
+		return false
+	}
+	runtime, ok := policy["runtime"].(map[string]any)
+	return ok && runtime["recovery_references"] == "paged/v1"
 }

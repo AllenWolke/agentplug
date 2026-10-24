@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://model-routing/qualification-verification/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["evidence_id", "report_hash", "model_version_id", "maximum_complexity", "target"],
+  "properties": {
+    "evidence_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "report_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "model_version_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "maximum_complexity": {"enum": ["simple", "medium", "complex"]},
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_id", "agent_version_id", "execution_context_sha256"],
+      "properties": {
+        "agent_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "agent_version_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "execution_context_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  }
+}

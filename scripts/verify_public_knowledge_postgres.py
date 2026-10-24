@@ -36,6 +36,8 @@ parser.add_argument('--coverage', action='store_true', help='identity-full only;
 parser.add_argument('--retrieval-cache', action='store_true', help='knowledge suite only; focused SQL retrieval-cache and live IAM backend checks')
 parser.add_argument('--answer-cache', action='store_true', help='knowledge suite only; focused governed RAG answer-cache checks')
 parser.add_argument('--answer-cache-process', action='store_true', help='process suite only; actual signed HTTP answer-cache and SQL billing with controlled upstream')
+parser.add_argument('--java-example-process', action='store_true', help='process suite only; run formal Java Agent image against the actual platform and owned PG')
+parser.add_argument('--example-tool-loop', action='store_true', help='controlled process suite only; supplier requests one actual runtime.inspect call before the final answer')
 parser.add_argument('--python-example-process', action='store_true', help='process suite only; run formal Python Agent image against the actual platform and owned PG')
 parser.add_argument('--function-calling', action='store_true', help='capability suite only; native function usage, replay and unknown tool receipt SQL checks')
 parser.add_argument('--business-state', action='store_true', help='capability suite only; business checkpoints, execution lease fences and explicit migration')
@@ -51,7 +53,14 @@ GO_WORKER_DIAGNOSTIC_REQUIRED_TESTS = (
     'TestSQLRealPlatformProcessStartsWithDMLAndRejectsBadSchema/knowledge-index-worker',
 )
 args = parser.parse_args()
-if args.evaluation_restart and (args.suite != 'process' or args.checkpoint_agent_process or args.live_models or args.python_example_process or args.answer_cache_process):
+if args.python_example_process and args.java_example_process:
+    raise SystemExit('one formal example per isolated fixture')
+external_example_process = args.python_example_process or args.java_example_process
+example_language = 'java' if args.java_example_process else 'python'
+example_title = example_language.title()
+if args.example_tool_loop and (args.suite != 'process' or args.live_models or args.evaluation_restart or args.checkpoint_agent_process or args.answer_cache_process):
+    raise SystemExit('tool loop requires its own controlled example process suite')
+if args.evaluation_restart and (args.suite != 'process' or args.checkpoint_agent_process or args.live_models or external_example_process or args.answer_cache_process):
     raise SystemExit('evaluation restart requires its own controlled process suite')
 ADMINISTRATOR_SCOPE_REQUIRED_TESTS = {
 	'TestSQLManagementWorkspaceBrowserSessionWithoutBusinessMembership',
@@ -120,6 +129,27 @@ GO_GOVERNED_BILLING_REQUIRED_TESTS = (
     'TestInvalidFunctionBillingPostgresIntegration',
 )
 GO_PERMISSION_AUTHENTICATION_REQUIRED_TESTS = (
+    'TestAutomaticRecoveryHoldManifestBindsReviewedBytes',
+    'TestSQLAutomaticToolRecoveryHoldsPreserveUnknownAndAdmitNewScope',
+    'TestKafkaHistoricalBoundarySkipsBeforeDecodeAndSurvivesLostGroupOffsets',
+    'TestKafkaHistoricalBoundaryCommitFailureDoesNotFetchOrQuarantineNext',
+    'TestKafkaHistoricalBoundaryRejectsInvalidAndForeignOffsets',
+    'TestEventReadResolvesDurableOriginWithoutReplacingReadAuthority',
+    'TestEventReadResolvesDurableOriginWithoutReplacingReadAuthority/independent_read_epoch_and_trace',
+    'TestEventReadResolvesDurableOriginWithoutReplacingReadAuthority/revoked_run',
+    'TestEventReadResolvesDurableOriginWithoutReplacingReadAuthority/revoked_history',
+    'TestEventReadResolvesDurableOriginWithoutReplacingReadAuthority/stale_run',
+    'TestEventReadResolvesDurableOriginWithoutReplacingReadAuthority/invalid_proof',
+    'TestEventReadResolvesDurableOriginWithoutReplacingReadAuthority/foreign_reader',
+    'TestEventReadResolvesDurableOriginWithoutReplacingReadAuthority/foreign_parent',
+    'TestEventReadResolvesDurableOriginWithoutReplacingReadAuthority/foreign_policy',
+    'TestSynchronousReviewResumeQueuedBeforeOwnerReleaseRechecksRevocation',
+    'TestPublishedPermissionResourcesRequireCurrentInstallationAndPolicy/complete_use_package_pins_material_without_disclosing_it',
+    'TestBrowserCancellationRevisionRaceIsBoundedAndRechecksAuthority',
+    'TestBrowserCancellationRevisionRaceIsBoundedAndRechecksAuthority/claim_race',
+    'TestBrowserCancellationRevisionRaceIsBoundedAndRechecksAuthority/revoked_between_reads',
+    'TestBrowserCancellationRevisionRaceIsBoundedAndRechecksAuthority/bounded_conflict',
+    'TestBrowserCancellationRevisionRaceIsBoundedAndRechecksAuthority/storage_failure_is_not_retried',
     'TestSQLAuthorizationChangeInvalidatesStepUpAtomically',
     'TestSQLAuthorizationChangeInvalidatesStepUpAtomically/local',
     'TestSQLAuthorizationChangeInvalidatesStepUpAtomically/oidc',
@@ -163,7 +193,7 @@ if args.skill_transactions and (args.suite != 'capability' or args.function_call
     raise SystemExit('skill transactions require their own focused capability suite')
 if args.runtime_observation and (args.suite != 'capability' or args.function_calling or args.business_state):
     raise SystemExit('runtime observation requires its own focused capability suite')
-if args.checkpoint_agent_process and (args.suite != 'process' or args.live_models or args.python_example_process or args.answer_cache_process):
+if args.checkpoint_agent_process and (args.suite != 'process' or args.live_models or external_example_process or args.answer_cache_process):
     raise SystemExit('checkpoint recovery requires a separate controlled process suite')
 if args.function_calling and args.suite != 'capability':
     raise SystemExit('function calling requires the focused capability suite')
@@ -177,8 +207,8 @@ if args.coverage and args.suite != 'identity-full':
     raise SystemExit('SQL coverage requires the identity-full fixture')
 if args.real_rag_metrics and (args.suite != 'evaluation' or args.rag_evaluation):
     raise SystemExit('real RAG metrics require the focused evaluation suite')
-if args.python_example_process and (args.suite != 'process' or args.answer_cache_process):
-    raise SystemExit('Python process requires the controlled process suite without other process variants')
+if external_example_process and (args.suite != 'process' or args.answer_cache_process):
+    raise SystemExit('formal example process requires the controlled process suite without other process variants')
 if args.live_models and args.suite != 'process':
     raise SystemExit('live models require the actual process suite')
 if args.rag_evaluation and args.suite != 'evaluation':
@@ -196,7 +226,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OWNER = "knowledge-pg-" + uuid.uuid4().hex
 NAME = "agentplug-test-" + OWNER
 GO_NAME = NAME + "-go"
-PYTHON_NAME = NAME + "-python"
+EXAMPLE_NAME = NAME + "-" + example_language
 KAFKA_NAME = NAME + "-kafka"
 TEMP = ROOT / ".tmp" / OWNER
 EVIDENCE = ROOT / "docs/新增需求/github作品改造"
@@ -269,9 +299,9 @@ if args.answer_cache:
 if args.answer_cache_process:
     basenames['process'] = 'T3-04-公共答案Cache真实平台与计费实际验证'
     receipt['scope'] = 'actual Linux platform/Go SDK live execution scope, signed answer HTTP, guarded loopback model gateway, approved SQL invocation/budget/usage ledgers; answer request sent by owned test proxy, not Python or external supplier acceptance'
-if args.python_example_process:
-    basenames['process'] = 'T3-06-Python真实双模型平台RAG实际验证' if args.live_models else 'T3-06-Python正式镜像真实平台与PG完整链路验证'
-    receipt['scope'] = 'actual formal Python example image and repository SDK/Linux platform/owned PostgreSQL pgvector/common capabilities/invocation-budget-usage ledgers; '+('operator-authorized external model teaching query' if args.live_models else 'controlled supplier')+', not independent semantic quality or final task acceptance'
+if external_example_process:
+    basenames['process'] = 'T3-06-'+example_title+'真实双模型平台RAG实际验证' if args.live_models else 'T3-06-'+example_title+'正式镜像真实平台与PG完整链路验证'
+    receipt['scope'] = 'actual formal '+example_title+' example image and repository SDK/Linux platform/owned PostgreSQL pgvector/common capabilities/invocation-budget-usage ledgers; '+('operator-authorized external model teaching query' if args.live_models else 'controlled supplier')+', not independent semantic quality or final task acceptance'
 
 
 if args.batch_id:
@@ -855,9 +885,11 @@ try:
     else:
         with (open(os.devnull, 'wb') if args.suite == 'platform-all-go' else log.open("wb")) as output:
             if args.suite in {'process', 'maintenance', 'kafka', 'platform-all-go'} or args.containerized_go:
-                go_image = 'golang:1.26.9-bookworm'
+                go_image = 'golang:1.26.10-bookworm'
                 run(['docker','image','inspect',go_image])
-                download = Path(os.environ.get('USERPROFILE',str(Path.home())))/'go/pkg/mod/cache/download'
+                project_mod_cache = ROOT/'.cache/go-mod'
+                default_mod_cache = project_mod_cache if (project_mod_cache/'cache/download').is_dir() else Path(os.environ.get('USERPROFILE',str(Path.home())))/'go/pkg/mod'
+                download = Path(os.environ.get('GOMODCACHE',str(default_mod_cache)))/'cache/download'
                 if not download.is_dir(): raise RuntimeError('existing offline Go module download cache required')
                 private_env = TEMP/'go.env'
                 go_settings = {'PUBLIC_TEST_POSTGRES_MIGRATION_DSN': 'postgres://postgres:'+password+'@127.0.0.1:5432/knowledge_test?sslmode=disable',
@@ -884,12 +916,15 @@ try:
                 if args.answer_cache_process:
                     go_settings['PLATFORM_TEST_PUBLIC_ANSWER_CACHE'] = '1'
                     go_settings['PLATFORM_TEST_PUBLIC_ANSWER_EVIDENCE'] = '/test-cache/answer-cache.json'
-                if args.python_example_process:
-                    python_image = json.loads(run(['docker','image','inspect','agentplug:example-python']).stdout)[0]
-                    receipt['python_image_id'] = python_image['Id']
-                    go_settings.update(PLATFORM_TEST_PYTHON_RUNTIME_CONFIG='/test-cache/python-runtime.json',
-                                       PLATFORM_TEST_PYTHON_ARTIFACT=python_image['Id'],
-                                       PLATFORM_TEST_PYTHON_EVIDENCE='/test-cache/python-evidence.json')
+                if args.example_tool_loop:
+                    go_settings['PLATFORM_TEST_EXAMPLE_TOOL_LOOP'] = '1'
+                if external_example_process:
+                    python_image = json.loads(run(['docker','image','inspect','agentplug:example-'+example_language]).stdout)[0]
+                    receipt[example_language+'_image_id'] = python_image['Id']
+                    go_settings.update({
+                        'PLATFORM_TEST_'+example_language.upper()+'_RUNTIME_CONFIG': '/test-cache/'+example_language+'-runtime.json',
+                        'PLATFORM_TEST_'+example_language.upper()+'_ARTIFACT': python_image['Id'],
+                        'PLATFORM_TEST_'+example_language.upper()+'_EVIDENCE': '/test-cache/'+example_language+'-evidence.json'})
                 if args.live_models:
                     metadata = ROOT / '.local-secrets/model-providers/runtime-mounts/providers.json'
                     if not metadata.is_file(): raise RuntimeError('prepared operator model metadata required')
@@ -898,6 +933,10 @@ try:
                 private_env.write_text(''.join(key+'='+value+'\n' for key,value in go_settings.items()),encoding='utf-8')
                 private_env.chmod(0o600)
                 go_cache = TEMP/'go-cache';go_cache.mkdir()
+                shared_build_cache = ROOT/'.cache/go-linux-test-build'
+                shared_build_cache.mkdir(parents=True, exist_ok=True)
+                go_settings['GOCACHE'] = '/go-build-cache'
+                private_env.write_text(''.join(key+'='+value+'\n' for key,value in go_settings.items()),encoding='utf-8')
                 # Private handoff/evidence files are created with mode 0600.
                 # On Linux they must belong to the host runner so it can read
                 # them and remove the owned module/build cache after the test.
@@ -910,6 +949,7 @@ try:
                     '--mount','type=bind,source='+str(ROOT)+',target=/workspace,readonly',
                     '--mount','type=bind,source='+str(download)+',target=/module-cache,readonly',
                     '--mount','type=bind,source='+str(go_cache)+',target=/test-cache',
+                    '--mount','type=bind,source='+str(shared_build_cache)+',target=/go-build-cache',
                     '--workdir','/workspace/platform',go_image]
                 if args.suite == 'administration':
                     go_settings.update(APP_ENV='test', DB_DRIVER='pgx', DB_DSN=go_settings['PUBLIC_TEST_POSTGRES_MIGRATION_DSN'])
@@ -994,36 +1034,38 @@ REVOKE DELETE ON platform_compensation_step,platform_compensation_local_effect,p
                     receipt['sdk_checkpoint_postgres'] = sdk_summary
                 else:
                     command = [*container_prefix,'go','test',*(['-race'] if args.suite == 'kafka' else []),'-p=1','-count=1','-timeout='+('600s' if args.live_models else '300s' if args.checkpoint_agent_process or args.evaluation_restart else '180s'),'-v',*selection,*packages]
-                if args.python_example_process:
+                if external_example_process:
                     process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT)
                     deadline = time.monotonic()+(900 if args.live_models else 420)
-                    configuration = go_cache/'python-runtime.json'
+                    configuration = go_cache/(example_language+'-runtime.json')
                     while not configuration.is_file():
                         if process.poll() is not None: break
-                        if time.monotonic()>deadline: raise RuntimeError('Python runtime handoff timed out')
+                        if time.monotonic()>deadline: raise RuntimeError(example_title+' runtime handoff timed out')
                         time.sleep(0.2)
                     if configuration.is_file():
                         settings=json.loads(configuration.read_text(encoding='utf-8'))
                         required={'PORT','APP_ENV','AGENT_PLATFORM_PUBLIC_KEY_BASE64','AGENT_PLATFORM_ISSUER','AGENT_PLATFORM_AUDIENCE',
                                   'PLATFORM_CAPABILITY_URL','INTERNAL_TOKEN','INTERNAL_SIGNING_SECRET','AGENT_CLIENT_ID','AGENT_CLIENT_SECRET','OTEL_EXPORTER_OTLP_ENDPOINT'}
                         if set(settings)!=required or any(not isinstance(value,str) or '\n' in value or '\r' in value for value in settings.values()):
-                            raise RuntimeError('invalid private Python runtime handoff')
-                        agent_env=TEMP/'python.env'
+                            raise RuntimeError('invalid private '+example_title+' runtime handoff')
+                        agent_env=TEMP/(example_language+'.env')
                         agent_env.write_text(''.join(key+'='+value+'\n' for key,value in settings.items()),encoding='utf-8')
                         agent_env.chmod(0o600)
-                        run(['docker','run','--detach','--name',PYTHON_NAME,'--label','agentplug.test.owner='+OWNER,
+                        run(['docker','run','--detach','--name',EXAMPLE_NAME,'--label','agentplug.test.owner='+OWNER,
                              '--network','container:'+NAME,'--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
                              '--tmpfs','/tmp:rw,noexec,nosuid,size=32m','--env-file',str(agent_env),python_image['Id']])
-                        receipt['python_started_with_ephemeral_workload_credentials']=True
+                        receipt[example_language+'_started_with_ephemeral_workload_credentials']=True
                     process.wait(timeout=max(1,deadline-time.monotonic()))
-                    evidence=go_cache/'python-evidence.json'
-                    receipt['python_platform_flow']=json.loads(evidence.read_text(encoding='utf-8')) if evidence.is_file() else {'result':'FAIL','reason':'successful full flow evidence absent'}
+                    evidence=go_cache/(example_language+'-evidence.json')
+                    receipt[example_language+'_platform_flow']=json.loads(evidence.read_text(encoding='utf-8')) if evidence.is_file() else {'result':'FAIL','reason':'successful full flow evidence absent'}
                 elif args.suite != 'platform-all-go':
                     process = subprocess.run(command, stdout=output,stderr=subprocess.STDOUT,
-                                             timeout=900 if args.live_models else 420 if args.suite == 'process' else 210)
+                                             # This wall-clock limit includes module unpacking and cold
+                                             # race compilation; Go's separate 180s test limit stays intact.
+                                             timeout=900 if args.live_models else 420 if args.suite == 'process' else 600)
                 if args.suite == 'scale' and (go_cache/'scale-evidence.json').is_file():
                     shutil.copyfile(go_cache/'scale-evidence.json', SCALE_EVIDENCE)
-                if args.live_models and not args.python_example_process:
+                if args.live_models and not external_example_process:
                     evidence = go_cache / 'live-rag.json'
                     if evidence.is_file():
                         receipt['live_model_rag'] = json.loads(evidence.read_text(encoding='utf-8'))
@@ -1141,8 +1183,8 @@ REVOKE DELETE ON platform_compensation_step,platform_compensation_local_effect,p
     else:
         receipt["tests_passed"] = process.returncode == 0 and len(receipt["passed_tests"]) >= expected and not receipt["skipped_tests"]
     if args.live_models:
-        live_proof = receipt.get('python_platform_flow',{}) if args.python_example_process else receipt.get('live_model_rag',{})
-        receipt['tests_passed'] = receipt['tests_passed'] and live_proof.get('result') == 'PASS' and (not args.python_example_process or live_proof.get('external_models') is True)
+        live_proof = receipt.get(example_language+'_platform_flow',{}) if external_example_process else receipt.get('live_model_rag',{})
+        receipt['tests_passed'] = receipt['tests_passed'] and live_proof.get('result') == 'PASS' and (not external_example_process or live_proof.get('external_models') is True)
         receipt['real_model_calls'] = True
     if args.answer_cache_process:
         receipt['tests_passed'] = receipt['tests_passed'] and receipt.get('public_answer_cache',{}).get('result') == 'PASS'
@@ -1268,9 +1310,9 @@ REVOKE DELETE ON platform_compensation_step,platform_compensation_local_effect,p
             required = {'TestFirstAdministratorLocalPasswordPostgres'}
         if args.real_rag_metrics:
             required = {'TestSQLRealFrozenRAGMetricServiceEvidence'} | {'TestSQLRealFrozenRAGMetricServiceEvidence/'+name for name in ('supported','fabricated-source','unknown-reference','wrong-revision')}
-        if args.python_example_process:
-            required = (required-{'TestSQLRealPlatformProcessStartsWithDMLAndRejectsBadSchema/knowledge-index-worker/go-example-platform-flow'}) | {'TestSQLRealPlatformProcessStartsWithDMLAndRejectsBadSchema/knowledge-index-worker/python-example-platform-flow'}
-            receipt['tests_passed'] = receipt['tests_passed'] and receipt.get('python_platform_flow',{}).get('result') == 'PASS'
+        if external_example_process:
+            required = (required-{'TestSQLRealPlatformProcessStartsWithDMLAndRejectsBadSchema/knowledge-index-worker/go-example-platform-flow'}) | {'TestSQLRealPlatformProcessStartsWithDMLAndRejectsBadSchema/knowledge-index-worker/'+example_language+'-example-platform-flow'}
+            receipt['tests_passed'] = receipt['tests_passed'] and receipt.get(example_language+'_platform_flow',{}).get('result') == 'PASS'
         if args.checkpoint_agent_process:
             required = (required - {'TestSQLRealPlatformProcessStartsWithDMLAndRejectsBadSchema/knowledge-index-worker', 'TestSQLRealPlatformProcessStartsWithDMLAndRejectsBadSchema/knowledge-index-worker/go-example-platform-flow'}) | {'TestSQLRealPlatformProcessStartsWithDMLAndRejectsBadSchema/checkpoint-agent-process-recovery'}
         if args.evaluation_restart:
@@ -1288,7 +1330,7 @@ REVOKE DELETE ON platform_compensation_step,platform_compensation_local_effect,p
         receipt['checkpoint_renewal_exact_history_sql'] = 'TestSQLBusinessCheckpointCASRecoveryAndAuthority/recovery-checkpoint-snapshot/renewal-reference-allows-only-exact-live-history' in receipt['passed_tests']
         receipt['checkpoint_principal_lifecycle_sql'] = 'TestSQLBusinessCheckpointCASRecoveryAndAuthority/actual-iam-disabled-principal-cannot-replay-state' in receipt['passed_tests']
         receipt['checkpoint_retention_sql'] = 'TestSQLBusinessCheckpointCASRecoveryAndAuthority/expired-payload-pruning-preserves-lineage' in receipt['passed_tests']
-    live_call_count = receipt.get('python_platform_flow',{}).get('model_invocations',0) if args.python_example_process else receipt.get('live_model_rag',{}).get('external_model_invocations_settled',0)
+    live_call_count = receipt.get(example_language+'_platform_flow',{}).get('model_invocations',0) if external_example_process else receipt.get('live_model_rag',{}).get('external_model_invocations_settled',0)
     receipt["real_model_calls"] = (True if live_call_count > 0 else None) if args.live_models else False
     receipt["live_model_mode"] = args.live_models
     receipt["live_iam"] = args.suite == "process"
@@ -1380,27 +1422,27 @@ finally:
                 receipt['private_go_jsonl_error'] = type(error).__name__
     if not docker_access_confirmed:
         receipt['cleanup_errors'].append('Docker daemon access unavailable; absence of containers cannot be verified')
-    python_inspect=subprocess.run(['docker','inspect',PYTHON_NAME],capture_output=True)
+    python_inspect=subprocess.run(['docker','inspect',EXAMPLE_NAME],capture_output=True)
     if python_inspect.returncode==0:
         actual_python=json.loads(python_inspect.stdout)[0]
         if actual_python.get('Config',{}).get('Labels',{}).get('agentplug.test.owner')!=OWNER:
-            receipt['cleanup_errors'].append('Python container ownership mismatch')
+            receipt['cleanup_errors'].append(example_title+' container ownership mismatch')
         else:
             if 'failure' in receipt:
                 try:
-                    python_log = subprocess.run(['docker','logs','--tail','80',PYTHON_NAME], capture_output=True, timeout=15)
+                    python_log = subprocess.run(['docker','logs','--tail','80',EXAMPLE_NAME], capture_output=True, timeout=15)
                     private_values = [locals().get('password', ''), locals().get('runtime_password', '')]
                     private_values.extend(value for key, value in locals().get('settings', {}).items()
                                           if re.search(r'(?i)password|secret|token|key|dsn|credential', key))
                     diagnostic = safe_event_value((python_log.stdout + python_log.stderr).decode('utf-8', errors='replace'), private_values)[-8000:]
-                    receipt['python_failure_summary'] = diagnostic
-                    print('Owned Python Agent failure diagnostic:\n' + diagnostic, flush=True)
+                    receipt[example_language+'_failure_summary'] = diagnostic
+                    print('Owned '+example_title+' Agent failure diagnostic:\n' + diagnostic, flush=True)
                 except (OSError, subprocess.SubprocessError) as diagnostic_error:
-                    receipt['python_failure_summary'] = 'Agent logs unavailable: ' + type(diagnostic_error).__name__
-            if subprocess.run(['docker','rm','--force',PYTHON_NAME],capture_output=True).returncode:
-                receipt['cleanup_errors'].append('owned Python container removal failed')
-    receipt['temporary_python_container_removed']=subprocess.run(['docker','inspect',PYTHON_NAME],capture_output=True).returncode!=0
-    if not receipt['temporary_python_container_removed']:receipt['cleanup_errors'].append('owned Python container remains')
+                    receipt[example_language+'_failure_summary'] = 'Agent logs unavailable: ' + type(diagnostic_error).__name__
+            if subprocess.run(['docker','rm','--force',EXAMPLE_NAME],capture_output=True).returncode:
+                receipt['cleanup_errors'].append('owned '+example_title+' container removal failed')
+    receipt['temporary_'+example_language+'_container_removed']=subprocess.run(['docker','inspect',EXAMPLE_NAME],capture_output=True).returncode!=0
+    if not receipt['temporary_'+example_language+'_container_removed']:receipt['cleanup_errors'].append('owned '+example_title+' container remains')
     go_inspect = subprocess.run(['docker','inspect',GO_NAME],capture_output=True)
     if go_inspect.returncode == 0:
         actual_go = json.loads(go_inspect.stdout)[0]
@@ -1452,7 +1494,7 @@ finally:
         receipt["cleanup_errors"].append("temporary path ownership mismatch")
     receipt["temporary_credentials_removed"] = not TEMP.exists()
     if not docker_access_confirmed:
-        for key in ('temporary_python_container_removed','temporary_go_container_removed','temporary_kafka_container_removed','temporary_container_removed'):
+        for key in ('temporary_'+example_language+'_container_removed','temporary_go_container_removed','temporary_kafka_container_removed','temporary_container_removed'):
             receipt[key] = None
     receipt["complete"] = receipt.get("tests_passed", False) and not receipt["cleanup_errors"] and receipt["temporary_container_removed"] and receipt["temporary_credentials_removed"]
     basename = basenames[args.suite]

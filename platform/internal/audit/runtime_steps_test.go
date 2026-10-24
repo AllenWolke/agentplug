@@ -84,6 +84,33 @@ func TestRuntimeAuditProjectionFailsClosedOnBindingOrUnknownFields(t *testing.T)
 	}
 }
 
+func TestRuntimeAuditAcceptsTheProducerOutputBoundWithoutDisclosingData(t *testing.T) {
+	for _, size := range []int{65537, 162405, sharedkernel.MaxToolObservationOutputBytes, -1, sharedkernel.MaxToolObservationOutputBytes + 1} {
+		event := runtimeAuditFixtureEvent()
+		var summary map[string]any
+		if err := json.Unmarshal([]byte(event.Summary), &summary); err != nil {
+			t.Fatal(err)
+		}
+		summary["output_size_bytes"] = size
+		raw, _ := json.Marshal(summary)
+		event.Summary = string(raw)
+		projection, err := decodeRuntimeAuditRecord(event, "run-1")
+		if size < 0 || size > sharedkernel.MaxToolObservationOutputBytes {
+			if !errors.Is(err, ErrRuntimeStepCorrupt) {
+				t.Fatalf("invalid output size accepted: %d", size)
+			}
+			continue
+		}
+		if err != nil || projection.OutputSizeBytes == nil || *projection.OutputSizeBytes != int64(size) {
+			t.Fatalf("legal producer metadata rejected: size=%d err=%v", size, err)
+		}
+		encoded, _ := json.Marshal(projection)
+		if strings.Contains(string(encoded), "payload") || strings.Contains(string(encoded), "fingerprint") {
+			t.Fatal("larger byte-count metadata disclosed private fields")
+		}
+	}
+}
+
 func TestRuntimeStepsCursorBindsScopeRunAndStep(t *testing.T) {
 	query := RuntimeStepsQuery{Scope: MetadataScope{Type: "application", TenantID: "t", DepartmentID: "d", ApplicationID: "a"}, RunID: "run-1", StepID: runtimeAuditFixtureStepID(), PageSize: 20}
 	event := runtimeAuditFixtureEvent()

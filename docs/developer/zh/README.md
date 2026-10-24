@@ -2,6 +2,8 @@
 
 [项目首页](../../../README.md) · [English](../en/README.md) · [日本語](../ja/README.md) · [Deutsch](../de/README.md)
 
+本次功能入口：[公共能力、SDK 2.1 与示例 Agent 更新](../../releases/public-capabilities-2.1.zh.md)，包含新增能力、三语言接入点、三个示例调整、配置及历史兼容要求。
+
 目标是先理解平台和业务 Agent 的分工，再运行一个业务工程，最后把它交付给真实用户。首次阅读按下表顺序；不需要一开始就配置所有可选组件。
 
 | 阶段 | 阅读与操作 | 完成标志 |
@@ -10,6 +12,9 @@
 | 部署基础平台 | [快速开始](quickstart.md)、[三种部署](deployment.md) | 健康检查通过，自己创建的管理员可登录 |
 | 写业务代码 | [第一个 Agent](first-agent.md) | 本地业务与 SDK 生命周期测试通过，镜像可以构建 |
 | 复用公共能力 | [模型、知识、工具等](capabilities.md) | 每个基础能力有明确 SDK 接入点与授权需求 |
+| 升级公共能力 | [SDK 2.1、模板与兼容迁移](public-capabilities-upgrade.md) | 三语言能力、原回执恢复和历史 Schema 的边界明确 |
+| 启用通知和取消补偿 | [运行与历史保护](notification-cancellation-operations.md)、[本项目启用验收](notification-compensation-acceptance-20261022.md) | 通知实际送达，原审批可续接，取消有停止、补偿和预算证明，历史未知记录保持隔离 |
+| 验证真实中断恢复 | [三个示例真实恢复补验](native-recovery-acceptance-20261022.md) | 已送达通知可撤回，等待审批重启后按原任务续接，工具丢响应只查原收据 |
 | 交付给用户 | [发布、部署、公司与用户绑定](delivery.md) | 实际安装 active，指定用户真实运行成功，未授权用户被拒绝 |
 | 后续扩展 | [二次开发](extending.md) | 变更有契约、模块边界、业务测试和迁移方案 |
 

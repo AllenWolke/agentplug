@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/lexagent/platform/internal/sharedkernel"
 )
 
 const runtimeAuditVersion = "runtime-execution-audit/v1"
@@ -212,7 +214,7 @@ func decodeRuntimeAuditRecord(event Event, runID string) (RuntimeExecutionAudit,
 	if record.StartedAt != nil && record.FinishedAt != nil && record.FinishedAt.Before(*record.StartedAt) {
 		return RuntimeExecutionAudit{}, ErrRuntimeStepCorrupt
 	}
-	if record.DurationMS != nil && *record.DurationMS < 0 || record.OutputSizeBytes != nil && (*record.OutputSizeBytes < 0 || *record.OutputSizeBytes > 64<<10) {
+	if record.DurationMS != nil && *record.DurationMS < 0 || record.OutputSizeBytes != nil && (*record.OutputSizeBytes < 0 || *record.OutputSizeBytes > sharedkernel.MaxToolObservationOutputBytes) {
 		return RuntimeExecutionAudit{}, ErrRuntimeStepCorrupt
 	}
 	if record.ErrorType != nil && !validRuntimeAuditError(*record.ErrorType) {

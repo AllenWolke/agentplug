@@ -26,6 +26,36 @@ func (s *SQLStore) ListPendingCancellationsAfter(parent context.Context, after s
 	return s.pendingCancellations(ctx, after, limit, true)
 }
 
+// ListPendingCancellationHeadersAfter returns only the fields the retry
+// scheduler compares (status, revision, lease). Backed-off rows therefore no
+// longer transfer request_json; a due row is reread in full before any stop.
+func (s *SQLStore) ListPendingCancellationHeadersAfter(parent context.Context, after string, limit int) ([]platformruntime.Run, error) {
+	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
+	defer cancel()
+	if limit < 1 {
+		return nil, nil
+	}
+	if limit > 256 {
+		limit = 256
+	}
+	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT run_id,status,revision,lease_token FROM platform_execution_run WHERE status IN ('cancelling','recovering') AND run_id>? ORDER BY run_id LIMIT ?`), after, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []platformruntime.Run
+	for rows.Next() {
+		var run platformruntime.Run
+		var status string
+		if err := rows.Scan(&run.ID, &status, &run.Revision, &run.LeaseToken); err != nil {
+			return nil, err
+		}
+		run.Status = platformruntime.Status(status)
+		result = append(result, run)
+	}
+	return result, rows.Err()
+}
+
 func (s *SQLStore) pendingCancellations(ctx context.Context, after string, limit int, keyset bool) ([]platformruntime.Run, error) {
 	if limit < 1 {
 		return nil, nil

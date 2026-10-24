@@ -125,8 +125,18 @@ func (m *Module) permissionMe(w http.ResponseWriter, r *http.Request) {
 			dataCapabilities = append(dataCapabilities, "business.review")
 		}
 	}
+	managedDepartments, projectionError := departmentManagementScopes(snapshot, time.Now().UTC())
+	if projectionError != nil {
+		m.permissionError(w, projectionError)
+		return
+	}
+	systemManager, systemError := systemManagementAccount(snapshot, time.Now().UTC())
+	if systemError != nil {
+		m.permissionError(w, systemError)
+		return
+	}
 	kind := administrationKind(snapshot, time.Now().UTC())
-	m.json(w, http.StatusOK, map[string]any{"policy_mode": snapshot.Mode, "scope": scope, "capabilities": capabilities, "global_capabilities": globalCapabilities, "data_capabilities": dataCapabilities, "role_bindings": snapshot.Bindings, "revision": snapshot.Principal.Revision, "administration_kind": kind, "self_service_permissions": snapshot.Mode == "v2" && kind == ""})
+	m.json(w, http.StatusOK, map[string]any{"policy_mode": snapshot.Mode, "scope": scope, "capabilities": capabilities, "global_capabilities": globalCapabilities, "data_capabilities": dataCapabilities, "role_bindings": snapshot.Bindings, "revision": snapshot.Principal.Revision, "administration_kind": kind, "department_management_scopes": managedDepartments, "personal_permission_requests_allowed": snapshot.Mode == "v2" && !systemManager, "self_service_permissions": snapshot.Mode == "v2" && kind == ""})
 }
 
 func (m *Module) permissionDirectories(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +168,10 @@ func (m *Module) permissionProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/principals/"), "/")
+	if len(parts) == 2 && parts[0] != "" && parts[1] == "membership-profile" {
+		m.membershipProfile(w, r, actor, repo, parts[0])
+		return
+	}
 	if len(parts) != 2 || parts[0] == "" || parts[1] != "access-profile" {
 		m.error(w, http.StatusNotFound, "RESOURCE_NOT_FOUND")
 		return
@@ -197,6 +211,13 @@ func (m *Module) permissionProfile(w http.ResponseWriter, r *http.Request) {
 				return permitted, nil
 			}
 			decision, err := repo.ResolvePermission(r.Context(), PrincipalUser, actor.Principal.ID, PermissionQuery{Action: "authorization.read", Scope: scope})
+			if errors.Is(err, ErrScopeMismatch) {
+				// Retired organization facts remain in immutable authorization
+				// history. They are not readable live scopes and must not hide
+				// the target's other, independently authorized current facts.
+				decisions[scope] = false
+				return false, nil
+			}
 			if err != nil {
 				return false, err
 			}
@@ -400,7 +421,7 @@ func (m *Module) permissionExplain(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) permissionError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, ErrPermissionExplanationObjectNotFound):
+	case errors.Is(err, ErrAuthorizationReceiptNotFound), errors.Is(err, ErrPermissionExplanationObjectNotFound):
 		m.error(w, http.StatusNotFound, "RESOURCE_NOT_FOUND")
 	case errors.Is(err, ErrPermissionExplanationStale):
 		m.error(w, http.StatusConflict, "PERMISSION_EXPLANATION_STALE")

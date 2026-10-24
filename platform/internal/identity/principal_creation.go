@@ -16,10 +16,11 @@ import (
 // Password is never included in a plan, receipt, audit event or request digest.
 // A retry checks the salted credential instead of storing a password fingerprint.
 type PrincipalCreationCommand struct {
-	Username    string          `json:"username"`
-	DisplayName string          `json:"display_name"`
-	Password    string          `json:"password,omitempty"`
-	Scope       ManagementScope `json:"scope"`
+	Username       string          `json:"username"`
+	DisplayName    string          `json:"display_name"`
+	Password       string          `json:"password,omitempty"`
+	Scope          ManagementScope `json:"scope"`
+	JoinDepartment bool            `json:"join_department,omitempty"`
 	Validity
 	Preset         *PresetSelection `json:"preset,omitempty"`
 	IdempotencyKey string           `json:"idempotency_key"`
@@ -40,7 +41,14 @@ func creationAuthorization(c PrincipalCreationCommand) (AuthorizationChangeComma
 	if err != nil {
 		return AuthorizationChangeCommand{}, "", err
 	}
-	return AuthorizationChangeCommand{SubjectType: PrincipalUser, SubjectID: c.Username, ExpectedRevision: 1, IdempotencyKey: c.IdempotencyKey, Reason: c.Reason, Preset: c.Preset, Memberships: []MembershipMutation{{ID: "member-" + permissionHash([]byte(c.Username+"\x00"+c.IdempotencyKey)), Scope: c.Scope, Status: "active", Validity: c.Validity}}}, permissionHash(raw), nil
+	command := AuthorizationChangeCommand{SubjectType: PrincipalUser, SubjectID: c.Username, ExpectedRevision: 1, IdempotencyKey: c.IdempotencyKey, Reason: c.Reason, Preset: c.Preset, Memberships: []MembershipMutation{{ID: "member-" + permissionHash([]byte(c.Username+"\x00"+c.IdempotencyKey)), Scope: c.Scope, Status: "active", Validity: c.Validity}}}
+	if c.JoinDepartment {
+		// The same planner independently checks membership.manage at department
+		// scope. Application-only administrators cannot widen membership by
+		// sending this flag. Account, credential and both memberships share a tx.
+		command.Memberships = append(command.Memberships, MembershipMutation{ID: "member-department-" + permissionHash([]byte(c.Username+"\x00"+c.IdempotencyKey)), Scope: ManagementScope{Type: "department", TenantID: c.Scope.TenantID, DepartmentID: c.Scope.DepartmentID}, Status: "active", Validity: c.Validity})
+	}
+	return command, permissionHash(raw), nil
 }
 
 func (s *SQLStore) PreviewPrincipalCreation(ctx context.Context, actor sharedkernel.Scope, c PrincipalCreationCommand) (AuthorizationChangePlan, error) {

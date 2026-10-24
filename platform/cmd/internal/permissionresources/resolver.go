@@ -142,3 +142,55 @@ func resolvePublishedInstallation(ctx context.Context, reader Catalog, scope sha
 	}
 	return identity.PermissionResource{Type: "agent_installation", ID: installationID, TenantID: scope.TenantID, DepartmentID: scope.DepartmentID, ApplicationID: scope.ApplicationID, InstallationID: installationID, AgentID: installation.AgentID, AgentVersionID: installation.VersionID, DisplayName: displayName}, nil
 }
+
+func (r PublishedResolver) ResolveAgentUseRequirements(ctx context.Context, scope sharedkernel.Scope) (identity.AgentUseRequirements, error) {
+	if r.catalog == nil || r.policies == nil || scope.Validate() != nil || scope.InstallationID == "" || scope.AgentInstanceID != scope.InstallationID {
+		return identity.AgentUseRequirements{}, identity.ErrInvalidResource
+	}
+	resource, err := resolvePublishedInstallation(ctx, r.catalog, scope, scope.InstallationID)
+	if err != nil {
+		return identity.AgentUseRequirements{}, err
+	}
+	scope.AgentID, scope.AgentVersionID = resource.AgentID, resource.AgentVersionID
+	policy, err := r.policies.Resolve(ctx, scope, resource.AgentVersionID)
+	if err != nil {
+		return identity.AgentUseRequirements{}, err
+	}
+	if policy.Validate() != nil || policy.ValidateDetails() != nil {
+		return identity.AgentUseRequirements{}, identity.ErrInvalidResource
+	}
+	installation, err := r.catalog.GetInstallation(ctx, scope.InstallationID)
+	if err != nil {
+		return identity.AgentUseRequirements{}, err
+	}
+	if installation.ID != scope.InstallationID || installation.VersionID != resource.AgentVersionID || installation.Status != catalog.InstallationActive ||
+		installation.TenantID != scope.TenantID || installation.DepartmentID != scope.DepartmentID || installation.ApplicationID != scope.ApplicationID || installation.AgentID != resource.AgentID {
+		return identity.AgentUseRequirements{}, identity.ErrIdentityConflict
+	}
+	result := identity.AgentUseRequirements{InstallationID: scope.InstallationID, AgentID: resource.AgentID, AgentVersionID: resource.AgentVersionID, DisplayName: installation.DisplayName, PolicyHash: policy.Hash}
+	add := func(typ, id, action, data string, confirmation bool) {
+		result.Requirements = append(result.Requirements, identity.AgentUseRequirement{ResourceType: typ, ResourceID: id, Action: action, DataScope: identity.DataScope{Type: data}, RequiresConfirmation: confirmation})
+	}
+	add("model", policy.ModelProfileID, "model.generate", "approved_organization", false)
+	if policy.Model.EmbeddingModelVersionID != "" || policy.Memory.SemanticEnabled {
+		add("model", policy.ModelProfileID, "model.embed", "approved_organization", false)
+	}
+	for _, id := range policy.Tool.AllowedTools {
+		add("tool", id, "tool.invoke", "approved_organization", slices.Contains(policy.Tool.RequireConfirmation, id))
+	}
+	for _, id := range policy.Knowledge.AllowedScopes {
+		add("knowledge", id, "knowledge.search", "approved_organization", false)
+	}
+	add("memory", policy.MemoryPolicyID, "memory.read", "owner", false)
+	add("memory", policy.MemoryPolicyID, "memory.write", "owner", false)
+	for _, id := range policy.Runtime.AllowedSkills {
+		add("skill", id, "skill.load", "approved_organization", false)
+	}
+	if policy.Runtime.Delegation != nil {
+		add("agent_installation", scope.InstallationID, "agent.delegate", "approved_organization", false)
+	}
+	if err := result.Seal(); err != nil {
+		return identity.AgentUseRequirements{}, err
+	}
+	return result, nil
+}

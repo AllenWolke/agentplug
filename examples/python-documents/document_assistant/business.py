@@ -5,6 +5,7 @@ import hashlib
 import json
 
 from agent_platform_sdk.capability_client import CapabilityGatewayClient, GatewayError
+from agent_platform_sdk.reference_authorization import authorize_cached_result
 from agent_platform_sdk.coordination import agent_group_plan_input_hash
 from agent_platform_sdk.errors import DomainExecutionError
 from agent_platform_sdk.execution_lifecycle import AgentGroupPause, HarnessPause
@@ -17,8 +18,10 @@ from agent_platform_sdk.recovery_context import (authorize_runtime_recovery_star
     validate_runtime_recovery_checkpoint, RecoveryCheckpointSnapshot,
     RecoveryCheckpointStep, RecoveryPlan)
 
-INPUT_SCHEMA = "schema://example-python-documents/input/v2"
-OUTPUT_SCHEMA = "schema://example-python-documents/output/v2"
+INPUT_SCHEMA = "schema://example-python-documents/input/v3"
+LEGACY_INPUT_SCHEMA = "schema://example-python-documents/input/v2"
+OUTPUT_SCHEMA = "schema://example-python-documents/output/v3"
+LEGACY_OUTPUT_SCHEMA = "schema://example-python-documents/output/v2"
 KNOWLEDGE_SCOPE = "python-documents"
 DOCUMENT_GROUP_NAMESPACE = "documents"
 DOCUMENT_GROUP_MARKER_KEY = "document-collaboration-plan"
@@ -43,7 +46,7 @@ DOCUMENT_GROUP_OBSERVATION_LIMIT = 600
 
 def validate_document_input(request: ExecuteRequest) -> tuple[str, int, str]:
     data = request.input
-    if request.input_schema != INPUT_SCHEMA or set(data) - {"question", "top_k", "cache_mode", "workflow_mode", "notify_me", "sandbox_check", "collaborate", "policy_snapshot"}:
+    if request.input_schema not in (INPUT_SCHEMA,LEGACY_INPUT_SCHEMA) or set(data) - {"question", "top_k", "cache_mode", "workflow_mode", "notify_me", "sandbox_check", "collaborate", "policy_snapshot", *( ("as_of","source_ids") if request.input_schema==INPUT_SCHEMA else () )}:
         raise DomainExecutionError("INVALID_REQUEST")
     question = data.get("question")
     top_k, mode = data.get("top_k", 3), data.get("cache_mode", "use")
@@ -59,6 +62,14 @@ def validate_document_input(request: ExecuteRequest) -> tuple[str, int, str]:
         or type(data.get("collaborate", False)) is not bool
     ):
         raise DomainExecutionError("INVALID_REQUEST")
+    if request.input_schema==INPUT_SCHEMA:
+        from datetime import date
+        if "as_of" in data:
+            try:
+                if not isinstance(data["as_of"],str) or date.fromisoformat(data["as_of"]).isoformat()!=data["as_of"]:raise ValueError()
+            except (ValueError,TypeError):raise DomainExecutionError("INVALID_REQUEST") from None
+        ids=data.get("source_ids")
+        if "source_ids" in data and (not isinstance(ids,list) or not 1<=len(ids)<=16 or any(not isinstance(v,str) or not v or v.strip()!=v or len(v)>128 for v in ids) or len(set(ids))!=len(ids)):raise DomainExecutionError("INVALID_REQUEST")
     return question, top_k, mode
 
 
@@ -181,7 +192,7 @@ async def _gather_document_support(request: ExecuteRequest, client: CapabilityGa
     expected_input = _document_group_child_input(request)
     if (not isinstance(child, dict)
             or child.get("status") != "completed" or child.get("output_omitted") is not False
-            or child.get("output_schema") != OPERATIONS_OUTPUT_SCHEMA
+            or child.get("output_schema") != _operations_child_schema(request,"output")
             or not isinstance(child.get("child_key"), str)
             or len(child["child_key"]) != 64
             or any(char not in "0123456789abcdef" for char in child["child_key"])
@@ -192,7 +203,7 @@ async def _gather_document_support(request: ExecuteRequest, client: CapabilityGa
             or len(child["output_digest"]) != 64
             or any(char not in "0123456789abcdef" for char in child["output_digest"])
             or not isinstance(output, dict)
-            or output.get("schema") != OPERATIONS_OUTPUT_SCHEMA
+            or output.get("schema") != _operations_child_schema(request,"output")
             or output.get("service") != expected_input["service"]
             or output.get("collaborate") is not False
             or output.get("notify_me") is not False
@@ -259,8 +270,8 @@ def _valid_document_group_checkpoint(request, checkpoint, _prior_values) -> bool
     else:
         return False
     if targets and (not isinstance(targets[0], dict)
-                    or targets[0] != {"input_schema": OPERATIONS_INPUT_SCHEMA,
-                                      "output_schema": OPERATIONS_OUTPUT_SCHEMA}):
+                    or targets[0] != {"input_schema": _operations_child_schema(request,"input"),
+                                      "output_schema": _operations_child_schema(request,"output")}):
         return False
     if bindings:
         binding = bindings[0]
@@ -270,7 +281,7 @@ def _valid_document_group_checkpoint(request, checkpoint, _prior_values) -> bool
                 or not isinstance(child_key, str) or len(child_key) != 64
                 or any(char not in "0123456789abcdef" for char in child_key)
                 or child_keys != [binding.get("child_key")]
-                or binding.get("output_schema") != OPERATIONS_OUTPUT_SCHEMA
+                or binding.get("output_schema") != _operations_child_schema(request,"output")
                 or not isinstance(binding.get("input_fingerprint"), str)
                 or len(binding["input_fingerprint"]) != 64
                 or any(char not in "0123456789abcdef" for char in binding["input_fingerprint"])):
@@ -280,8 +291,10 @@ def _valid_document_group_checkpoint(request, checkpoint, _prior_values) -> bool
 
 def _knowledge_state_hash(request: ExecuteRequest) -> str:
     requests = [{"skill_id": "example.documents.guidance", "sections": ["citations"]}]
-    return _digest([request.input["question"], KNOWLEDGE_SCOPE,
-                    request.input.get("top_k", 3), request.input.get("cache_mode", "use"), requests])
+    identity=[request.input["question"], KNOWLEDGE_SCOPE,request.input.get("top_k",3),request.input.get("cache_mode","use"),requests]
+    if request.input.get("as_of","") or request.input.get("source_ids") is not None:
+        identity.append({"as_of":request.input.get("as_of",""),"source_ids":request.input.get("source_ids")})
+    return _digest(identity)
 
 
 def _document_harness_input(request: ExecuteRequest, frozen: dict) -> dict:
@@ -592,7 +605,8 @@ async def answer_document(request: ExecuteRequest, client: CapabilityGatewayClie
     # re-loads trusted versions and validates the same pin at cache/model edges.
     result = await client.run_knowledge_harness(question, KNOWLEDGE_SCOPE,
             key="document-answer", top_k=top_k, cache_mode=mode,
-            skill_requests=[{"skill_id": "example.documents.guidance", "sections": ["citations"]}])
+            skill_requests=[{"skill_id": "example.documents.guidance", "sections": ["citations"]}],
+            **({k:request.input[k] for k in ("as_of","source_ids") if k in request.input}))
     text, references = result.get("text"), result.get("references")
     citations, claims = result.get("evaluation_citations"), result.get("evaluation_claims")
     if (
@@ -602,6 +616,7 @@ async def answer_document(request: ExecuteRequest, client: CapabilityGatewayClie
         or not isinstance(claims, list) or len(claims) != 1 or not isinstance(claims[0], dict) or claims[0].get("text") != text
     ):
         raise GatewayError("KNOWLEDGE_RESPONSE_INVALID", "platform cited answer required")
+    await authorize_cached_result(client,result,KNOWLEDGE_SCOPE)
     retrieved_ids = [reference.get("clause_or_chunk_id") for reference in references if isinstance(reference, dict)]
     citation_ids = result.get("citation_ids")
     if (
@@ -628,8 +643,9 @@ async def answer_document(request: ExecuteRequest, client: CapabilityGatewayClie
             await _ensure_document_group_marker(request, client)
         collaboration = await _gather_document_support(request, client)
         await client.validate_current_execution()
+    await authorize_cached_result(client,result,KNOWLEDGE_SCOPE)
     response = {
-        "schema": OUTPUT_SCHEMA, "question": question, "answer": text,
+        "schema": document_output_schema(request), "question": question, "answer": text,
         "references": references, "retrieved_ids": retrieved_ids, "citation_ids": citation_ids,
         "evaluation_citations": citations, "evaluation_claims": claims,
         "answer_cache_hit": result.get("answer_cache_hit", False),
@@ -647,4 +663,13 @@ async def answer_document(request: ExecuteRequest, client: CapabilityGatewayClie
     }
     if collaboration is not None:
         response["collaboration"] = collaboration
+    if request.input_schema==INPUT_SCHEMA:
+        response["model_metadata"]={key:result[key] for key in ("routing","route_execution","context_cache","response_schema","model_version_id","provider_id","model_id","step_id","billing") if key in result}
     return response
+
+def _operations_child_schema(request,kind):
+    version="v3" if request.input_schema==INPUT_SCHEMA else "v2"
+    return f"schema://example-go-operations/{kind}/{version}"
+
+def document_output_schema(request):
+    return OUTPUT_SCHEMA if request.input_schema==INPUT_SCHEMA else LEGACY_OUTPUT_SCHEMA

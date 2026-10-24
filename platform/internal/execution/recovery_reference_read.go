@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/lexagent/platform/internal/contract"
 	platformruntime "github.com/lexagent/platform/internal/runtime"
 	"github.com/lexagent/platform/internal/sqlutil"
 )
@@ -46,7 +47,7 @@ func (s *SQLStore) CurrentRecoveryStopReference(ctx context.Context, expected pl
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) == 0 || len(raw) > 128<<10 {
+	if len(raw) == 0 || len(raw) > contract.MaxRecoveryReferenceBytes {
 		return nil, ErrStopEvidenceInvalid
 	}
 	var event struct {

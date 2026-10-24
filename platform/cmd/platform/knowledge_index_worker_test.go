@@ -33,6 +33,8 @@ func TestKnowledgeIndexWorkerFailureCodeUsesPhaseAndTypedCauses(t *testing.T) {
 		{"unknown", unknown, "INDEX_TASK_PENDING_RECONCILIATION"},
 		{"admission-policy", errors.Join(unknown, &capability.KnowledgeModelError{Status: 403, Code: "POLICY_DENIED"}), "INDEX_TASK_POLICY_DENIED"},
 		{"admission-workload", &capability.KnowledgeModelError{Status: 403, Code: "WORKLOAD_AUTHENTICATION_DENIED"}, "INDEX_TASK_WORKLOAD_AUTHENTICATION_DENIED"},
+		{"internal-root-stage", &capability.KnowledgeModelError{Status: 403, Code: "CAPABILITY_DENIED", DiagnosticCode: "RUN_AUTHORITY"}, "INDEX_TASK_CAPABILITY_DENIED_RUN_AUTHORITY"},
+		{"private-stage", &capability.KnowledgeModelError{Status: 403, Code: "CAPABILITY_DENIED", DiagnosticCode: "token=private"}, "INDEX_TASK_CAPABILITY_DENIED"},
 		{"private-code", &capability.KnowledgeModelError{Status: 502, Code: "secret=must-not-appear"}, "INDEX_TASK_MODEL_ADMISSION_FAILED"},
 		{"secret", errors.Join(unknown, errIndexSecretUnavailable), "INDEX_TASK_WORKLOAD_SECRET_UNAVAILABLE"},
 	} {

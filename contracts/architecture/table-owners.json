@@ -134,5 +134,13 @@
   "platform_identity_department_agent_policy": "identity",
   "platform_identity_department_agent_entry": "identity",
   "platform_identity_department_agent_change": "identity",
-  "platform_identity_permission_batch": "identity"
+  "platform_identity_permission_batch": "identity",
+  "platform_identity_department_agent_package": "identity",
+  "platform_model_route_decision": "capability",
+  "platform_model_route_availability": "capability",
+  "platform_model_route_execution": "capability",
+  "platform_run_model_selection": "capability",
+  "platform_business_state_admission": "capability",
+  "public.sdk_execution_generation": "checkpoint-sdk",
+  "public.checkpoint_migrations": "checkpoint-sdk"
 }

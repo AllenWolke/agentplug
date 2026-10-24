@@ -8,6 +8,7 @@ import (
 
 	"github.com/lexagent/platform/internal/contract"
 	"github.com/lexagent/platform/internal/conversation"
+	"github.com/lexagent/platform/internal/policyasset"
 	platformruntime "github.com/lexagent/platform/internal/runtime"
 )
 
@@ -21,8 +22,9 @@ type conversationReplaySessionSource interface {
 }
 
 type conversationRunReplay struct {
-	repository conversationReplayRepository
-	sessions   conversationReplaySessionSource
+	repository      conversationReplayRepository
+	sessions        conversationReplaySessionSource
+	modelSelections policyasset.ModelSelectionStore
 }
 
 func (a conversationRunReplay) MatchRunReplay(ctx context.Context, actor conversation.Scope, session string, request conversation.RunStartRequest) (bool, error) {
@@ -51,6 +53,19 @@ func (a conversationRunReplay) MatchRunReplay(ctx context.Context, actor convers
 		return false, conversation.ErrForbidden
 	}
 	if run.IdempotencyKey != request.IdempotencyKey || request.AgentEndpoint != "" && request.AgentEndpoint != run.AgentEndpoint || request.AgentInstanceID != "" && request.AgentInstanceID != scope.AgentInstanceID || request.InstallationID != "" && request.InstallationID != scope.InstallationID || request.AuthorizationEpoch != 0 && request.AuthorizationEpoch != scope.AuthorizationEpoch {
+		return false, conversation.ErrRunReplayConflict
+	}
+	selection := policyasset.ModelSelection{}
+	if a.modelSelections != nil {
+		binding, found, err := a.modelSelections.LookupModelSelection(ctx, scope)
+		if err != nil {
+			return false, err
+		}
+		if found {
+			selection = binding.Selection
+		}
+	}
+	if selection.EffectiveMode() != request.ModelSelection.EffectiveMode() || request.ModelSelection.Validate() != nil {
 		return false, conversation.ErrRunReplayConflict
 	}
 	creation, err := a.repository.GetCreation(run.ID)
@@ -86,7 +101,7 @@ func (a conversationRunReplay) MatchRunReplay(ctx context.Context, actor convers
 		return false, conversation.ErrRunReplayConflict
 	}
 	if request.Fingerprint != "" {
-		fingerprint, err := conversation.RunCommandFingerprint(scope, run.IdempotencyKey, accepted.Input)
+		fingerprint, err := conversation.RunCommandSelectionFingerprint(scope, run.IdempotencyKey, accepted.Input, selection)
 		if err != nil {
 			return false, err
 		}

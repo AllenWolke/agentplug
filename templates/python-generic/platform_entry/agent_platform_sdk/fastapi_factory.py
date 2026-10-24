@@ -80,17 +80,19 @@ def create_fastapi_agent_app(
 
     @asynccontextmanager
     async def managed(app: Any):
-        if lifespan is None:
-            try:
-                yield
-            finally:
-                await registry.shutdown()
-            return
-        async with lifespan(app):
-            try:
-                yield
-            finally:
-                await registry.shutdown()
+        from .capability_connections import capability_connection_lifespan
+        async with capability_connection_lifespan():
+            if lifespan is None:
+                try:
+                    yield
+                finally:
+                    await registry.shutdown()
+                return
+            async with lifespan(app):
+                try:
+                    yield
+                finally:
+                    await registry.shutdown()
 
     app = FastAPI(title=title, version=version, lifespan=managed)
     from .telemetry import TraceContextMiddleware
@@ -257,7 +259,7 @@ def create_fastapi_agent_app(
             raise HTTPException(422, "signed resume operation and input are required")
         if run_id != request.scope.run_id:
             raise HTTPException(409, "run binding mismatch")
-        if (request.resume_input.get("version") in {"runtime-recovery/v1", "agent-group-resume/v1"}
+        if (request.resume_input.get("version") in {"runtime-recovery/v1", "runtime-recovery/v2", "agent-group-resume/v1"}
                 and registry.generation_replay_state(registry.key(request)) in {"active", "exited"}):
             # Same-generation runtime/group replay is a narrow lifecycle-owned
             # read. Never pass it through a business resume hook or register a

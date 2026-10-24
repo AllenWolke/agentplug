@@ -15,7 +15,7 @@ func TestPermissionInstallationTargetsUseIndependentLiveAuthority(t *testing.T) 
 	p := identity.Principal{Type: identity.PrincipalUser, ID: "alice", TenantID: "t", IsActive: true, Roles: []string{"admin"}}
 	actor := catalog.ControlActor{PrincipalType: "user", PrincipalID: p.ID, TenantID: "t", DepartmentID: "d", ApplicationID: "a"}
 	target := catalog.ControlScope{TenantID: "t", DepartmentID: "d", ApplicationID: "a"}
-	for _, permission := range []string{"machine.manage", "authorization.change", "delegation.manage", "catalog.manage"} {
+	for _, permission := range []string{"machine.manage", "authorization.change", "delegation.manage", "catalog.manage", "department.agent_access.manage"} {
 		t.Run(permission, func(t *testing.T) {
 			snapshot := identity.PermissionSnapshot{Mode: "v2", Principal: p,
 				Roles:       []identity.RoleDefinition{{Code: "specialist", Version: 1, ScopeTypes: []string{"application"}, Actions: []string{permission}, Assignable: true}},
@@ -23,7 +23,7 @@ func TestPermissionInstallationTargetsUseIndependentLiveAuthority(t *testing.T) 
 				Bindings:    []identity.RoleBinding{{ID: "b", SubjectID: p.ID, Scope: scope, RoleCode: "specialist", RoleVersion: 1, Status: "active"}},
 			}
 			store := versionedCatalogStore{catalogIdentityStoreStub: catalogIdentityStoreStub{principal: p}, snapshot: snapshot}
-			for action, required := range map[catalog.ControlAction]string{catalog.ControlAuthorizationTargets: "authorization.change", catalog.ControlWorkloadTargets: "machine.manage", catalog.ControlDelegationTargets: "delegation.manage", catalog.ControlRead: "catalog.manage"} {
+			for action, required := range map[catalog.ControlAction]string{catalog.ControlAuthorizationTargets: "authorization.change", catalog.ControlWorkloadTargets: "machine.manage", catalog.ControlDelegationTargets: "delegation.manage", catalog.ControlDepartmentAgentTargets: "department.agent_access.manage", catalog.ControlRead: "catalog.manage"} {
 				err := (identityCatalogControl{store: store}).AuthorizeCatalogControl(context.Background(), actor, action, target)
 				if (err == nil) != (permission == required) {
 					t.Fatalf("%s: %v", action, err)
@@ -36,7 +36,7 @@ func TestPermissionInstallationTargetsUseIndependentLiveAuthority(t *testing.T) 
 			}
 			expired := time.Now().Add(-time.Second)
 			store.snapshot.Bindings[0].Validity.ExpiresAt = &expired
-			for _, action := range []catalog.ControlAction{catalog.ControlAuthorizationTargets, catalog.ControlWorkloadTargets, catalog.ControlDelegationTargets} {
+			for _, action := range []catalog.ControlAction{catalog.ControlAuthorizationTargets, catalog.ControlWorkloadTargets, catalog.ControlDelegationTargets, catalog.ControlDepartmentAgentTargets} {
 				if err := (identityCatalogControl{store: store}).AuthorizeCatalogControl(context.Background(), actor, action, target); !errors.Is(err, catalog.ErrCatalogForbidden) {
 					t.Fatal("expired authority survived", err)
 				}
@@ -48,7 +48,7 @@ func TestPermissionInstallationTargetsUseIndependentLiveAuthority(t *testing.T) 
 			}
 		})
 	}
-	for _, action := range []catalog.ControlAction{catalog.ControlAuthorizationTargets, catalog.ControlWorkloadTargets, catalog.ControlDelegationTargets} {
+	for _, action := range []catalog.ControlAction{catalog.ControlAuthorizationTargets, catalog.ControlWorkloadTargets, catalog.ControlDelegationTargets, catalog.ControlDepartmentAgentTargets} {
 		if err := (identityCatalogControl{store: catalogIdentityStoreStub{principal: p}}).AuthorizeCatalogControl(context.Background(), actor, action, target); !errors.Is(err, catalog.ErrCatalogForbidden) {
 			t.Fatal("legacy administrator gained new metadata view", err)
 		}

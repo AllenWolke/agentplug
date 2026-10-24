@@ -84,6 +84,7 @@ func (m *Module) billingAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
+		Action      string          `json:"action,omitempty"`
 		ScopeHash   string          `json:"scope_hash"`
 		Key         string          `json:"idempotency_key"`
 		Fingerprint string          `json:"fingerprint"`
@@ -93,6 +94,27 @@ func (m *Module) billingAdmin(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&input) != nil || decoder.Decode(new(any)) != io.EOF || len(input.ScopeHash) != 64 || input.Key == "" || len(input.Key) > 255 || len(input.Fingerprint) != 64 || input.Decision.ActorID != "" || input.Decision.ActorTenant != "" {
 		m.error(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid billing decision", "")
+		return
+	}
+	if input.Action == "reconcile_known" {
+		if input.Decision != (BillingDecision{}) {
+			m.error(w, 400, "INVALID_REQUEST", "saved-response recovery accepts no caller-authored amount or decision", "")
+			return
+		}
+		record, err := store.GetBillingRecord(ctx, input.ScopeHash, input.Key)
+		if err != nil || record.Recovery == nil || record.Fingerprint != input.Fingerprint || record.Recovery.Reservation.Scope.TenantID != actor.TenantID || record.Recovery.Reservation.Scope.DepartmentID != actor.DepartmentID || record.Recovery.Reservation.Scope.ApplicationID != actor.ApplicationID {
+			m.error(w, 409, "BILLING_DECISION_CONFLICT", "exact original owned billing record required", "")
+			return
+		}
+		if err := m.resumeKnownBilling(ctx, record); err != nil {
+			m.error(w, 409, "KNOWN_BILLING_RECOVERY_DENIED", "saved response or pinned price is incomplete or conflicting", "")
+			return
+		}
+		m.ok(w, map[string]any{"status": "accepted", "model_calls": 0, "reservation_id": record.Recovery.Reservation.ReservationID}, "")
+		return
+	}
+	if input.Action != "" {
+		m.error(w, 400, "INVALID_REQUEST", "unsupported billing action", "")
 		return
 	}
 	// Actor is exclusively projected from the authenticated gateway session.
@@ -115,8 +137,29 @@ func (m *Module) billingAdmin(w http.ResponseWriter, r *http.Request) {
 	m.ok(w, map[string]any{"status": "accepted", "decision_id": input.Decision.ID}, "")
 }
 
+// Unresolved records need an operator decision, so they are never truncated
+// by resolved history; only the resolved tail is capped. A shared LIMIT once
+// hid manual rows behind newer resolved ones.
+// 待处理记录必须完整返回；仅已结清历史截断，避免新结清记录挤掉待人工记录。
+const billingUnresolvedCap, billingResolvedCap = 10000, 100
+
 func (s *SQLModelInvocationStore) ListBillingManual(ctx context.Context) ([]BillingRecordView, error) {
-	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT scope_hash,idempotency_key,fingerprint,billing_state,billing_recovery_json FROM platform_model_invocation WHERE billing_state IN ('manual','decision_pending','resolved') ORDER BY updated_at DESC LIMIT 100`))
+	unresolved, err := s.listBilling(ctx, `billing_state IN ('manual','decision_pending')`, billingUnresolvedCap+1)
+	if err != nil {
+		return nil, err
+	}
+	if len(unresolved) > billingUnresolvedCap {
+		return nil, errors.New("unresolved billing records exceed listing cap")
+	}
+	resolved, err := s.listBilling(ctx, `billing_state='resolved'`, billingResolvedCap)
+	if err != nil {
+		return nil, err
+	}
+	return append(unresolved, resolved...), nil
+}
+
+func (s *SQLModelInvocationStore) listBilling(ctx context.Context, filter string, limit int) ([]BillingRecordView, error) {
+	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT scope_hash,idempotency_key,fingerprint,billing_state,billing_recovery_json FROM platform_model_invocation WHERE `+filter+` ORDER BY updated_at DESC LIMIT ?`), limit)
 	if err != nil {
 		return nil, err
 	}

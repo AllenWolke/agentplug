@@ -14,7 +14,7 @@ RUN apt-get update \
     && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=build /workspace/examples/java-tickets/target/example-java-tickets-0.2.7.jar /app/agent.jar
+COPY --from=build /workspace/examples/java-tickets/target/example-java-tickets-0.3.0.jar /app/agent.jar
 COPY --from=build /workspace/examples/java-tickets/target/lib/ /app/lib/
 USER 65532:65532
 ENV PORT=8080

@@ -48,9 +48,10 @@ func (s *memoryModelInvocationStore) RecoverExpiredPreparations(_ context.Contex
 		if count >= 16 {
 			break
 		}
-		if r.Status == "running" && r.AttemptToken != "" && r.Recovery == nil && !r.PreparationUntil.After(time.Now()) {
+		if r.Status == "running" && r.AttemptToken != "" && r.Recovery == nil && r.Response == nil && !r.PreparationUntil.After(time.Now()) {
 			r.Status = "failed"
 			r.AttemptToken = ""
+			r.PreparationUntil = time.Time{}
 			s.records[key] = r
 			count++
 		}
@@ -65,7 +66,7 @@ AND billing_recovery_json IS NULL AND response_json IS NULL AND preparation_dead
 ORDER BY preparation_deadline,scope_hash,idempotency_key LIMIT 16 FOR UPDATE SKIP LOCKED
 )
 UPDATE platform_model_invocation AS invocation
-SET status='failed',billing_state='',invocation_token='',preparation_deadline=NULL,updated_at=clock_timestamp()
+SET status='failed',billing_state='done',invocation_token='',preparation_deadline=NULL,updated_at=clock_timestamp()
 FROM expired WHERE invocation.scope_hash=expired.scope_hash AND invocation.idempotency_key=expired.idempotency_key`))
 	if err != nil {
 		return 0, err
@@ -77,11 +78,12 @@ func (s *memoryModelInvocationStore) FailPreparation(_ context.Context, scope, k
 	defer s.mu.Unlock()
 	key = scope + "\x00" + key
 	r, ok := s.records[key]
-	if !ok || r.Status != "running" || r.Fingerprint != fingerprint || r.AttemptToken != token || token == "" || r.Recovery != nil {
+	if !ok || r.Status != "running" || r.Fingerprint != fingerprint || r.AttemptToken != token || token == "" || r.Recovery != nil || r.Response != nil {
 		return ErrModelInvocationConflict
 	}
 	r.Status = "failed"
 	r.AttemptToken = ""
+	r.PreparationUntil = time.Time{}
 	s.records[key] = r
 	return nil
 }
@@ -89,7 +91,9 @@ func (s *SQLModelInvocationStore) FailPreparation(ctx context.Context, scope, ke
 	if token == "" {
 		return ErrModelInvocationConflict
 	}
-	result, err := s.db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_model_invocation SET status='failed',billing_state='',invocation_token='',preparation_deadline=NULL,updated_at=clock_timestamp() WHERE scope_hash=? AND idempotency_key=? AND fingerprint=? AND invocation_token=? AND status='running' AND billing_state='preparing' AND billing_recovery_json IS NULL`), scope, key, fingerprint, token)
+	// This transition is available only before a durable send intent exists.
+	// "done" closes an unsent preparation; it does not settle provider usage.
+	result, err := s.db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_model_invocation SET status='failed',billing_state='done',invocation_token='',preparation_deadline=NULL,updated_at=clock_timestamp() WHERE scope_hash=? AND idempotency_key=? AND fingerprint=? AND invocation_token=? AND status='running' AND billing_state='preparing' AND billing_recovery_json IS NULL AND response_json IS NULL`), scope, key, fingerprint, token)
 	if err != nil {
 		return err
 	}

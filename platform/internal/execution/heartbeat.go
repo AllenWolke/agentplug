@@ -37,12 +37,12 @@ func (d *Dispatcher) startHeartbeat(ctx context.Context, cancel context.CancelFu
 					// the child is still the caller's work; cancelling here
 					// kills that child. The next tick repeats the same check.
 					if err != nil && !heartbeatLockWait(err) {
-						log.Printf("execution heartbeat denied run_id=%s stage=ancestry error_type=%s", run.ID, heartbeatErrorType(err))
+						log.Printf("execution heartbeat denied run_id=%q stage=ancestry error_type=%s", run.ID, heartbeatErrorType(err))
 						cancel()
 						return
 					}
 					if err != nil {
-						log.Printf("execution heartbeat ancestry deferred run_id=%s error_type=%s", run.ID, heartbeatErrorType(err))
+						log.Printf("execution heartbeat ancestry deferred run_id=%q error_type=%s", run.ID, heartbeatErrorType(err))
 					}
 				}
 				if d.authorize != nil {
@@ -53,12 +53,12 @@ func (d *Dispatcher) startHeartbeat(ctx context.Context, cancel context.CancelFu
 					// that only exhausts the lock wait is not a grant change;
 					// the finished comparison still cancels on a later tick.
 					if err != nil && !heartbeatLockWait(err) {
-						log.Printf("execution heartbeat denied run_id=%s stage=authorization error_type=%s", run.ID, heartbeatErrorType(err))
+						log.Printf("execution heartbeat denied run_id=%q stage=authorization error_type=%s", run.ID, heartbeatErrorType(err))
 						cancel()
 						return
 					}
 					if err != nil {
-						log.Printf("execution heartbeat authorization deferred run_id=%s error_type=%s", run.ID, heartbeatErrorType(err))
+						log.Printf("execution heartbeat authorization deferred run_id=%q error_type=%s", run.ID, heartbeatErrorType(err))
 					}
 				}
 				var err error
@@ -72,7 +72,16 @@ func (d *Dispatcher) startHeartbeat(ctx context.Context, cancel context.CancelFu
 					_, err = d.repository.Heartbeat(run.ID, run.LeaseToken, run.Revision, time.Now().UTC(), ttl)
 				}
 				if err != nil {
-					log.Printf("execution heartbeat failed run_id=%s stage=lease error_type=%s", run.ID, heartbeatErrorType(err))
+					// A lease heartbeat that only exhausted a row-lock wait must
+					// not cancel a healthy run: under concurrency the lease row is
+					// contended exactly like the ancestry/authorization rows, and
+					// the lease TTL is twelve minutes, so the next tick can retry.
+					// A real lease conflict (lost/expired token) still cancels.
+					if heartbeatLockWait(err) {
+						log.Printf("execution heartbeat lease deferred run_id=%q error_type=%s", run.ID, heartbeatErrorType(err))
+						continue
+					}
+					log.Printf("execution heartbeat failed run_id=%q stage=lease error_type=%s", run.ID, heartbeatErrorType(err))
 					cancel()
 					return
 				}
@@ -83,16 +92,23 @@ func (d *Dispatcher) startHeartbeat(ctx context.Context, cancel context.CancelFu
 }
 
 // heartbeatLockWait is a tick that expired or was canceled while waiting for a
-// row lock. context.Canceled alone is the run stopping and still cancels.
+// row lock, or that hit a transient database/resource class (connection loss,
+// serialization failure, resource exhaustion, internal error). None of these
+// prove a permission change or a lost lease, so the next tick retries instead
+// of cancelling a healthy run. context.Canceled alone is the run stopping and
+// still cancels.
 func heartbeatLockWait(err error) bool {
 	if err == nil {
 		return false
 	}
 	var sqlError interface{ SQLState() string }
 	if errors.As(err, &sqlError) {
-		switch sqlError.SQLState() {
-		case "55P03", "57014":
-			return true
+		state := sqlError.SQLState()
+		if len(state) >= 2 {
+			switch state[:2] {
+			case "55", "57", "40", "XX", "08", "53":
+				return true
+			}
 		}
 	}
 	return errors.Is(err, context.DeadlineExceeded)

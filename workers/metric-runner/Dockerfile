@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.10-bookworm AS build
 ARG TARGETOS=linux
 ARG TARGETARCH
 ENV GOPROXY=https://goproxy.cn|https://mirrors.aliyun.com/goproxy/|https://proxy.golang.org,direct

@@ -25,6 +25,9 @@ func ModelBudgetExecutionAuthority(ctx context.Context, scope sharedkernel.Scope
 		return sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, usagecost.ErrBudgetScopeMismatch
 	}
 	if err := bound.Execution.Check(ctx); err != nil {
+		if ctx.Err() != nil {
+			return sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, ctx.Err()
+		}
 		if budgetAdmissionDeferred(err) {
 			return sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, err
 		}
@@ -41,6 +44,9 @@ func ModelBudgetAdmissionAuthority(ctx context.Context, request usagecost.ModelB
 		return sharedkernel.Scope{}, sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, 0, usagecost.ErrBudgetScopeMismatch
 	}
 	if err := bound.Execution.Check(ctx); err != nil {
+		if ctx.Err() != nil {
+			return sharedkernel.Scope{}, sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, 0, ctx.Err()
+		}
 		if budgetAdmissionDeferred(err) {
 			return sharedkernel.Scope{}, sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, 0, err
 		}

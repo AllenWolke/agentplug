@@ -317,20 +317,47 @@ func (r *Runner) execute(ctx context.Context, run *Resource) error {
 	data := request.Dataset()
 	metrics := request.Metrics()
 	results := make([]CaseResultData, len(data.Cases))
+	reuse := newCaseReuseResolver(r.store, request)
+	prepared := map[int]CaseResultData{}
+	// Validate the entire reuse set before any new Agent/model call. A bad
+	// tail cannot spend on a valid prefix or change the independent gold.
+	for i, input := range data.Cases {
+		sample, err := decodeEvaluationCase(input)
+		if err != nil {
+			return snapshotInvalid("invalid evaluation case")
+		}
+		if sample.Reuse != nil {
+			// Preflight may include many remote authority reads. Renew with the
+			// same CAS fence before each one, rather than spending the whole
+			// lease validating a large reuse set before its first commit.
+			if err := r.renewEvaluationLease(ctx, run); err != nil {
+				return err
+			}
+			if err := r.authorizeCaseReuse(ctx, request, i, sample.Input); err != nil {
+				return err
+			}
+			value, err := reuse.prepare(ctx, input, i)
+			if err != nil {
+				return err
+			}
+			prepared[i] = value
+		}
+	}
 	for i, input := range data.Cases {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		runData, err := decodeRunData(run.Data)
-		if err != nil || !validID(runData.LeaseToken) {
-			return snapshotInvalid("run lease disappeared during execution")
-		}
-		refreshed, err := r.store.RenewRunLease(ctx, run.Scope, run.ID, run.Revision, runData.LeaseToken, time.Now().UTC().Add(r.options.LeaseDuration))
-		if err != nil {
+		if err := r.renewEvaluationLease(ctx, run); err != nil {
 			return err
 		}
-		*run = refreshed
+		runData, _ := decodeRunData(run.Data)
 		inputHash := Checksum(input)
+		if _, ok := prepared[i]; ok {
+			sample, _ := decodeEvaluationCase(input)
+			if err := r.authorizeCaseReuse(ctx, request, i, sample.Input); err != nil {
+				return err
+			}
+		}
 		caseID := caseResultID(run.ID, i)
 		caseRow, getErr := r.store.Get(ctx, run.Scope, KindCaseResult, caseID)
 		if getErr == nil {
@@ -343,9 +370,39 @@ func (r *Runner) execute(ctx context.Context, run *Resource) error {
 					return snapshotInvalid("persisted case metric binding differs from the frozen suite")
 				}
 			}
+			if value, ok := prepared[i]; ok {
+				if err := verifyPreparedCaseReuse(value, stored); err != nil {
+					return err
+				}
+			} else if stored.ReusedFrom != nil {
+				return snapshotInvalid("unexpected case reuse provenance")
+			}
 			results[i] = stored
 		} else if !errors.Is(getErr, ErrNotFound) {
 			return getErr
+		} else if value, ok := prepared[i]; ok {
+			value.ProducedAt = time.Now().UTC()
+			raw, _ := json.Marshal(value)
+			row := Resource{ID: caseID, Kind: KindCaseResult, Scope: run.Scope, Status: "completed", Revision: 1,
+				CreatedBy: "platform-evaluation-product", CreatedAt: value.ProducedAt, UpdatedAt: value.ProducedAt, Data: raw}
+			if err := r.store.CommitRunCase(ctx, run.Scope, run.ID, run.Revision, runData.LeaseToken, row); err != nil {
+				if !errors.Is(err, ErrConflict) {
+					return err
+				}
+				existing, er := getScopedResource(ctx, r.store, run.Scope, KindCaseResult, caseID)
+				if er != nil {
+					return er
+				}
+				stored, er := decodeCaseResult(existing)
+				if er != nil {
+					return er
+				}
+				if er = verifyPreparedCaseReuse(value, stored); er != nil {
+					return er
+				}
+				value = stored
+			}
+			results[i] = value
 		} else {
 			// Keep gold labels in the evaluator only. The Agent receives the
 			// input object, never the full dataset case or expected answer.
@@ -392,6 +449,10 @@ func (r *Runner) execute(ctx context.Context, run *Resource) error {
 				caseData.Metrics = append(caseData.Metrics, normalizeMetricOutcome(metric, outcome, scoreErr))
 			}
 			applyMetricGrounding(&caseData, metrics)
+			if independentReviewMeasured(request.AgentID(), request.AgentVersionID(), invocation, metrics, input) {
+				caseData.MeasurementProtocol = IndependentVerdictProtocol
+				caseData.ExecutionRunID = invocation.ExecutionRunID
+			}
 			caseCancel()
 			caseBytes, _ := json.Marshal(caseData)
 			caseRow = Resource{ID: caseID, Kind: KindCaseResult, Scope: run.Scope, Status: "completed", Revision: 1, CreatedBy: "platform-evaluation-product", CreatedAt: caseData.ProducedAt, UpdatedAt: caseData.ProducedAt, Data: caseBytes}
@@ -416,6 +477,19 @@ func (r *Runner) execute(ctx context.Context, run *Resource) error {
 		}
 	}
 	return r.completeRun(ctx, run, request, data, metrics, results)
+}
+
+func (r *Runner) renewEvaluationLease(ctx context.Context, run *Resource) error {
+	data, err := decodeRunData(run.Data)
+	if err != nil || !validID(data.LeaseToken) {
+		return snapshotInvalid("run lease disappeared during execution")
+	}
+	refreshed, err := r.store.RenewRunLease(ctx, run.Scope, run.ID, run.Revision, data.LeaseToken, time.Now().UTC().Add(r.options.LeaseDuration))
+	if err != nil {
+		return err
+	}
+	*run = refreshed
+	return nil
 }
 
 func (r *Runner) saveProgress(ctx context.Context, run *Resource, completed, failed int) error {
@@ -444,7 +518,9 @@ func (r *Runner) completeRun(ctx context.Context, run *Resource, request Executi
 	providerMode := "real"
 	citation, domain, artifactsPresent := "passed", "passed", true
 	ids := make([]string, len(cases))
+	independent := len(cases) > 0
 	for i, result := range cases {
+		independent = independent && result.MeasurementProtocol == IndependentVerdictProtocol && validID(result.ExecutionRunID)
 		ids[i] = caseResultID(run.ID, i)
 		if result.ProviderMode != "real" {
 			providerMode = result.ProviderMode
@@ -466,6 +542,9 @@ func (r *Runner) completeRun(ctx context.Context, run *Resource, request Executi
 		ProviderMode: providerMode, SourceType: dataset.SourceType, SampleCount: len(cases), Metrics: metricOutcomes,
 		MetricsPresent: len(metricOutcomes) == len(metrics), ArtifactsPresent: artifactsPresent,
 		CitationGrounding: citation, DomainGrounding: domain, ProducedAt: produced, CaseResultIDs: ids,
+	}
+	if independent {
+		evidenceData.MeasurementProtocol = IndependentVerdictProtocol
 	}
 	reportHash, err := evaluationReportHash(evidenceData, cases)
 	if err != nil {
@@ -593,6 +672,9 @@ func aggregateCaseMetrics(metrics []MetricSnapshot, cases []CaseResultData) []Me
 type BuiltinMetricEvaluator struct{}
 
 func (BuiltinMetricEvaluator) EvaluateMetric(_ context.Context, metric MetricSnapshot, input, output json.RawMessage) (MetricOutcome, error) {
+	if metric.Kind == "independent_verdict" {
+		return EvaluateIndependentVerdict(metric, input, output)
+	}
 	if metric.Kind == "agent_assertions" {
 		return EvaluateAgentAssertions(context.Background(), metric, input, output)
 	}
@@ -700,6 +782,12 @@ func decodeCaseResult(row Resource) (CaseResultData, error) {
 	if data.ProducedAt.IsZero() || (data.ProviderMode != "real" && data.ProviderMode != "mock" && data.ProviderMode != "replay" && data.ProviderMode != "synthetic" && data.ProviderMode != "unknown") ||
 		(data.CitationGrounding != "passed" && data.CitationGrounding != "failed" && data.CitationGrounding != "unknown") ||
 		(data.DomainGrounding != "passed" && data.DomainGrounding != "failed" && data.DomainGrounding != "unknown") {
+		return CaseResultData{}, ErrSnapshotInvalid
+	}
+	if data.MeasurementProtocol != "" && (data.MeasurementProtocol != IndependentVerdictProtocol || !validID(data.ExecutionRunID)) {
+		return CaseResultData{}, ErrSnapshotInvalid
+	}
+	if data.ReusedFrom != nil && !validCaseReuseReference(*data.ReusedFrom) {
 		return CaseResultData{}, ErrSnapshotInvalid
 	}
 	for _, metric := range data.Metrics {

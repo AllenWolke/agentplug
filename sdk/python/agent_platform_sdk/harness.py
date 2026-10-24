@@ -1,4 +1,5 @@
 """Persistent governed loop; uncertain dispatch never triggers automatic replay."""
+import asyncio
 import copy
 import hashlib
 import json
@@ -11,6 +12,7 @@ from .recovery_context import (authorize_runtime_recovery_start, complete_runtim
     record_runtime_recovery_checkpoint_save, validate_runtime_recovery_checkpoint)
 
 STATE_SCHEMA = "schema://agentplug/harness-loop/v1"
+EXTENDED_STATE_SCHEMA = "schema://agentplug/harness-loop/v2"
 
 
 def _json(value):
@@ -19,6 +21,32 @@ def _json(value):
 
 def _stop(code):
     return GatewayError(code, "harness stopped at a governed boundary")
+
+
+async def _load_entry(client, key, schema, timeout):
+    """Overlap two independent, currently authorized reads, never a send.
+
+    No permission, policy or checkpoint is cached. Both reads must succeed
+    before state validation or any mutation; CAS still owns write races. An
+    error/cancellation drains both tasks and keeps the original exception.
+    """
+    policy_task = asyncio.create_task(client.load_harness_policy(timeout=min(float(timeout), 10.0)))
+    checkpoint_task = asyncio.create_task(client.load_checkpoint("harness", key, schema,
+        timeout=float(timeout)))
+    try:
+        policy = await policy_task
+        entry_started = time.monotonic()
+        try:
+            loaded = await asyncio.wait_for(checkpoint_task,
+                timeout=min(float(timeout), policy["limits"]["max_elapsed_seconds"]))
+        except TimeoutError as error:
+            raise _stop("UPSTREAM_TIMEOUT") from error
+        return policy, loaded, entry_started
+    finally:
+        for task in (policy_task, checkpoint_task):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(policy_task, checkpoint_task, return_exceptions=True)
 
 
 def _budget_exhausted(result):
@@ -35,7 +63,8 @@ def _budget_exhausted(result):
 def _budget_output(previous, reason="budget_exhausted"):
     output = {"completion_status": "incomplete", "finish_reason": reason}
     output.update({key: copy.deepcopy(value) for key, value in (previous or {}).items()
-                   if key in ("text", "model", "usage", "billing", "run_budget", "prompt_template_hash")})
+                   if key in ("text", "model", "usage", "billing", "run_budget", "prompt_template_hash",
+                              "routing", "route_execution", "context_cache", "response_schema", "model_version_id", "provider_id", "model_id", "step_id")})
     if reason == "budget_exhausted":
         output["termination_reason"] = "MODEL_BUDGET_EXCEEDED"
     return output
@@ -45,7 +74,8 @@ def _limit_output(previous, finish_reason):
     output = {"completion_status": "incomplete", "termination_reason": "HARNESS_LIMIT_EXCEEDED",
               "finish_reason": finish_reason}
     output.update({key: copy.deepcopy(value) for key, value in (previous or {}).items()
-                   if key in ("text", "model", "usage", "billing", "run_budget", "prompt_template_hash")})
+                   if key in ("text", "model", "usage", "billing", "run_budget", "prompt_template_hash",
+                              "routing", "route_execution", "context_cache", "response_schema", "model_version_id", "provider_id", "model_id", "step_id")})
     return output
 
 
@@ -101,13 +131,30 @@ def _skill_identifier(value):
 
 
 async def run_harness(client, input, *, key, max_rounds=4, max_tool_calls=8,
-                      confirmation_token="", timeout=30):
+                      confirmation_token="", timeout=30, action_validator=None,
+                      progress_evaluator=None, extension_id="", deadline_ms=None):
+    """Run published functions with optional, deterministic business guards.
+
+    Guards receive copies and must not perform I/O. ``action_validator`` returns
+    exactly True to admit an operation. ``progress_evaluator`` returns None to
+    continue or an outcome with completion_status completed/incomplete to stop.
+    An extension identifier pins their business semantics to the checkpoint.
+    Extensions use v2; calls without extensions retain the original v1 format.
+    """
+    extended = any(value is not None for value in (action_validator, progress_evaluator, deadline_ms)) or bool(extension_id)
     if (not isinstance(key, str) or not key or type(max_rounds) is not int or not 1 <= max_rounds <= 8
             or type(max_tool_calls) is not int or not 1 <= max_tool_calls <= 16
             or not isinstance(confirmation_token, str) or len(confirmation_token.encode()) > 8192
             or type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0):
         raise _stop("HARNESS_CONFIG_INVALID")
+    if (any(value is not None and not callable(value) for value in (action_validator, progress_evaluator))
+            or (extended and (not isinstance(extension_id, str)
+                             or re.fullmatch(r"[A-Za-z0-9_.:/-]{1,128}", extension_id) is None))
+            or (deadline_ms is not None and (type(deadline_ms) is not int or not 0 < deadline_ms <= (1 << 53) - 1))):
+        raise _stop("HARNESS_CONFIG_INVALID")
+    schema = EXTENDED_STATE_SCHEMA if extended else STATE_SCHEMA
     current = json.loads(_json(input))
+    current.pop("deadline_ms", None)  # Only the saved, negotiated loop deadline is sent.
     skill_requests = current.pop("skill_requests", [])
     current.pop("skill_bindings", None)
     if not isinstance(skill_requests, list) or len(skill_requests) > 4:
@@ -130,24 +177,30 @@ async def run_harness(client, input, *, key, max_rounds=4, max_tool_calls=8,
     # This is deliberately the original v1 fingerprint. Runtime policy changes
     # bind through the separate policy fields and never rewrite input identity.
     digest = hashlib.sha256(_json([input, max_rounds, max_tool_calls]).encode()).hexdigest()
-    policy = await client.load_harness_policy(timeout=min(float(timeout), 10.0))
-    entry_started = time.monotonic()
+    if extended:
+        digest = hashlib.sha256(_json([input, max_rounds, max_tool_calls, extension_id,
+                                      action_validator is not None, progress_evaluator is not None,
+                                      deadline_ms]).encode()).hexdigest()
+    policy, loaded, entry_started = await _load_entry(client, key, schema, timeout)
     limits = copy.deepcopy(policy["limits"])
     effective_rounds = min(max_rounds, limits["max_rounds"])
     effective_tool_calls = min(max_tool_calls, limits["max_tool_calls"])
     deadline_default = policy["server_time_ms"] + limits["max_elapsed_seconds"] * 1000
+    if deadline_ms is not None:
+        deadline_default = min(deadline_default, deadline_ms)
 
     state = {"version": "harness-loop/v1", "input_hash": digest, "phase": "model",
              "round": 0, "tool_count": 0, "messages": messages, "pending": [],
              "loop_policy_hash": policy["policy_hash"], "loop_limits": copy.deepcopy(limits),
              "loop_deadline_ms": deadline_default, "tool_repeats": {}, "repeat_counted_call_id": ""}
-    loaded = await client.load_checkpoint("harness", key, STATE_SCHEMA,
-                                          timeout=min(float(timeout), limits["max_elapsed_seconds"]))
-    validate_runtime_recovery_checkpoint("harness", key, STATE_SCHEMA, loaded)
+    if extended:
+        state.update(version="harness-loop/v2", extension_id=extension_id,
+                     model_receipts=[], observations=[])
+    validate_runtime_recovery_checkpoint("harness", key, schema, loaded)
     revision = 0
     checkpoint = loaded.get("checkpoint")
     if checkpoint is None:
-        authorize_runtime_recovery_start("harness", key, STATE_SCHEMA, digest)
+        authorize_runtime_recovery_start("harness", key, schema, digest)
     if checkpoint is not None:
         if (not isinstance(checkpoint, dict) or type(checkpoint.get("revision")) is not int
                 or checkpoint["revision"] < 1):
@@ -157,6 +210,13 @@ async def run_harness(client, input, *, key, max_rounds=4, max_tool_calls=8,
                 or previous.get("input_hash") != digest):
             raise _stop("HARNESS_STATE_REJECTED")
         revision, state = checkpoint["revision"], copy.deepcopy(previous)
+
+    if extended:
+        if (state.get("extension_id") != extension_id
+                or not isinstance(state.get("model_receipts"), list) or len(state["model_receipts"]) > max_rounds
+                or not isinstance(state.get("observations"), list) or len(state["observations"]) != state.get("tool_count")
+                or any(not isinstance(item, dict) for item in state["model_receipts"] + state["observations"])):
+            raise _stop("HARNESS_STATE_REJECTED")
 
     phase = state.get("phase")
     if (phase not in ("model", "model_dispatch", "tool", "approval_required", "tool_dispatch",
@@ -232,9 +292,9 @@ async def run_harness(client, input, *, key, max_rounds=4, max_tool_calls=8,
         save_timeout = min(float(timeout), remaining) if remaining > 0 else min(float(timeout), 5.0)
         if force and remaining <= 0:
             save_timeout = min(float(timeout), 5.0)
-        receipt = await client.save_checkpoint("harness", key, STATE_SCHEMA, copy.deepcopy(state),
+        receipt = await client.save_checkpoint("harness", key, schema, copy.deepcopy(state),
                                               revision, f"loop-{revision + 1}", timeout=save_timeout)
-        record_runtime_recovery_checkpoint_save("harness", key, STATE_SCHEMA, revision, receipt)
+        record_runtime_recovery_checkpoint_save("harness", key, schema, revision, receipt)
         if receipt.get("checkpoint", {}).get("revision") != revision + 1:
             raise _stop("HARNESS_STATE_REJECTED")
         revision += 1
@@ -359,8 +419,14 @@ async def run_harness(client, input, *, key, max_rounds=4, max_tool_calls=8,
             output = state.get("output", {})
             status = "incomplete" if output.get("completion_status") == "incomplete" else "completed"
             if status == "completed":
-                await complete_runtime_recovery_step("harness", key, STATE_SCHEMA)
-            return {"status": status, "output": output}
+                await complete_runtime_recovery_step("harness", key, schema)
+            response = {"status": status, "output": output}
+            if extended:
+                response["execution"] = {"version": "harness-execution/v2", "extension_id": extension_id,
+                    "deadline_ms": state["loop_deadline_ms"], "decision_count": len(state["model_receipts"]),
+                    "tool_count": state["tool_count"], "model_receipts": copy.deepcopy(state["model_receipts"]),
+                    "observations": copy.deepcopy(state["observations"])}
+            return response
 
         if phase not in ("model_dispatch", "tool_dispatch"):
             try:
@@ -398,6 +464,8 @@ async def run_harness(client, input, *, key, max_rounds=4, max_tool_calls=8,
                     raise _stop("HARNESS_CONTEXT_REJECTED")
                 current.update(messages=prepared["messages"], idempotency_key=step_key("model"),
                                prompt_template_hash=prepared["prompt_template_hash"])
+                if prepared.get("model_route_execution") == "model-route-execution/v1":
+                    current["deadline_ms"] = state.get("loop_deadline_ms", deadline_default)
                 if state.get("skill_bindings"):
                     current["skill_bindings"] = copy.deepcopy(state["skill_bindings"])
                 state.update(phase="model_dispatch", prompt_hash=prepared["prompt_template_hash"],
@@ -458,6 +526,9 @@ async def run_harness(client, input, *, key, max_rounds=4, max_tool_calls=8,
             if legacy_state and not all(field in state for field in _POLICY_STATE_FIELDS):
                 await bind_legacy_state()
             state.pop("model_request", None)
+            if extended:
+                state["model_receipts"].append({"idempotency_key": request["idempotency_key"],
+                                               "receipt": copy.deepcopy(result)})
             calls = result.get("tool_calls")
             if _budget_exhausted(result) and isinstance(calls, list) and calls:
                 state.update(phase="done", pending=[], repeat_counted_call_id="",
@@ -492,6 +563,18 @@ async def run_harness(client, input, *, key, max_rounds=4, max_tool_calls=8,
                 seen.add(model_id)
                 pending_operations.append({"name": tool, "call_id": step_key(model_id),
                                            "payload": payload, "model_call_id": model_id})
+            if action_validator is not None:
+                # Validate the whole proposed batch before invoking its first
+                # member: a later forbidden operation cannot be hidden behind
+                # an earlier allowed read.
+                view = {"round": state["round"], "tool_count": state["tool_count"],
+                        "observations": copy.deepcopy(state["observations"])}
+                for operation in pending_operations:
+                    if action_validator(copy.deepcopy(operation), copy.deepcopy(view)) is not True:
+                        state.update(phase="done", pending=[], repeat_counted_call_id="",
+                                     output=_limit_output(result, "action_rejected"))
+                        await save(force=True)
+                        raise _stop("HARNESS_ACTION_REJECTED")
             if not policy_mismatch and state["round"] >= effective_rounds - 1:
                 try:
                     await finish_limit("round_limit", result)
@@ -527,6 +610,11 @@ async def run_harness(client, input, *, key, max_rounds=4, max_tool_calls=8,
                 return {"status": "approval_required", "pending": pending_view}
             original_phase = phase
             if not recovering:
+                if action_validator is not None:
+                    view = {"round": state["round"], "tool_count": state["tool_count"],
+                            "observations": copy.deepcopy(state["observations"])}
+                    if action_validator(copy.deepcopy(operation), view) is not True:
+                        raise _stop("HARNESS_ACTION_REJECTED")
                 if state["tool_count"] >= effective_tool_calls:
                     try:
                         await finish_limit("tool_limit")
@@ -614,12 +702,23 @@ async def run_harness(client, input, *, key, max_rounds=4, max_tool_calls=8,
             state["messages"].append({"role": "tool", "tool_call_id": operation["model_call_id"],
                                       "content": _json(observation)})
             state["tool_count"] += 1
+            if extended:
+                state["observations"].append({"operation": copy.deepcopy(operation),
+                                               "observation": copy.deepcopy(observation)})
             state["repeat_counted_call_id"] = ""
             state["pending"].pop(0)
             state["phase"] = "tool"
             if not state["pending"]:
                 state["round"] += 1
                 state["phase"] = "model"
+            if progress_evaluator is not None:
+                view = {"round": state["round"], "tool_count": state["tool_count"],
+                        "observations": copy.deepcopy(state["observations"])}
+                outcome = progress_evaluator(copy.deepcopy(observation), view)
+                if outcome is not None:
+                    if not isinstance(outcome, dict) or outcome.get("completion_status") not in ("completed", "incomplete"):
+                        raise _stop("HARNESS_PROGRESS_REJECTED")
+                    state.update(phase="done", pending=[], output=copy.deepcopy(outcome))
             await save(force=True)
         else:
             raise _stop("HARNESS_STATE_REJECTED")

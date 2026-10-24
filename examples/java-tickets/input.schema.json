@@ -1,9 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "schema://example-java-tickets/input/v2",
+  "$id": "schema://example-java-tickets/input/v3",
   "type": "object",
   "additionalProperties": false,
-  "required": ["ticket_id", "summary"],
+  "required": [
+    "ticket_id",
+    "summary"
+  ],
   "properties": {
     "ticket_id": {
       "type": "string",

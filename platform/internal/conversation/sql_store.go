@@ -483,7 +483,7 @@ func (s *SQLStore) List(ctx context.Context, scope Scope, query Query) (Page, er
 	if err := s.db.QueryRowContext(ctx, sqlutil.Bind(`SELECT COUNT(*) FROM platform_conversation_session WHERE `+where), args...).Scan(&total); err != nil {
 		return Page{}, fmt.Errorf("count conversations: %w", err)
 	}
-	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT id,kind,agent_id,agent_version_id,installation_id,title,preview,owner_id,status,message_count,can_continue FROM platform_conversation_session WHERE `+where+` ORDER BY updated_at DESC,id DESC LIMIT ? OFFSET ?`), append(args, query.PageSize, (query.Page-1)*query.PageSize)...)
+	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT id,kind,agent_id,agent_version_id,installation_id,title,preview,owner_id,status,message_count,can_continue,updated_at FROM platform_conversation_session WHERE `+where+` ORDER BY updated_at DESC,id DESC LIMIT ? OFFSET ?`), append(args, query.PageSize, (query.Page-1)*query.PageSize)...)
 	if err != nil {
 		return Page{}, fmt.Errorf("list conversations: %w", err)
 	}
@@ -491,7 +491,7 @@ func (s *SQLStore) List(ctx context.Context, scope Scope, query Query) (Page, er
 	items := make([]Summary, 0)
 	for rows.Next() {
 		var item Summary
-		if err := rows.Scan(&item.ID, &item.Kind, &item.AgentID, &item.AgentVersionID, &item.InstallationID, &item.Title, &item.Preview, &item.OwnerID, &item.Status, &item.MessageCount, &item.CanContinue); err != nil {
+		if err := rows.Scan(&item.ID, &item.Kind, &item.AgentID, &item.AgentVersionID, &item.InstallationID, &item.Title, &item.Preview, &item.OwnerID, &item.Status, &item.MessageCount, &item.CanContinue, &item.UpdatedAt); err != nil {
 			return Page{}, fmt.Errorf("scan conversation: %w", err)
 		}
 		items = append(items, item)
@@ -533,7 +533,7 @@ func (s *SQLStore) SearchManaged(ctx context.Context, query ManagedSearchQuery) 
 		return Page{}, fmt.Errorf("count managed conversations: %w", err)
 	}
 	pageArgs := append(append([]any(nil), args...), query.PageSize, (query.Page-1)*query.PageSize)
-	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT id,kind,agent_id,agent_version_id,installation_id,title,preview,owner_id,status,message_count,can_continue
+	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT id,kind,agent_id,agent_version_id,installation_id,title,preview,owner_id,status,message_count,can_continue,updated_at
 		FROM platform_conversation_session WHERE `+where+` ORDER BY updated_at DESC,id DESC LIMIT ? OFFSET ?`), pageArgs...)
 	if err != nil {
 		return Page{}, fmt.Errorf("search managed conversations: %w", err)
@@ -542,7 +542,7 @@ func (s *SQLStore) SearchManaged(ctx context.Context, query ManagedSearchQuery) 
 	items := make([]Summary, 0)
 	for rows.Next() {
 		var item Summary
-		if err := rows.Scan(&item.ID, &item.Kind, &item.AgentID, &item.AgentVersionID, &item.InstallationID, &item.Title, &item.Preview, &item.OwnerID, &item.Status, &item.MessageCount, &item.CanContinue); err != nil {
+		if err := rows.Scan(&item.ID, &item.Kind, &item.AgentID, &item.AgentVersionID, &item.InstallationID, &item.Title, &item.Preview, &item.OwnerID, &item.Status, &item.MessageCount, &item.CanContinue, &item.UpdatedAt); err != nil {
 			return Page{}, fmt.Errorf("scan managed conversation: %w", err)
 		}
 		items = append(items, item)
@@ -576,7 +576,7 @@ func conversationDetail(ctx context.Context, reader conversationRowReader, scope
 		return Summary{}, ErrInvalidQuery
 	}
 	var item Summary
-	err := reader.QueryRowContext(ctx, sqlutil.Bind(`SELECT id,kind,agent_id,agent_version_id,installation_id,title,preview,owner_id,status,message_count,can_continue FROM platform_conversation_session WHERE id=? AND tenant_id=? AND department_id=? AND application_id=? AND principal_type=? AND owner_id=? AND status <> 'deleted'`), id, scope.TenantID, scope.DepartmentID, scope.ApplicationID, scope.PrincipalType, scope.historyOwner()).Scan(&item.ID, &item.Kind, &item.AgentID, &item.AgentVersionID, &item.InstallationID, &item.Title, &item.Preview, &item.OwnerID, &item.Status, &item.MessageCount, &item.CanContinue)
+	err := reader.QueryRowContext(ctx, sqlutil.Bind(`SELECT id,kind,agent_id,agent_version_id,installation_id,title,preview,owner_id,status,message_count,can_continue,updated_at FROM platform_conversation_session WHERE id=? AND tenant_id=? AND department_id=? AND application_id=? AND principal_type=? AND owner_id=? AND status <> 'deleted'`), id, scope.TenantID, scope.DepartmentID, scope.ApplicationID, scope.PrincipalType, scope.historyOwner()).Scan(&item.ID, &item.Kind, &item.AgentID, &item.AgentVersionID, &item.InstallationID, &item.Title, &item.Preview, &item.OwnerID, &item.Status, &item.MessageCount, &item.CanContinue, &item.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Summary{}, ErrNotFound
 	}

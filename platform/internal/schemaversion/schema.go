@@ -98,8 +98,24 @@ const DepartmentAgentAccessVersion uint64 = 2026101003
 const DepartmentAgentAccessManifest = "2026101003:2026101002+explicit-managed-department-agent-ceiling-head-entries-and-atomic-command-receipts+empty-ceiling-for-new-company-departments+runtime-and-version-constraints+per-action-source-generations-and-reviewed-ceiling-preview"
 const PermissionBatchVersion uint64 = 2026101004
 const PermissionBatchManifest = "2026101004:2026101003+durable-owner-scoped-permission-batches+per-subject-atomic-authorization-request-decision-audit-outbox-and-recoverable-results"
-const CurrentVersion uint64 = PermissionBatchVersion
-const Manifest = PermissionBatchManifest
+const AutoModelRoutingVersion uint64 = 2026101401
+const AutoModelRoutingManifest = "2026101401:2026100906+immutable-model-route-decisions+run-model-selection-bindings"
+const ContextCacheVersion uint64 = 2026101402
+const ContextCacheManifest = "2026101402:2026101401+optional-approved-cached-input-token-pricing"
+const ModelAvailabilityVersion uint64 = 2026101501
+const ModelAvailabilityManifest = "2026101501:2026101402+scoped-model-availability+fenced-recovery-probes"
+const ModelRouteExecutionVersion uint64 = 2026101502
+const ModelRouteExecutionManifest = "2026101502:2026101501+durable-logical-model-execution+retained-unknown-attempts"
+const CheckpointAdmissionVersion uint64 = 2026101503
+const CheckpointAdmissionManifest = "2026101503:2026101502+short-transaction-checkpoint-quota-admission"
+const ModelBudgetEvidenceVersion uint64 = 2026101801
+const ModelBudgetEvidenceManifest = "2026101801:2026101503+indexed-model-budget-reservation-evidence"
+const AccountingReadIndexesVersion uint64 = 2026102001
+const AccountingReadIndexesManifest = "2026102001:2026101801+active-accounting-reads+billing-tail+active-outbox-indexes"
+const PublicCapabilityUpgradeVersion uint64 = 2026102201
+const PublicCapabilityUpgradeManifest = "2026102201:2026101004+model-routing-cache-schema+checkpoint-capacity-and-admission+identity-packages+runtime-observation-and-evaluation"
+const CurrentVersion uint64 = PublicCapabilityUpgradeVersion
+const Manifest = PublicCapabilityUpgradeManifest
 
 func IndexCompensationChecksum() string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(IndexCompensationManifest)))
@@ -274,6 +290,8 @@ func knownPostgresPredecessor(version uint64, checksum string) bool {
 		return checksum == fmt.Sprintf("%x", sha256.Sum256([]byte(DepartmentAdministrationManifest)))
 	case CompanyAdministrationVersion:
 		return checksum == fmt.Sprintf("%x", sha256.Sum256([]byte(CompanyAdministrationManifest)))
+	case PermissionBatchVersion:
+		return checksum == fmt.Sprintf("%x", sha256.Sum256([]byte(PermissionBatchManifest)))
 	case DepartmentAgentAccessVersion:
 		return checksum == fmt.Sprintf("%x", sha256.Sum256([]byte(DepartmentAgentAccessManifest)))
 	default:
@@ -347,4 +365,32 @@ func ApplyPostgres(ctx context.Context, db *sql.DB, migrate func(context.Context
 		return err
 	}
 	return tx.Commit()
+}
+
+func ModelBudgetEvidenceChecksum() string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(ModelBudgetEvidenceManifest)))
+}
+
+func CheckpointAdmissionChecksum() string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(CheckpointAdmissionManifest)))
+}
+
+func ModelRouteExecutionChecksum() string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(ModelRouteExecutionManifest)))
+}
+
+func ModelAvailabilityChecksum() string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(ModelAvailabilityManifest)))
+}
+
+func ContextCacheChecksum() string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(ContextCacheManifest)))
+}
+
+func AutoModelRoutingChecksum() string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(AutoModelRoutingManifest)))
+}
+
+func KafkaDeadLetterChecksum() string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(KafkaDeadLetterManifest)))
 }

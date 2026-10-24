@@ -1,0 +1,2123 @@
+{
+  "schema": "agentplug-conditional-83-tests/v1",
+  "project": "agentplug",
+  "checked_at": "2026-10-23T07:32:58.323723+00:00",
+  "complete": true,
+  "baseline": {
+    "path": "docs/developer/zh/github-actions-verification-20261023.json",
+    "sha256": "d3eef60c56166feff41c328bd5d4f77ad0ccd2f3dab38d8f763d07a67ee30257",
+    "original_full_suite_unchanged": {
+      "passed": 3478,
+      "failed": 0,
+      "skipped": 83
+    }
+  },
+  "counts": {
+    "originally_skipped": 83,
+    "directly_passed": 82,
+    "auxiliary_verified_by_parent": 1,
+    "failed": 0,
+    "unresolved": 0
+  },
+  "model_budget": {
+    "authorization_maximum": 72,
+    "used_before": 59,
+    "used_this_round": 4,
+    "used_after": 63,
+    "remaining": 9,
+    "unknown_requests_resent": false
+  },
+  "scope": {
+    "existing_database_connected": false,
+    "existing_accounts_or_authorizations_changed": false,
+    "historical_unknown_records_processed": false,
+    "reference_project_accessed": false,
+    "native_business_end_to_end_reexecuted_this_round": false,
+    "github_hosted_run_executed": false,
+    "previous_native_acceptance": "docs/developer/zh/native-recovery-deployment-20261022.json"
+  },
+  "source_receipts": [
+    {
+      "group": "pg",
+      "local_receipt": "docs/新增需求/生产级评审/界面验证/专用PostgreSQL用例-conditional-20261023-pg01.json",
+      "sha256": "f018208ae43741aa365c76794299d51f8014f8dc72bf4f56f40645ce2eef41e7",
+      "logs": [
+        {
+          "path": ".local-secrets/test-evidence/dedicated-pg-f963e50065ab409ca1a9b3877a6f5b29/capability.jsonl",
+          "sha256": "2bbf7580af6bd16b8ebd48e5d174d40e7bf2b8a7731fd67c904a00095188b89a"
+        },
+        {
+          "path": ".local-secrets/test-evidence/dedicated-pg-f963e50065ab409ca1a9b3877a6f5b29/compensation.jsonl",
+          "sha256": "6f6675a29409033425f95778da6d4c533e7e5c8094bd49e17effd333ee9401af"
+        },
+        {
+          "path": ".local-secrets/test-evidence/dedicated-pg-f963e50065ab409ca1a9b3877a6f5b29/execution.jsonl",
+          "sha256": "d0eb1c4e9e545b560648d030c1578a11baa3efe55863e551683e736e214c8d96"
+        },
+        {
+          "path": ".local-secrets/test-evidence/dedicated-pg-f963e50065ab409ca1a9b3877a6f5b29/knowledge.jsonl",
+          "sha256": "413a3662f0cb96440a868af2a34614d573b07d27930d75c749f786d7e05feb1f"
+        },
+        {
+          "path": ".local-secrets/test-evidence/dedicated-pg-f963e50065ab409ca1a9b3877a6f5b29/notification.jsonl",
+          "sha256": "a780b154706aab850aa20f160921f19abad9046add46038121442608d96e8887"
+        },
+        {
+          "path": ".local-secrets/test-evidence/dedicated-pg-f963e50065ab409ca1a9b3877a6f5b29/platform.jsonl",
+          "sha256": "868af3e3f6b5cfef9bd0da54a77d8ce2d20ece063b94680732e151a07f96eafb"
+        }
+      ],
+      "complete": true
+    },
+    {
+      "group": "cache",
+      "local_receipt": ".tmp/conditional-contracts-conditional-20261023-cache02.json",
+      "sha256": "bb8bbad90ae28fe9925a9b75d359b1bb025f29ffea8aca39ad8d07126cf7d42d",
+      "logs": [
+        {
+          "path": ".local-secrets/test-evidence/conditional-sql-6db95b01cf9a433583f68912011cdbeb/modelgovernance.jsonl",
+          "sha256": "1ce62e595d5799d1d33d472678858af6b4b0d0d8072b8ed86538c478ec8f0289"
+        },
+        {
+          "path": ".local-secrets/test-evidence/conditional-sql-6db95b01cf9a433583f68912011cdbeb/capability.jsonl",
+          "sha256": "c46707e1496e94292f6792820b1020df082ecca39f6f1ed4fc7dcdfac892b84b"
+        },
+        {
+          "path": ".local-secrets/test-evidence/conditional-sql-6db95b01cf9a433583f68912011cdbeb/execution.jsonl",
+          "sha256": "002da2bbb6901ede0c49893a59150ee50b1b567a25836b2fe5488d0af6501920"
+        }
+      ],
+      "complete": true
+    },
+    {
+      "group": "interop",
+      "local_receipt": ".tmp/conditional-tests-20261023/interop-v2.json",
+      "sha256": "0ac350aa8fb429a593789971247aedfbae41babd5040782d3ff8827bd58cefbd",
+      "logs": [
+        {
+          "path": ".local-secrets/test-evidence/conditional-interop-99c524b268e649eeb3de14b3821d3e89/interop.jsonl",
+          "sha256": "7c6a6593ce59b61d1dea1e5b962e66fa7c5cc1b92324e706d7c75345bf7dfd0f"
+        }
+      ],
+      "complete": true
+    },
+    {
+      "group": "scale",
+      "local_receipt": "docs/新增需求/github作品改造/T3-04A-PostgreSQL权限规模实际验证-conditional-20261023-scale01.json",
+      "sha256": "e94a6df3d7ae85ab40c9ff818c524737d3620a58564dfae28e4f803b54fb9ddf",
+      "logs": [
+        {
+          "path": "docs/新增需求/github作品改造/T3-04A-PostgreSQL权限规模实际验证-conditional-20261023-scale01.log",
+          "sha256": "2b0fbc1e38b14bb4f731b3e31cc5f5c0d71d19be9a35f116129eb58df93526f9"
+        }
+      ],
+      "complete": true
+    },
+    {
+      "group": "restart",
+      "local_receipt": "docs/新增需求/github作品改造/T3-21-原始评测种子与真实平台进程重启验证-conditional-20261023-restart01.json",
+      "sha256": "a9be8b53aace9b2480e5fedb2f8240b3ae843c5a816e4072417218d96d458b3f",
+      "logs": [
+        {
+          "path": "docs/新增需求/github作品改造/T3-21-原始评测种子与真实平台进程重启验证-conditional-20261023-restart01.log",
+          "sha256": "06356f66c651652f50b66e7fdf9e843548791521f6e4716eb478d3edbcfb56e4"
+        }
+      ],
+      "complete": true
+    },
+    {
+      "group": "models",
+      "local_receipt": ".tmp/conditional-tests-20261023/models.json",
+      "sha256": "01d2e66d6ce6426492acd13727d9b8a9b00fd224f06b700015acb2c69583f3a1",
+      "logs": [
+        {
+          "path": ".local-secrets/test-evidence/conditional-models-7130cb9506764592b8f2e4cc8119baa3/modelgateway.log",
+          "sha256": "1b15590d0cf499ca905124f9a1d25706efbd302ebb01bd3e9bad35d37cb73170"
+        }
+      ],
+      "complete": true
+    },
+    {
+      "group": "dns",
+      "local_receipt": ".tmp/conditional-tests-20261023/dns.json",
+      "sha256": "8c767a498e461b7912e12645c6f0bd44e16e6aae56441760ea9a30670eec522b",
+      "logs": [
+        {
+          "path": ".local-secrets/test-evidence/conditional-dns-d81e0766657a4a8c90346305d7ca3d3c/modelgateway.log",
+          "sha256": "d9a95c9f40c5c6c795a2d1ec5b9e1e66a8360a5fa79e60d9abafc7fc8132349e"
+        }
+      ],
+      "complete": true
+    }
+  ],
+  "scale_metrics": {
+    "users": 10003,
+    "role_bindings": 90003,
+    "resource_grants": 10000,
+    "concurrency": 20,
+    "samples_per_operation": 500,
+    "list_p95_ms": 77.719811,
+    "decision_p95_ms": 15.705217,
+    "passed": true
+  },
+  "cases": [
+    {
+      "number": 1,
+      "package": "github.com/lexagent/platform/cmd/platform",
+      "test": "TestPostgresCancellationProgressCompositionDoesNotReadFrozenToolHistory",
+      "scenario": "取消进度读取保留冻结证据，使用实时停止栅栏",
+      "source": "platform/cmd/platform/cancellation_progress_postgres_test.go",
+      "line": 22,
+      "source_sha256": "2cc28a97d2e5fcbb34c890af1fcbc6733cadb07cd5fc1ca48eb99fe269100b06",
+      "original_skip_reason": "dedicated owned compensation database required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 2,
+      "package": "github.com/lexagent/platform/internal/agentgateway",
+      "test": "TestGRPCTransportInteropWithPythonBridge",
+      "scenario": "Go 客户端与真实 Python gRPC 桥互通",
+      "source": "platform/internal/agentgateway/grpc_transport_test.go",
+      "line": 405,
+      "source_sha256": "aa1a1595bb3cbc2004113af5f7f962e0cc3e9e22b9a3abd8d04c90fadb30ddcb",
+      "original_skip_reason": "set LEXAGENT_RUN_PYTHON_GRPC_INTEROP=1 to run the Go-to-Python gRPC interoperability test",
+      "reason_zh": "跨进程通信需要显式开关及 Python gRPC/ASGI 依赖，普通运行没有启用。",
+      "activation_conditions_zh": "`LEXAGENT_RUN_PYTHON_GRPC_INTEROP=1`（gRPC）或 `SDK_TCP_INTEROP_TEST=1`（TCP），安装 SDK 的 `grpc,asgi` 及 FastAPI。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "gRPC 不影响当前 HTTP 示例默认流程；TCP 契约保护 Python 执行中断及取消续接，本轮已补验。",
+      "status": "passed",
+      "group": "interop",
+      "evidence_group": "interop",
+      "parent_test": null
+    },
+    {
+      "number": 3,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/cleanup_missing",
+      "scenario": "沙箱清理证明和未知结果边界；分支 cleanup_missing",
+      "source": "platform/internal/capability/code_cancellation_postgres_test.go",
+      "line": 24,
+      "source_sha256": "1d809e720809b5814d2b42d0af3ea5aec61ac0b5e05b5b9c4c0c07e0e6cc48f4",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例启用沙箱时的停止和清理证明；未知或错绑定必须保持未确认，本轮已补验。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 4,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/completed",
+      "scenario": "沙箱清理证明和未知结果边界；分支 completed",
+      "source": "platform/internal/capability/code_cancellation_postgres_test.go",
+      "line": 24,
+      "source_sha256": "1d809e720809b5814d2b42d0af3ea5aec61ac0b5e05b5b9c4c0c07e0e6cc48f4",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例启用沙箱时的停止和清理证明；未知或错绑定必须保持未确认，本轮已补验。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 5,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/not_found",
+      "scenario": "沙箱清理证明和未知结果边界；分支 not_found",
+      "source": "platform/internal/capability/code_cancellation_postgres_test.go",
+      "line": 24,
+      "source_sha256": "1d809e720809b5814d2b42d0af3ea5aec61ac0b5e05b5b9c4c0c07e0e6cc48f4",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例启用沙箱时的停止和清理证明；未知或错绑定必须保持未确认，本轮已补验。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 6,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/tampered_metadata",
+      "scenario": "沙箱清理证明和未知结果边界；分支 tampered_metadata",
+      "source": "platform/internal/capability/code_cancellation_postgres_test.go",
+      "line": 24,
+      "source_sha256": "1d809e720809b5814d2b42d0af3ea5aec61ac0b5e05b5b9c4c0c07e0e6cc48f4",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例启用沙箱时的停止和清理证明；未知或错绑定必须保持未确认，本轮已补验。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 7,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/unknown",
+      "scenario": "沙箱清理证明和未知结果边界；分支 unknown",
+      "source": "platform/internal/capability/code_cancellation_postgres_test.go",
+      "line": 24,
+      "source_sha256": "1d809e720809b5814d2b42d0af3ea5aec61ac0b5e05b5b9c4c0c07e0e6cc48f4",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例启用沙箱时的停止和清理证明；未知或错绑定必须保持未确认，本轮已补验。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 8,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/wrong_binding",
+      "scenario": "沙箱清理证明和未知结果边界；分支 wrong_binding",
+      "source": "platform/internal/capability/code_cancellation_postgres_test.go",
+      "line": 24,
+      "source_sha256": "1d809e720809b5814d2b42d0af3ea5aec61ac0b5e05b5b9c4c0c07e0e6cc48f4",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例启用沙箱时的停止和清理证明；未知或错绑定必须保持未确认，本轮已补验。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 9,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestMemoryCompensationMissingBindingAndLateForwardAreDeniedPostgres",
+      "scenario": "拒绝记忆操作缺绑定及取消后的迟到写入",
+      "source": "platform/internal/capability/memory_compensation_postgres_test.go",
+      "line": 215,
+      "source_sha256": "a077ca738492e127915ec64a5c7a7decfc880016bed77ae5fc51ca96d12f46cf",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保护共享记忆及事务授权，不是 Agent 启动开关；三个示例原有业务职责不变，本轮补验通过。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 10,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestMemoryCompensationPreservesEvenSameValueConcurrentWriterPostgres",
+      "scenario": "记忆补偿保护同值并发写者",
+      "source": "platform/internal/capability/memory_compensation_postgres_test.go",
+      "line": 195,
+      "source_sha256": "a077ca738492e127915ec64a5c7a7decfc880016bed77ae5fc51ca96d12f46cf",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保护共享记忆及事务授权，不是 Agent 启动开关；三个示例原有业务职责不变，本轮补验通过。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 11,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestMemoryCompensationReverseOrderAndForwardIdempotencyPostgres",
+      "scenario": "记忆写入幂等及逆序撤销",
+      "source": "platform/internal/capability/memory_compensation_postgres_test.go",
+      "line": 170,
+      "source_sha256": "a077ca738492e127915ec64a5c7a7decfc880016bed77ae5fc51ca96d12f46cf",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保护共享记忆及事务授权，不是 Agent 启动开关；三个示例原有业务职责不变，本轮补验通过。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 12,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestMemoryCompensationTransactionContextOwnsAuthorizationCallbacksPostgres",
+      "scenario": "授权回调使用业务事务上下文",
+      "source": "platform/internal/capability/memory_compensation_postgres_test.go",
+      "line": 228,
+      "source_sha256": "a077ca738492e127915ec64a5c7a7decfc880016bed77ae5fc51ca96d12f46cf",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保护共享记忆及事务授权，不是 Agent 启动开关；三个示例原有业务职责不变，本轮补验通过。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 13,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestPostgresModelPerformanceKeepsHistoricalClockMismatchMissing",
+      "scenario": "历史观测时钟不一致时保留缺失，不捏造指标",
+      "source": "platform/internal/capability/model_performance_evidence_postgres_test.go",
+      "line": 15,
+      "source_sha256": "e85f93c1494995380b75e0cef5338a352b1d7c8b03400ce07424526f6404316b",
+      "original_skip_reason": "requires registered independent PostgreSQL fixture",
+      "reason_zh": "历史时钟不一致证据需要独立注册的 PostgreSQL 夹具；全量运行没有提供该专用连接。",
+      "activation_conditions_zh": "`PUBLIC_TEST_CONTEXT_CACHE_POSTGRES_DSN` 指向新库中的 `ctxcache_20261012_…` schema；独立迁移。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保护缓存价格升级与历史观测证据；不是示例启动开关，本轮验证通过，不改历史价格或回执。",
+      "status": "passed",
+      "group": "cache",
+      "evidence_group": "cache",
+      "parent_test": null
+    },
+    {
+      "number": 14,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/ack_lost",
+      "scenario": "可逆外部 API 持久化撤销与迟到写入；分支 ack_lost",
+      "source": "platform/internal/capability/reversible_api_postgres_test.go",
+      "line": 33,
+      "source_sha256": "b0872308d005ee0641f7a48e98515471055201a051174b65d8baf6e0df3fe486",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "覆盖可选可逆外部 API 的取消安全；三个示例默认流程不依赖该外部 API，启用时仍需独立端点和控制凭据。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 15,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/applied",
+      "scenario": "可逆外部 API 持久化撤销与迟到写入；分支 applied",
+      "source": "platform/internal/capability/reversible_api_postgres_test.go",
+      "line": 33,
+      "source_sha256": "b0872308d005ee0641f7a48e98515471055201a051174b65d8baf6e0df3fe486",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "覆盖可选可逆外部 API 的取消安全；三个示例默认流程不依赖该外部 API，启用时仍需独立端点和控制凭据。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 16,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/before_forward",
+      "scenario": "可逆外部 API 持久化撤销与迟到写入；分支 before_forward",
+      "source": "platform/internal/capability/reversible_api_postgres_test.go",
+      "line": 33,
+      "source_sha256": "b0872308d005ee0641f7a48e98515471055201a051174b65d8baf6e0df3fe486",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "覆盖可选可逆外部 API 的取消安全；三个示例默认流程不依赖该外部 API，启用时仍需独立端点和控制凭据。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 17,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/other_writer",
+      "scenario": "可逆外部 API 持久化撤销与迟到写入；分支 other_writer",
+      "source": "platform/internal/capability/reversible_api_postgres_test.go",
+      "line": 33,
+      "source_sha256": "b0872308d005ee0641f7a48e98515471055201a051174b65d8baf6e0df3fe486",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "覆盖可选可逆外部 API 的取消安全；三个示例默认流程不依赖该外部 API，启用时仍需独立端点和控制凭据。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 18,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/wrong_control_credential",
+      "scenario": "可逆外部 API 持久化撤销与迟到写入；分支 wrong_control_credential",
+      "source": "platform/internal/capability/reversible_api_postgres_test.go",
+      "line": 33,
+      "source_sha256": "b0872308d005ee0641f7a48e98515471055201a051174b65d8baf6e0df3fe486",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "覆盖可选可逆外部 API 的取消安全；三个示例默认流程不依赖该外部 API，启用时仍需独立端点和控制凭据。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 19,
+      "package": "github.com/lexagent/platform/internal/capability",
+      "test": "TestSQLToolPauseWorkerProcessHelper",
+      "scenario": "暂停工具工作进程的专用子入口",
+      "source": "platform/internal/capability/tool_process_pause_linux_test.go",
+      "line": 156,
+      "source_sha256": "77d47f261326ec67782bc9e07075a5ff0c2671cb56f367a9221c7f23e6167202",
+      "original_skip_reason": "subprocess-only helper",
+      "reason_zh": "这是只供父测试启动的子进程入口，直接运行会缺少租约和标准输入控制，跳过是预期行为。",
+      "activation_conditions_zh": "由父测试传入 `AGENTPLUG_PAUSE_HELPER=1`、测试库和原始租约，并控制 SIGSTOP/SIGCONT 与标准输入。",
+      "github_workflow_impact_zh": "辅助入口独立跳过应保留；新 CI job 要求父测试实际通过。",
+      "three_example_agents_impact_zh": "保护三个示例共用的工具租约接管和旧进程写入拒绝；父测试实际执行通过，不能手动重放历史未知调用。",
+      "status": "auxiliary_verified_by_parent",
+      "group": "helper",
+      "evidence_group": "cache",
+      "parent_test": "TestSQLToolStoppedProcessCannotSubmitAfterTakeover"
+    },
+    {
+      "number": 20,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestLocalEffectBeforeImageAndInverseReceiptAreAtomicPostgres",
+      "scenario": "前镜像与撤销回执原子提交",
+      "source": "platform/internal/compensation/local_effect_postgres_test.go",
+      "line": 38,
+      "source_sha256": "f1f4a46a74e9397ae7860affde2b6f3abfcf83ab689458ac65e6b90c42dd369e",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 21,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestLocalEffectConcurrentResourceWriteCannotBeOverwrittenPostgres",
+      "scenario": "撤销不得覆盖其他写者",
+      "source": "platform/internal/compensation/local_effect_postgres_test.go",
+      "line": 114,
+      "source_sha256": "f1f4a46a74e9397ae7860affde2b6f3abfcf83ab689458ac65e6b90c42dd369e",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 22,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestPostgresCompensationMigrationDriftRollsBackOuterBundle",
+      "scenario": "迁移漂移回滚整个迁移事务",
+      "source": "platform/internal/compensation/schema_postgres_test.go",
+      "line": 54,
+      "source_sha256": "c0c94a83bfd0c92cdd753c79bada82883c4583abc05bef939f8c75d47cb931a6",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 23,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestPostgresCompensationMigrationProtectsHistoryACL",
+      "scenario": "迁移保护历史记录及访问控制",
+      "source": "platform/internal/compensation/schema_postgres_test.go",
+      "line": 13,
+      "source_sha256": "c0c94a83bfd0c92cdd753c79bada82883c4583abc05bef939f8c75d47cb931a6",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 24,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLAutomaticRecoveryHoldsPreserveUnknownAndAdmitNewRootPostgres",
+      "scenario": "隔离历史未知，允许新根任务正常运行",
+      "source": "platform/internal/compensation/recovery_holds_postgres_test.go",
+      "line": 13,
+      "source_sha256": "0388090c45f6f75f31b632fba526a2ef3a1d0b831a2a73b3094a975f711f0c41",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 25,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLCannotCompensateBeforeStopOrOverwriteConcurrentBusinessWritePostgres",
+      "scenario": "停止前禁止补偿并保护并发业务写",
+      "source": "platform/internal/compensation/sql_store_postgres_test.go",
+      "line": 501,
+      "source_sha256": "f5765bd8741b6c98503ad102ddf5973b386a94d622bfbce884fe8c6ee16cf54b",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 26,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLConcurrentClaimsSerializeTheNextInversePostgres",
+      "scenario": "并发认领串行化下一步撤销",
+      "source": "platform/internal/compensation/sql_store_postgres_test.go",
+      "line": 540,
+      "source_sha256": "f5765bd8741b6c98503ad102ddf5973b386a94d622bfbce884fe8c6ee16cf54b",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 27,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLEnrolledParentReusesChildInverseAndExcludesSiblingFromChildCancelPostgres",
+      "scenario": "父子撤销复用且不波及兄弟任务",
+      "source": "platform/internal/compensation/enrollment_postgres_test.go",
+      "line": 40,
+      "source_sha256": "a1994d6ccffc75e2b50a40f285ee8a4e975c0150c6c63e0756d7173b26415076",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 28,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLEnrollmentCannotCrossScopeOrHideMismatchedDigestPostgres",
+      "scenario": "拒绝跨作用域和摘要不符的补偿登记",
+      "source": "platform/internal/compensation/enrollment_postgres_test.go",
+      "line": 110,
+      "source_sha256": "a1994d6ccffc75e2b50a40f285ee8a4e975c0150c6c63e0756d7173b26415076",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 29,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLExpiredSubmittedLeaseRemainsReadOnlyAndFencedPostgres",
+      "scenario": "已提交租约过期后只读恢复并保持栅栏",
+      "source": "platform/internal/compensation/sql_store_postgres_test.go",
+      "line": 455,
+      "source_sha256": "f5765bd8741b6c98503ad102ddf5973b386a94d622bfbce884fe8c6ee16cf54b",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 30,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLFinalizeFastPendingGateStillChecksEveryTerminalReceiptPostgres",
+      "scenario": "结束快路径仍核验全部终态回执",
+      "source": "platform/internal/compensation/worker_postgres_test.go",
+      "line": 104,
+      "source_sha256": "a41c4c4c2fba5053071b093046ee806e4be36661288d18860a12a5752ae4df95",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 31,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLLostInverseResponseRecoversReceiptWithoutReplayPostgres",
+      "scenario": "撤销响应丢失只读取原回执",
+      "source": "platform/internal/compensation/sql_store_postgres_test.go",
+      "line": 413,
+      "source_sha256": "f5765bd8741b6c98503ad102ddf5973b386a94d622bfbce884fe8c6ee16cf54b",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 32,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLMissingEffectRequiresNoEffectProofAndWrongStopRevisionIsDeniedPostgres",
+      "scenario": "无效果也要证明，并拒绝错误停止版本",
+      "source": "platform/internal/compensation/sql_store_postgres_test.go",
+      "line": 580,
+      "source_sha256": "f5765bd8741b6c98503ad102ddf5973b386a94d622bfbce884fe8c6ee16cf54b",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 33,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLRegistrationParticipatesInBusinessTransactionPostgres",
+      "scenario": "补偿登记与业务事务同提交",
+      "source": "platform/internal/compensation/sql_store_postgres_test.go",
+      "line": 292,
+      "source_sha256": "f5765bd8741b6c98503ad102ddf5973b386a94d622bfbce884fe8c6ee16cf54b",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 34,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLReverseOrderIncludesChildEffectsAndFinalOutcomeIsAtomicPostgres",
+      "scenario": "包括子任务效果的逆序撤销和原子终态",
+      "source": "platform/internal/compensation/sql_store_postgres_test.go",
+      "line": 327,
+      "source_sha256": "f5765bd8741b6c98503ad102ddf5973b386a94d622bfbce884fe8c6ee16cf54b",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 35,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLStoppedTreeCoverageRejectsScopeSubstitutionAndCorruptEffectsPostgres",
+      "scenario": "拒绝停止树范围替换和效果篡改",
+      "source": "platform/internal/compensation/coverage_postgres_test.go",
+      "line": 124,
+      "source_sha256": "01d0b46891420284e8bc205de0c57e27889d119ea0b5aa280e5e2df9fb8d8676",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 36,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLStoppedTreeCoverageRequiresExactRecordedSetPostgres",
+      "scenario": "停止树覆盖必须精确匹配已登记集合",
+      "source": "platform/internal/compensation/coverage_postgres_test.go",
+      "line": 69,
+      "source_sha256": "01d0b46891420284e8bc205de0c57e27889d119ea0b5aa280e5e2df9fb8d8676",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 37,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLStoppedTreeCoverageWithAppendOnlyRuntimeRolePostgres",
+      "scenario": "仅追加运行账号下的停止树覆盖",
+      "source": "platform/internal/compensation/coverage_postgres_test.go",
+      "line": 14,
+      "source_sha256": "01d0b46891420284e8bc205de0c57e27889d119ea0b5aa280e5e2df9fb8d8676",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 38,
+      "package": "github.com/lexagent/platform/internal/compensation",
+      "test": "TestSQLWorkerDrainsThousandUniqueInversesWithoutPerStepIdlePostgres",
+      "scenario": "连续清理千项唯一撤销操作",
+      "source": "platform/internal/compensation/worker_postgres_test.go",
+      "line": 34,
+      "source_sha256": "a41c4c4c2fba5053071b093046ee806e4be36661288d18860a12a5752ae4df95",
+      "original_skip_reason": "dedicated owned PostgreSQL compensation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 39,
+      "package": "github.com/lexagent/platform/internal/evaluationproduct",
+      "test": "TestSeedPlatformProcessRestartRun",
+      "scenario": "实际平台重启恢复原始评测种子",
+      "source": "platform/internal/evaluationproduct/sql_execution_integration_test.go",
+      "line": 402,
+      "source_sha256": "fe3805d471d45b026a60f7411981f3d3981c8edb6aa3a3e44df439d5f5241400",
+      "original_skip_reason": "only run by the isolated modular Compose process-restart E2E",
+      "reason_zh": "只能在专用平台停机/重启场景调用，普通测试不得留下待恢复评测记录。",
+      "activation_conditions_zh": "专用 `process --evaluation-restart` 夹具设置种子开关及已发布测试套件，实际停止并重启测试平台。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "评测服务恢复的专用验证，不阻断三个业务示例；故意不完整的测试套件应以 SNAPSHOT_INVALID 安全结束。",
+      "status": "passed",
+      "group": "restart",
+      "evidence_group": "restart",
+      "parent_test": null
+    },
+    {
+      "number": 40,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationCannotBypassThroughTransitionOrEventPostgres",
+      "scenario": "禁止经状态迁移或事件旁路补偿",
+      "source": "platform/internal/execution/cancellation_compensation_postgres_test.go",
+      "line": 456,
+      "source_sha256": "7f6a89a005cbfda3240e4cb8750cefe886ff006297cf7fe7994f8c01b74716e2",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 41,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationConcurrentBusinessWriteIsPreservedPostgres",
+      "scenario": "取消补偿保留并发业务写",
+      "source": "platform/internal/execution/cancellation_compensation_postgres_test.go",
+      "line": 380,
+      "source_sha256": "7f6a89a005cbfda3240e4cb8750cefe886ff006297cf7fe7994f8c01b74716e2",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 42,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationFenceKeepsSuccessAndRecoveryStrictPostgres",
+      "scenario": "成功与恢复路径保留取消栅栏",
+      "source": "platform/internal/execution/cancellation_settlement_postgres_test.go",
+      "line": 15,
+      "source_sha256": "c65322e73f1a0d28097bcbfcc58df0128bf248069bc81551b4991e4dad2d77d5",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 43,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationFinalAuditFailureRollsBackWholeOutcomePostgres",
+      "scenario": "最终审计失败则整体回滚",
+      "source": "platform/internal/execution/cancellation_compensation_postgres_test.go",
+      "line": 341,
+      "source_sha256": "7f6a89a005cbfda3240e4cb8750cefe886ff006297cf7fe7994f8c01b74716e2",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 44,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationHistoricalOutcomeNeverGetsInventedProofPostgres",
+      "scenario": "历史终态不得补造停止证明",
+      "source": "platform/internal/execution/cancellation_compensation_postgres_test.go",
+      "line": 471,
+      "source_sha256": "7f6a89a005cbfda3240e4cb8750cefe886ff006297cf7fe7994f8c01b74716e2",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 45,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationNeverClaimedCompletesAtomicallyPostgres",
+      "scenario": "未被认领任务也需原子完成取消",
+      "source": "platform/internal/execution/cancellation_compensation_postgres_test.go",
+      "line": 210,
+      "source_sha256": "7f6a89a005cbfda3240e4cb8750cefe886ff006297cf7fe7994f8c01b74716e2",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 46,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationPreparesCoverageAfterDurableIntentPostgres",
+      "scenario": "持久化取消意图后准备效果覆盖",
+      "source": "platform/internal/execution/cancellation_compensation_postgres_test.go",
+      "line": 421,
+      "source_sha256": "7f6a89a005cbfda3240e4cb8750cefe886ff006297cf7fe7994f8c01b74716e2",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 47,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationProgressUsesFrozenCoverageButLiveFencesPostgres",
+      "scenario": "取消进度结合冻结覆盖和实时栅栏",
+      "source": "platform/internal/execution/cancellation_progress_postgres_test.go",
+      "line": 12,
+      "source_sha256": "e3541697007bd6f6080865550201a8423567add0a31ec22678c953a6d0242390",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 48,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationProjectionRejectsMismatchedOutcomePostgres",
+      "scenario": "投影拒绝不匹配的补偿终态",
+      "source": "platform/internal/execution/cancellation_compensation_postgres_test.go",
+      "line": 490,
+      "source_sha256": "7f6a89a005cbfda3240e4cb8750cefe886ff006297cf7fe7994f8c01b74716e2",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 49,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationRejectsBareStopOrUncoveredEffectsPostgres",
+      "scenario": "仅停止或效果未覆盖不得取消成功",
+      "source": "platform/internal/execution/cancellation_compensation_postgres_test.go",
+      "line": 291,
+      "source_sha256": "7f6a89a005cbfda3240e4cb8750cefe886ff006297cf7fe7994f8c01b74716e2",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 50,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationRejectsNewWriteAfterIntentPostgres",
+      "scenario": "取消意图之后拒绝新写入",
+      "source": "platform/internal/execution/cancellation_compensation_postgres_test.go",
+      "line": 321,
+      "source_sha256": "7f6a89a005cbfda3240e4cb8750cefe886ff006297cf7fe7994f8c01b74716e2",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 51,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCancellationCompensationStopRetainsFIFOUntilActualUndoPostgres",
+      "scenario": "实际撤销前保持会话 FIFO 预留",
+      "source": "platform/internal/execution/cancellation_compensation_postgres_test.go",
+      "line": 239,
+      "source_sha256": "7f6a89a005cbfda3240e4cb8750cefe886ff006297cf7fe7994f8c01b74716e2",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 52,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCompletedEvaluationCompensationPreservesUnsettledEvidencePostgres",
+      "scenario": "已完成评测补偿保留未结算证据",
+      "source": "platform/internal/execution/completed_evaluation_compensation_postgres_test.go",
+      "line": 146,
+      "source_sha256": "d6192fecafcca047b43bc455405862985b63304cb6fa41f1855ff25239161571",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 53,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCompletedEvaluationCompensationRequiresRecordedParentAndOutcomePostgres",
+      "scenario": "已完成评测补偿要求原父任务及终态",
+      "source": "platform/internal/execution/completed_evaluation_compensation_postgres_test.go",
+      "line": 123,
+      "source_sha256": "d6192fecafcca047b43bc455405862985b63304cb6fa41f1855ff25239161571",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 54,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCompletedEvaluationCompensationRetainsOutcomeAndUndoesWritesPostgres/failed",
+      "scenario": "评测结果保留并撤销其业务写；分支 failed",
+      "source": "platform/internal/execution/completed_evaluation_compensation_postgres_test.go",
+      "line": 70,
+      "source_sha256": "d6192fecafcca047b43bc455405862985b63304cb6fa41f1855ff25239161571",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 55,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestCompletedEvaluationCompensationRetainsOutcomeAndUndoesWritesPostgres/succeeded",
+      "scenario": "评测结果保留并撤销其业务写；分支 succeeded",
+      "source": "platform/internal/execution/completed_evaluation_compensation_postgres_test.go",
+      "line": 70,
+      "source_sha256": "d6192fecafcca047b43bc455405862985b63304cb6fa41f1855ff25239161571",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 56,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/exact",
+      "scenario": "内部任务取消要求精确归属回执；分支 exact",
+      "source": "platform/internal/execution/internal_task_compensation_postgres_test.go",
+      "line": 14,
+      "source_sha256": "07ab350c707ce08cac0e2e8c5f9ab8d0a64169f701916397affbdaf12f55fe27",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 57,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/missing",
+      "scenario": "内部任务取消要求精确归属回执；分支 missing",
+      "source": "platform/internal/execution/internal_task_compensation_postgres_test.go",
+      "line": 14,
+      "source_sha256": "07ab350c707ce08cac0e2e8c5f9ab8d0a64169f701916397affbdaf12f55fe27",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 58,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/remote_endpoint",
+      "scenario": "内部任务取消要求精确归属回执；分支 remote_endpoint",
+      "source": "platform/internal/execution/internal_task_compensation_postgres_test.go",
+      "line": 14,
+      "source_sha256": "07ab350c707ce08cac0e2e8c5f9ab8d0a64169f701916397affbdaf12f55fe27",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 59,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/wrong_lease",
+      "scenario": "内部任务取消要求精确归属回执；分支 wrong_lease",
+      "source": "platform/internal/execution/internal_task_compensation_postgres_test.go",
+      "line": 14,
+      "source_sha256": "07ab350c707ce08cac0e2e8c5f9ab8d0a64169f701916397affbdaf12f55fe27",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 60,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/wrong_revision",
+      "scenario": "内部任务取消要求精确归属回执；分支 wrong_revision",
+      "source": "platform/internal/execution/internal_task_compensation_postgres_test.go",
+      "line": 14,
+      "source_sha256": "07ab350c707ce08cac0e2e8c5f9ab8d0a64169f701916397affbdaf12f55fe27",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 61,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestPlatformSignatureAcceptedByNativeGoSDKWithNumericEvidence",
+      "scenario": "实际 Go SDK 接收平台签名的高精度数字证据",
+      "source": "platform/internal/execution/numeric_sdk_signature_test.go",
+      "line": 23,
+      "source_sha256": "d69ca90712deada5ee9b62b86711c4ca6b5bc48a5fc38d41bd078e582d185a29",
+      "original_skip_reason": "compiled actual Go SDK receiver required",
+      "reason_zh": "需要先编译并指定真正的 Go SDK 接收进程，普通单元测试没有提供该程序。",
+      "activation_conditions_zh": "先在 SDK 模块编译实际接收器，再设置 `SDK_GO_NUMERIC_FIXTURE`；程序目录允许执行。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保护 Go 示例传递冻结知识数字证据时的签名和精度；Java/Python 默认流程不依赖这个 Go 专用接收器。",
+      "status": "passed",
+      "group": "numeric",
+      "evidence_group": "cache",
+      "parent_test": null
+    },
+    {
+      "number": 62,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestRealSignedTCPTimeoutWaitsForPythonGraphStop",
+      "scenario": "真实签名 TCP 超时等待 Python 图停止及重启拒绝伪确认",
+      "source": "platform/internal/execution/tcp_cancellation_interop_test.go",
+      "line": 29,
+      "source_sha256": "3aec8cfda1d589bd537e5a9344a8ba94e8a2077586de9550a17981b6101f3278",
+      "original_skip_reason": "real Python TCP fixture not enabled",
+      "reason_zh": "跨进程通信需要显式开关及 Python gRPC/ASGI 依赖，普通运行没有启用。",
+      "activation_conditions_zh": "`LEXAGENT_RUN_PYTHON_GRPC_INTEROP=1`（gRPC）或 `SDK_TCP_INTEROP_TEST=1`（TCP），安装 SDK 的 `grpc,asgi` 及 FastAPI。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "gRPC 不影响当前 HTTP 示例默认流程；TCP 契约保护 Python 执行中断及取消续接，本轮已补验。",
+      "status": "passed",
+      "group": "interop",
+      "evidence_group": "interop",
+      "parent_test": null
+    },
+    {
+      "number": 63,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestSQLCancellationScanRotatesPastBlockedRunsPostgres",
+      "scenario": "取消扫描越过阻塞任务继续轮转",
+      "source": "platform/internal/execution/cancellation_scan_postgres_test.go",
+      "line": 14,
+      "source_sha256": "e1fa21ac18fc2a49bddfdd48d4f3e640dbb182ac334d55fdf418cc3660637ba3",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 64,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestSQLSynchronousCreationCannotRaceCancelledParentPostgres",
+      "scenario": "同步子任务创建不得越过父任务取消",
+      "source": "platform/internal/execution/synchronous_creation_postgres_test.go",
+      "line": 15,
+      "source_sha256": "4851cdc405542721b5eb73b55c8eb1cd2459fa6dc32e52a333cc1bd063a4d078",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 65,
+      "package": "github.com/lexagent/platform/internal/execution",
+      "test": "TestSQLSynchronousCreationCommitIsVisibleBeforeParentStopPostgres",
+      "scenario": "子任务创建提交必须在父停止前可见",
+      "source": "platform/internal/execution/synchronous_creation_postgres_test.go",
+      "line": 79,
+      "source_sha256": "4851cdc405542721b5eb73b55c8eb1cd2459fa6dc32e52a333cc1bd063a4d078",
+      "original_skip_reason": "dedicated owned PostgreSQL cancellation fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保障三个示例公共取消、固定协作及恢复安全；本轮专用 SQL 测试通过，历史未知保持隔离。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 66,
+      "package": "github.com/lexagent/platform/internal/identity",
+      "test": "TestSQLPermissionScaleAcceptance",
+      "scenario": "一万用户权限列表与决策规模验收",
+      "source": "platform/internal/identity/permission_scale_test.go",
+      "line": 22,
+      "source_sha256": "5bbb1c74fb0d1e45e83dd38aa537383fc3027a409e88bc4b70527ec2b8ab434c",
+      "original_skip_reason": "explicit scale fixture opt-in required",
+      "reason_zh": "没有打开规模验收开关；避免普通单元测试自动生成 1 万个用户及大量授权。",
+      "activation_conditions_zh": "`PERMISSION_SCALE_TEST=1`、全新 PostgreSQL 夹具、明确样本量与延迟阈值。",
+      "github_workflow_impact_zh": "既有 identity-sql job 已单独启用；本轮再次通过。",
+      "three_example_agents_impact_zh": "衡量高用户量下的权限性能，不是三个示例的使用前置开关；合成数据只存在临时库。",
+      "status": "passed",
+      "group": "scale",
+      "evidence_group": "scale",
+      "parent_test": null
+    },
+    {
+      "number": 67,
+      "package": "github.com/lexagent/platform/internal/knowledge",
+      "test": "TestIndexCompensationForwardAuditFailureRollsBackPostgres",
+      "scenario": "索引发布审计失败原子回滚",
+      "source": "platform/internal/knowledge/index_compensation_postgres_test.go",
+      "line": 242,
+      "source_sha256": "972b85a379e0c8a3022bc2dbcb69bc9b3cb774efea22c15a096dd7e908876df9",
+      "original_skip_reason": "isolated PostgreSQL fixture not configured",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保护共享知识索引发布及撤销，不迁移业务知识；三个示例检索默认流程未因该跳过而关闭。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 68,
+      "package": "github.com/lexagent/platform/internal/knowledge",
+      "test": "TestIndexCompensationPreservesConcurrentAndSourceChangesPostgres/new-source",
+      "scenario": "索引撤销保护新来源和并发源变化；分支 new-source",
+      "source": "platform/internal/knowledge/index_compensation_postgres_test.go",
+      "line": 211,
+      "source_sha256": "972b85a379e0c8a3022bc2dbcb69bc9b3cb774efea22c15a096dd7e908876df9",
+      "original_skip_reason": "isolated PostgreSQL fixture not configured",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保护共享知识索引发布及撤销，不迁移业务知识；三个示例检索默认流程未因该跳过而关闭。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 69,
+      "package": "github.com/lexagent/platform/internal/knowledge",
+      "test": "TestIndexCompensationPreservesConcurrentAndSourceChangesPostgres/same-head-aba",
+      "scenario": "索引撤销保护新来源和并发源变化；分支 same-head-aba",
+      "source": "platform/internal/knowledge/index_compensation_postgres_test.go",
+      "line": 211,
+      "source_sha256": "972b85a379e0c8a3022bc2dbcb69bc9b3cb774efea22c15a096dd7e908876df9",
+      "original_skip_reason": "isolated PostgreSQL fixture not configured",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保护共享知识索引发布及撤销，不迁移业务知识；三个示例检索默认流程未因该跳过而关闭。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 70,
+      "package": "github.com/lexagent/platform/internal/knowledge",
+      "test": "TestIndexCompensationReversePublicationsAndReplayPostgres",
+      "scenario": "索引逆序撤销及只读回放",
+      "source": "platform/internal/knowledge/index_compensation_postgres_test.go",
+      "line": 183,
+      "source_sha256": "972b85a379e0c8a3022bc2dbcb69bc9b3cb774efea22c15a096dd7e908876df9",
+      "original_skip_reason": "isolated PostgreSQL fixture not configured",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保护共享知识索引发布及撤销，不迁移业务知识；三个示例检索默认流程未因该跳过而关闭。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 71,
+      "package": "github.com/lexagent/platform/internal/modelgateway",
+      "test": "TestLiveDeepSeekGateway",
+      "scenario": "真实 DeepSeek 生成及 token 回执",
+      "source": "platform/internal/modelgateway/live_deepseek_integration_test.go",
+      "line": 118,
+      "source_sha256": "969f05fdf61c6b20038e45adbe419449b329e8a90602fb80da5f24fb85396fda",
+      "original_skip_reason": "set LEXAGENT_LIVE_DEEPSEEK_KEY_FILE to run the opt-in live vendor test",
+      "reason_zh": "未显式挂载供应商凭据；付费外部请求默认关闭，避免 CI 意外调用。",
+      "activation_conditions_zh": "明确授权剩余额度、只读挂载本项目凭据、固定模型/HTTPS 地址和载荷；本轮预留 4 次，不自动重试。",
+      "github_workflow_impact_zh": "普通 CI 继续显式跳过外部付费探针，本轮在授权额度内已通过。",
+      "three_example_agents_impact_zh": "验证三个示例共同依赖的生成/工具协议或知识向量上游；本轮真实请求通过，外部可用性及余额仍是运行条件。",
+      "status": "passed",
+      "group": "models",
+      "evidence_group": "models",
+      "parent_test": null
+    },
+    {
+      "number": 72,
+      "package": "github.com/lexagent/platform/internal/modelgateway",
+      "test": "TestLiveDeepSeekNativeFunctionCalling",
+      "scenario": "真实 Function Calling 两次请求往返",
+      "source": "platform/internal/modelgateway/live_function_calling_test.go",
+      "line": 17,
+      "source_sha256": "188daf1ec66cb504d7f5eeb49c4840a7e21871889b8336219940a758281c0868",
+      "original_skip_reason": "set LEXAGENT_LIVE_DEEPSEEK_KEY_FILE for the authorized live provider probe",
+      "reason_zh": "未显式挂载供应商凭据；付费外部请求默认关闭，避免 CI 意外调用。",
+      "activation_conditions_zh": "明确授权剩余额度、只读挂载本项目凭据、固定模型/HTTPS 地址和载荷；本轮预留 4 次，不自动重试。",
+      "github_workflow_impact_zh": "普通 CI 继续显式跳过外部付费探针，本轮在授权额度内已通过。",
+      "three_example_agents_impact_zh": "验证三个示例共同依赖的生成/工具协议或知识向量上游；本轮真实请求通过，外部可用性及余额仍是运行条件。",
+      "status": "passed",
+      "group": "models",
+      "evidence_group": "models",
+      "parent_test": null
+    },
+    {
+      "number": 73,
+      "package": "github.com/lexagent/platform/internal/modelgateway",
+      "test": "TestLiveEmbeddingGateway",
+      "scenario": "真实阿里云 Embedding 向量和 token 回执",
+      "source": "platform/internal/modelgateway/live_embedding_integration_test.go",
+      "line": 17,
+      "source_sha256": "6c56ac193fe3f6954c3df58047f75c8919d9b5c65c7e990cc9172bc3e94b32b4",
+      "original_skip_reason": "set LEXAGENT_LIVE_EMBEDDING_KEY_FILE for an authorized live embedding call",
+      "reason_zh": "未显式挂载供应商凭据；付费外部请求默认关闭，避免 CI 意外调用。",
+      "activation_conditions_zh": "明确授权剩余额度、只读挂载本项目凭据、固定模型/HTTPS 地址和载荷；本轮预留 4 次，不自动重试。",
+      "github_workflow_impact_zh": "普通 CI 继续显式跳过外部付费探针，本轮在授权额度内已通过。",
+      "three_example_agents_impact_zh": "验证三个示例共同依赖的生成/工具协议或知识向量上游；本轮真实请求通过，外部可用性及余额仍是运行条件。",
+      "status": "passed",
+      "group": "models",
+      "evidence_group": "models",
+      "parent_test": null
+    },
+    {
+      "number": 74,
+      "package": "github.com/lexagent/platform/internal/modelgateway",
+      "test": "TestLiveGoogleDoHModelDNS",
+      "scenario": "真实公共模型域名 DNS 解析，零模型请求",
+      "source": "platform/internal/modelgateway/google_dns_test.go",
+      "line": 41,
+      "source_sha256": "35bf4f6e84749279621e22464f040b39a337a9a49d5deb26959f5c591b47fcfd",
+      "original_skip_reason": "explicit public model DNS probe hostnames required; no model requests",
+      "reason_zh": "未指定允许探测的公共模型域名；外部 DNS 测试默认关闭，不发送模型请求。",
+      "activation_conditions_zh": "`PLATFORM_LIVE_MODEL_DOH_HOSTS_JSON` 显式指定两个公共模型域名；可连通 `dns.google`。",
+      "github_workflow_impact_zh": "普通 CI 不依赖第三方 DNS 可用性；显式探测本轮已通过。",
+      "three_example_agents_impact_zh": "保护显式启用的公共模型 DNS 解析；不决定工具、审批、通知或 SDK 是否启用，本轮解析通过。",
+      "status": "passed",
+      "group": "dns",
+      "evidence_group": "dns",
+      "parent_test": null
+    },
+    {
+      "number": 75,
+      "package": "github.com/lexagent/platform/internal/modelgovernance",
+      "test": "TestPostgresContextCachePriceUpgradePreservesOldRowsAndExplicitZero",
+      "scenario": "旧价格保留及显式零缓存价格升级",
+      "source": "platform/internal/modelgovernance/context_cache_price_test.go",
+      "line": 61,
+      "source_sha256": "43d0dad725f1021b166336bca508b42e798471c006b7045225a11630b7b3e4ae",
+      "original_skip_reason": "dedicated cache migration PostgreSQL fixture not configured",
+      "reason_zh": "需要独立注册的缓存迁移 schema；通用数据库连接不能替代，测试会修改旧价格表结构。",
+      "activation_conditions_zh": "`PUBLIC_TEST_CONTEXT_CACHE_POSTGRES_DSN` 指向新库中的 `ctxcache_20261012_…` schema；独立迁移。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "保护缓存价格升级与历史观测证据；不是示例启动开关，本轮验证通过，不改历史价格或回执。",
+      "status": "passed",
+      "group": "cache",
+      "evidence_group": "cache",
+      "parent_test": null
+    },
+    {
+      "number": 76,
+      "package": "github.com/lexagent/platform/internal/notification",
+      "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/changed_message",
+      "scenario": "通知恢复核验归属、撤回墓碑并禁止重发；分支 changed_message",
+      "source": "platform/internal/notification/agent_redrive_postgres_test.go",
+      "line": 34,
+      "source_sha256": "6b7e7eb22a4a0743791062509e399b81c82c3025ecb8e4ba6fcceb8fe3437710",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "直接保障三个示例的通知送达、权限复核和取消撤回；本轮 SQL 补验通过，真实送达后撤回另有原环境验收。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 77,
+      "package": "github.com/lexagent/platform/internal/notification",
+      "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/denied",
+      "scenario": "通知恢复核验归属、撤回墓碑并禁止重发；分支 denied",
+      "source": "platform/internal/notification/agent_redrive_postgres_test.go",
+      "line": 34,
+      "source_sha256": "6b7e7eb22a4a0743791062509e399b81c82c3025ecb8e4ba6fcceb8fe3437710",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "直接保障三个示例的通知送达、权限复核和取消撤回；本轮 SQL 补验通过，真实送达后撤回另有原环境验收。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 78,
+      "package": "github.com/lexagent/platform/internal/notification",
+      "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/no_preregistration",
+      "scenario": "通知恢复核验归属、撤回墓碑并禁止重发；分支 no_preregistration",
+      "source": "platform/internal/notification/agent_redrive_postgres_test.go",
+      "line": 34,
+      "source_sha256": "6b7e7eb22a4a0743791062509e399b81c82c3025ecb8e4ba6fcceb8fe3437710",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "直接保障三个示例的通知送达、权限复核和取消撤回；本轮 SQL 补验通过，真实送达后撤回另有原环境验收。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 79,
+      "package": "github.com/lexagent/platform/internal/notification",
+      "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/unknown_delivery",
+      "scenario": "通知恢复核验归属、撤回墓碑并禁止重发；分支 unknown_delivery",
+      "source": "platform/internal/notification/agent_redrive_postgres_test.go",
+      "line": 34,
+      "source_sha256": "6b7e7eb22a4a0743791062509e399b81c82c3025ecb8e4ba6fcceb8fe3437710",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "直接保障三个示例的通知送达、权限复核和取消撤回；本轮 SQL 补验通过，真实送达后撤回另有原环境验收。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 80,
+      "package": "github.com/lexagent/platform/internal/notification",
+      "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/withdrawn",
+      "scenario": "通知恢复核验归属、撤回墓碑并禁止重发；分支 withdrawn",
+      "source": "platform/internal/notification/agent_redrive_postgres_test.go",
+      "line": 34,
+      "source_sha256": "6b7e7eb22a4a0743791062509e399b81c82c3025ecb8e4ba6fcceb8fe3437710",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "直接保障三个示例的通知送达、权限复核和取消撤回；本轮 SQL 补验通过，真实送达后撤回另有原环境验收。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 81,
+      "package": "github.com/lexagent/platform/internal/notification",
+      "test": "TestInboxConfirmedCorrectionAndNeverDeliveredFencePostgres",
+      "scenario": "收件箱纠正证明与从未送达栅栏",
+      "source": "platform/internal/notification/inbox_channel_postgres_test.go",
+      "line": 106,
+      "source_sha256": "223e609a5497d9b1bfeb3455043f0e1280eaaa8665af3d25e78d3fe3285fc246",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "直接保障三个示例的通知送达、权限复核和取消撤回；本轮 SQL 补验通过，真实送达后撤回另有原环境验收。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 82,
+      "package": "github.com/lexagent/platform/internal/notification",
+      "test": "TestInboxHTTPRecipientRevocationAndContinuityLockPostgres",
+      "scenario": "HTTP 收件人撤权及授权连续性锁",
+      "source": "platform/internal/notification/inbox_http_postgres_test.go",
+      "line": 15,
+      "source_sha256": "093d91d4a1ae25cc42db01234259460fe8392f7848763d5cb99cde57f12b61b5",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "直接保障三个示例的通知送达、权限复核和取消撤回；本轮 SQL 补验通过，真实送达后撤回另有原环境验收。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    },
+    {
+      "number": 83,
+      "package": "github.com/lexagent/platform/internal/notification",
+      "test": "TestInboxWithdrawalAndLateForwardTombstonePostgres",
+      "scenario": "通知送达后撤回及迟到投递墓碑",
+      "source": "platform/internal/notification/inbox_channel_postgres_test.go",
+      "line": 71,
+      "source_sha256": "223e609a5497d9b1bfeb3455043f0e1280eaaa8665af3d25e78d3fe3285fc246",
+      "original_skip_reason": "dedicated owned PostgreSQL fixture required",
+      "reason_zh": "通用全量运行没有设置专用补偿数据库连接；该用例只接受自有测试库，避免破坏共享数据。",
+      "activation_conditions_zh": "`COMPENSATION_TEST_POSTGRES_DSN` 指向本轮新建的 `agentplug_compensation_test_…` 库；每包隔离。",
+      "github_workflow_impact_zh": "原全量步骤缺少此专用条件；新增 conditional-public-contracts job 强制执行，失败即阻断。",
+      "three_example_agents_impact_zh": "直接保障三个示例的通知送达、权限复核和取消撤回；本轮 SQL 补验通过，真实送达后撤回另有原环境验收。",
+      "status": "passed",
+      "group": "pg",
+      "evidence_group": "pg",
+      "parent_test": null
+    }
+  ],
+  "regression": {
+    "all_static_checks_passed": true,
+    "static_checks": [
+      {
+        "name": "pip-check",
+        "command": [
+          "python",
+          "-m",
+          "pip",
+          "check"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 1.12,
+        "log": "static-pip-check.log"
+      },
+      {
+        "name": "scan_secrets.py",
+        "command": [
+          "python",
+          "scripts/scan_secrets.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 23.54,
+        "log": "static-scan_secrets.py.log"
+      },
+      {
+        "name": "test_scan_secrets.py",
+        "command": [
+          "python",
+          "scripts/test_scan_secrets.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 0.47,
+        "log": "static-test_scan_secrets.py.log"
+      },
+      {
+        "name": "check_gofmt.py",
+        "command": [
+          "python",
+          "scripts/check_gofmt.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 3.28,
+        "log": "static-check_gofmt.py.log"
+      },
+      {
+        "name": "verify_modular_process.py",
+        "command": [
+          "python",
+          "scripts/verify_modular_process.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 4.78,
+        "log": "static-verify_modular_process.py.log"
+      },
+      {
+        "name": "verify_modular_boundaries.py",
+        "command": [
+          "python",
+          "scripts/verify_modular_boundaries.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 44.0,
+        "log": "static-verify_modular_boundaries.py.log"
+      },
+      {
+        "name": "check_contract_breaking.py",
+        "command": [
+          "python",
+          "scripts/check_contract_breaking.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 0.17,
+        "log": "static-check_contract_breaking.py.log"
+      },
+      {
+        "name": "lint_execution_contract.py",
+        "command": [
+          "python",
+          "scripts/lint_execution_contract.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 0.22,
+        "log": "static-lint_execution_contract.py.log"
+      },
+      {
+        "name": "check_removed_architecture.py",
+        "command": [
+          "python",
+          "scripts/check_removed_architecture.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 5.63,
+        "log": "static-check_removed_architecture.py.log"
+      },
+      {
+        "name": "check_publication.py",
+        "command": [
+          "python",
+          "scripts/check_publication.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 24.39,
+        "log": "static-check_publication.py.log"
+      },
+      {
+        "name": "check_markdown_links.py",
+        "command": [
+          "python",
+          "scripts/check_markdown_links.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 26.65,
+        "log": "static-check_markdown_links.py.log"
+      },
+      {
+        "name": "check_agent_productization_contracts.py",
+        "command": [
+          "python",
+          "scripts/check_agent_productization_contracts.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 0.22,
+        "log": "static-check_agent_productization_contracts.py.log"
+      },
+      {
+        "name": "check_agent_code_ownership.py",
+        "command": [
+          "python",
+          "scripts/check_agent_code_ownership.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 1.47,
+        "log": "static-check_agent_code_ownership.py.log"
+      },
+      {
+        "name": "sdk-sync",
+        "command": [
+          "python",
+          "scripts/sync_public_sdks.py",
+          "--check"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 3.98,
+        "log": "static-sdk-sync.log"
+      },
+      {
+        "name": "productization",
+        "command": [
+          "python",
+          "scripts/verify_productization_behavior.py",
+          "--compact"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 0.52,
+        "log": "static-productization.log"
+      },
+      {
+        "name": "release-tests",
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q",
+          "-p",
+          "no:cacheprovider",
+          "--basetemp",
+          "/tmp/pytest-release",
+          "tests/release-validation"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 30.31,
+        "log": "static-release-tests.log"
+      },
+      {
+        "name": "e2e-contract-tests",
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q",
+          "-p",
+          "no:cacheprovider",
+          "--basetemp",
+          "/tmp/pytest-e2e",
+          "tests/performance/agent_platform_v2/test_gate.py",
+          "tests/e2e/clean_cutover_test.py",
+          "tests/e2e/test_modular_projection_wait.py",
+          "tests/e2e/test_modular_failure_assertions.py",
+          "tests/e2e/test_modular_negative_postgres_assertions.py",
+          "tests/e2e/test_native_recovery_proxy.py"
+        ],
+        "cwd": ".",
+        "exit_code": 0,
+        "seconds": 14.07,
+        "log": "static-e2e-contract-tests.log"
+      }
+    ],
+    "release_validation": {
+      "passed": 306,
+      "failed": 0,
+      "skipped": 0
+    },
+    "e2e_performance_contracts": {
+      "passed": 83,
+      "failed": 0,
+      "skipped": 0
+    },
+    "actionlint": {
+      "version": "1.7.12",
+      "workflows": 3,
+      "exit_code": 0
+    },
+    "exact_ci_transport_driver": {
+      "complete": true,
+      "race_detector_enabled": true,
+      "packages": [
+        {
+          "package": "agentgateway",
+          "exit_code": 0,
+          "seconds": 43.03,
+          "required_states": {
+            "TestGRPCTransportInteropWithPythonBridge": "pass"
+          },
+          "failed_tests": [],
+          "skipped_tests": [],
+          "log_sha256": "d255b3d04e04c1bb6351386fe039cbbcbe19e214536df236e396075a48c7f7b7",
+          "passed": true
+        },
+        {
+          "package": "execution",
+          "exit_code": 0,
+          "seconds": 67.75,
+          "required_states": {
+            "TestRealSignedTCPTimeoutWaitsForPythonGraphStop": "pass"
+          },
+          "failed_tests": [],
+          "skipped_tests": [],
+          "log_sha256": "9552990a632a3917c46287505779aea88562797e4fa20c8384880c404a8e9f96",
+          "passed": true
+        }
+      ]
+    }
+  },
+  "preservation": {
+    "schema": "agentplug-conditional-preservation/v1",
+    "native_containers": 9,
+    "metadata_unchanged": true,
+    "mount_comparison_sorted_by_destination": true,
+    "health": {
+      "frontend": true,
+      "platform": true,
+      "go": true,
+      "java": true,
+      "python": true
+    },
+    "health_http_status": {
+      "frontend": 200,
+      "platform": 200
+    },
+    "automatic_recovery_holds_sha256": "36939e6e2c36dff5ef4b01baaf794f388f9de81dedbfbc9d1519e1505ce9a6da",
+    "automatic_recovery_holds_unchanged": true,
+    "native_database_mutations": false,
+    "reference_project_accessed": false,
+    "passed": true
+  },
+  "cleanup": {
+    "schema": "agentplug-conditional-cleanup/v1",
+    "complete": true,
+    "files": {
+      "complete": true,
+      "removed": [
+        {
+          "path": ".cache/go-linux-test-build",
+          "bytes": 1211437537
+        },
+        {
+          "path": ".tmp/conditional-tests-20261023/kubectl",
+          "bytes": 61886792
+        },
+        {
+          "path": ".tmp/conditional-tests-20261023/modelgateway.test",
+          "bytes": 38971707
+        }
+      ],
+      "bytes_removed": 1312296036
+    },
+    "images": {
+      "complete": true,
+      "task_owned_containers_remaining": 0,
+      "removed_images": [
+        {
+          "tag": "agentplug-test:conditional-tests-20261023-asgi",
+          "image_id": "sha256:faa18b0a3793f4d3b3edc7003c6fb7ea636d079016747c981449a52247573a36",
+          "unreferenced": true
+        },
+        {
+          "tag": "agentplug-test:conditional-tests-20261023",
+          "image_id": "sha256:f62f7eec62839792c16d813c50bbfa887c358fb464718fb1171593a8ecf2ad1e",
+          "unreferenced": true
+        }
+      ],
+      "global_prune_used": false,
+      "shared_base_images_removed": false,
+      "existing_volumes_modified": false
+    },
+    "source_snapshot_and_test_logs_retained": true
+  },
+  "evidence_files": [
+    {
+      "path": ".tmp/conditional-tests-20261023/actionlint.log",
+      "sha256": "f69c663edfdfaa76bd11e3f0f2f7fc72a08382005883873454348b23e8f9cc2a"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/native-preservation.json",
+      "sha256": "37ce16880b8ec3819e72c300ab026c4b8c4997b8652c524d96904548a7981c52"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/native-before.json",
+      "sha256": "7d93e6e0c3cede75dde645a0d58800ad9e03c4f075e82a9ef8b21029ba66b14b"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/interop-driver.log",
+      "sha256": "aa8df648c971372ed137f4e1b54fd2c1d0ecb68cd5b257524f1898815aa9767a"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/interop-driver-receipts/专用环境-interop-conditional-ci-driver-20261023.json",
+      "sha256": "0de2d6c898167e6846463f69472f06d888572eab19a310f7af37a428fca24d6c"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/interop.json",
+      "sha256": "48f40496a9e8641ae8dfd82f323fb8dccf715c6fea8e2ac73f27abcef27e1d72"
+    },
+    {
+      "path": ".tmp/conditional-contracts-conditional-20261023-cache01.json",
+      "sha256": "0a08a4739a74cb6cf95c60e1e31bbffc8fb0e704f979f38a4f075341acee9da5"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/native-preservation-order-sensitive.json",
+      "sha256": "28e3ff4202ace83b1dce9430e5340893a0b8554222f6b3caed9de5defee6ff2d"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-report.json",
+      "sha256": "ac2e816c7a9c5f33cee9ef81ef266025ab7026f869dae0f008d427a20c7c9afe"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-pip-check.log",
+      "sha256": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-scan_secrets.py.log",
+      "sha256": "6b0bc342e769e989b43e39671b595e1c08bd8b0cbc6019e296e26ddfe3f33c7f"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-test_scan_secrets.py.log",
+      "sha256": "8d07bcca4d98c58e6e61982273d511fc9a19d64a50b606a43b2218d829583a76"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-check_gofmt.py.log",
+      "sha256": "f0ab3d242318dc644fcb62c7a174c5eaaced8727c91da8835671b3dd82070950"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-verify_modular_process.py.log",
+      "sha256": "3c72f3ee68717214545f4a7ccf9831d7769d5cfcf3fb9cc8ebc5d6e42bf30e5d"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-verify_modular_boundaries.py.log",
+      "sha256": "22464ae122313fcded248ef7840dd870faf67f94987f53bf59dea24805ddcd9a"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-check_contract_breaking.py.log",
+      "sha256": "28d9102df84c8adaae24cb717806850d57bc60e5fc838cd0f198017e91e88ccc"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-lint_execution_contract.py.log",
+      "sha256": "b0ecc6c6b2c7d9374eb32fac1a8626a1dd820d3e2a4adaa6ff39430a410a4928"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-check_removed_architecture.py.log",
+      "sha256": "ef02e80d5fc308239d86f118f7aeb637e5b876500ada7dd2e50b7b457c3a03c7"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-check_publication.py.log",
+      "sha256": "2f331ce96a1f06346bfc3b764c8ade2e2e55438138d020280a7fc48fbca6bf80"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-check_markdown_links.py.log",
+      "sha256": "bf76bf9910a653c39a17305dc8d83d41352b06a1c7e77e7947c51935827ffd5a"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-check_agent_productization_contracts.py.log",
+      "sha256": "87101f9e0c3518623010abfa51761b951aaba803a7ecee3e4f6c099ed6aa6d1d"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-check_agent_code_ownership.py.log",
+      "sha256": "98f6a422178f8a5d8bce4d7c41ee12e27109e003226f96a2de45369acad41cfe"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-sdk-sync.log",
+      "sha256": "e0a6570f69200ff83a853f19586da91659e015de5d3c80d76067290a7c92e337"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-productization.log",
+      "sha256": "fa5e797f2c5338ce54655681b511c05c9530fc9b045f0cf0a61881c13c314472"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-release-tests.log",
+      "sha256": "6b5071e9770e6a242d9a54eb07ea7734cc707578127628e8de482360a95ca81c"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/static-e2e-contract-tests.log",
+      "sha256": "5b6d020d4306d4e539f2ab47c8aa51c55a032c9848f7d1d9c34c91281d4694de"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/interop-driver-private/dedicated-interop-115a61e13be449d4a055855ee053f32e/agentgateway.jsonl",
+      "sha256": "d255b3d04e04c1bb6351386fe039cbbcbe19e214536df236e396075a48c7f7b7"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/interop-driver-private/dedicated-interop-115a61e13be449d4a055855ee053f32e/execution.jsonl",
+      "sha256": "9552990a632a3917c46287505779aea88562797e4fa20c8384880c404a8e9f96"
+    },
+    {
+      "path": ".tmp/conditional-tests-20261023/cleanup.json",
+      "sha256": "c0d4ab5af6c44198344e441aa3dcf8c4eea0297a9894902e542086e9d4dcdc5f"
+    }
+  ],
+  "validated_source_files": [
+    {
+      "path": ".github/workflows/three-project-quality.yml",
+      "sha256": "0b72705bfb57b3d4d4e8fafbe04c0512d3599eea67442641cc2f80d78ebe1ff1"
+    },
+    {
+      "path": "scripts/verify_dedicated_postgres_tests.py",
+      "sha256": "bf423859bc95e2c9dbaffa61e15db442e8364c9d0f993b69a7772d399c030302"
+    },
+    {
+      "path": "scripts/verify_optional_transport_and_models.py",
+      "sha256": "8c7a801327f99e1bc475a5626f39ddefa17abe6ed0960b7787c49c58beb9982e"
+    },
+    {
+      "path": "scripts/verify_isolated_cache_contracts.py",
+      "sha256": "f7fc5e15abd43579b4a73416575526927b3ed6d5ce3f8dea2f3f8e064cf328ef"
+    },
+    {
+      "path": "tests/release-validation/test_conditional_public_contracts.py",
+      "sha256": "caedc6b18eedea3bda62bf7bff4fa80b82a4a74f34fada8a17f60a630f426105"
+    }
+  ]
+}

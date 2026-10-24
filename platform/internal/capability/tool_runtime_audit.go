@@ -119,6 +119,49 @@ func (s *SQLToolInvocationStore) recordRuntimeAuditTx(ctx context.Context, tx *s
 		metadata["resource_usage"] = auditRuntimeResources(observation.ResourceUsage)
 	}
 	id := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%d\x00%s", l.ScopeHash, l.CallID, l.Fence, transition)))
+	if q.RemoteContract != nil {
+		identity, identityErr := NewToolOperationIdentity(q)
+		if identityErr != nil || q.RemoteContract.Validate() != nil {
+			return ErrToolInvocationConflict
+		}
+		// Separate versioned event: keep the existing closed runtime-step schema
+		// intact while committing the remote contract with the ledger transition.
+		binding, err := json.Marshal(struct {
+			Version  string                `json:"version"`
+			Identity ToolOperationIdentity `json:"identity"`
+			Contract RemoteToolContract    `json:"contract"`
+			Fence    uint64                `json:"attempt_fence"`
+			Status   string                `json:"status"`
+		}{"remote-tool-contract-audit/v1", identity, *q.RemoteContract, l.Fence, transition})
+		if err != nil {
+			return err
+		}
+		if err = s.audit.RecordTx(tx, audit.Event{ID: fmt.Sprintf("tool-contract-%x", id),
+			TenantID: q.Scope.TenantID, DepartmentID: q.Scope.DepartmentID, ApplicationID: q.Scope.ApplicationID,
+			ActorType: q.Scope.PrincipalType, ActorID: q.Scope.PrincipalID, TraceID: q.Scope.TraceID,
+			AggregateType: "run", AggregateID: q.Scope.RunID, Action: "runtime.tool.remote_contract",
+			Outcome: transition, Summary: string(binding), CreatedAt: now.UTC()}); err != nil {
+			return err
+		}
+	}
+	if diagnostic, ok := ctx.Value(toolFailureDiagnosticKey{}).(toolFailureDiagnostic); ok {
+		// Keep the closed runtime-step v1 schema unchanged. A separate audit
+		// event commits with this exact failed/unknown ledger transition.
+		cause, err := json.Marshal(map[string]any{"version": "runtime-tool-failure-cause/v1",
+			"run_id": q.Scope.RunID, "step_id": fmt.Sprintf("runtime-%x", step),
+			"call_id": l.CallID, "tool_name": q.Name, "tool_outcome": transition,
+			"cause_type": diagnostic.causeType, "cause_stage": diagnostic.causeStage})
+		if err != nil {
+			return err
+		}
+		if err := s.audit.RecordTx(tx, audit.Event{ID: fmt.Sprintf("tool-failure-%x", id),
+			TenantID: q.Scope.TenantID, DepartmentID: q.Scope.DepartmentID, ApplicationID: q.Scope.ApplicationID,
+			ActorType: q.Scope.PrincipalType, ActorID: q.Scope.PrincipalID, TraceID: q.Scope.TraceID,
+			AggregateType: "run", AggregateID: q.Scope.RunID, Action: "runtime.tool.failure_cause",
+			Outcome: transition, Summary: string(cause), CreatedAt: now.UTC()}); err != nil {
+			return err
+		}
+	}
 	summary, err := json.Marshal(metadata)
 	if err != nil {
 		return err

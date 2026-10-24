@@ -66,6 +66,9 @@ func (s *SQLStore) beginRecordedChildStopTx(ctx context.Context, tx *sql.Tx, par
 	if tx == nil || expected == 0 || expected > 1<<63-1 || depth < 1 || depth > 4 || child.ValidateTrusted() != nil || child.ParentRunID != parent.RunID || child.RunID == parent.RunID || child.TenantID != parent.TenantID || child.DepartmentID != parent.DepartmentID || child.ApplicationID != parent.ApplicationID || child.PrincipalType != parent.PrincipalType || child.PrincipalID != parent.PrincipalID || child.SessionID != parent.SessionID {
 		return empty, platformruntime.ErrInvalidRequest
 	}
+	if err := lockExecutionAdvisory(ctx, tx, child.RunID, false); err != nil {
+		return empty, err
+	}
 	var lockedRevision uint64
 	if err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT revision FROM platform_execution_run WHERE run_id=? FOR UPDATE`), child.RunID).Scan(&lockedRevision); err != nil {
 		return empty, err

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/lexagent/platform/internal/sharedkernel"
+	"github.com/lexagent/platform/internal/sqlutil"
 )
 
 // The composition authority binds signed execution admission to the conservative
@@ -14,6 +15,9 @@ import (
 // browser session. The tree store separately verifies terminal provider proof.
 type RunTreeModelBudgetAuthority interface {
 	ReserveCommand(context.Context, *sql.Tx, ModelBudgetRequest) (sharedkernel.Scope, RunTreeBudgetCommand, error)
+	// Persist the owning invocation's no-send recovery in the SAME transaction.
+	// A lost commit acknowledgement must not leave an ownerless budget hold.
+	RecordAdmission(context.Context, *sql.Tx, ModelBudgetReservation) error
 	ExistingCommand(context.Context, *sql.Tx, ModelBudgetReservation, string, *Event, string, string) (sharedkernel.Scope, RunTreeBudgetCommand, error)
 }
 
@@ -65,6 +69,7 @@ func (s *SQLRunTreeModelBudgetStore) Reserve(ctx context.Context, request ModelB
 		return ModelBudgetReservation{}, err
 	}
 	defer tx.Rollback()
+	ctx = sqlutil.WithContinuityTransaction(ctx, s.db, tx)
 	scope, command, err := s.authority.ReserveCommand(ctx, tx, request)
 	if err != nil {
 		return ModelBudgetReservation{}, err
@@ -91,6 +96,9 @@ func (s *SQLRunTreeModelBudgetStore) Reserve(ctx context.Context, request ModelB
 		return ModelBudgetReservation{}, ErrBudgetReservationClosed
 	}
 	if err = s.tree.SaveModelReservationTx(ctx, tx, reservation); err != nil {
+		return ModelBudgetReservation{}, err
+	}
+	if err = s.authority.RecordAdmission(ctx, tx, reservation); err != nil {
 		return ModelBudgetReservation{}, err
 	}
 	if err = tx.Commit(); err != nil {

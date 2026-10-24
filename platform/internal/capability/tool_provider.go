@@ -25,7 +25,10 @@ type ToolCommand struct {
 	Payload map[string]any
 }
 
-// ToolNoEffectError 仅用于能够证明未产生副作用的本地只读失败。
+// ToolNoEffectError is a public provider classification for a proven failure
+// before any side effect, including deterministic command prevalidation.
+// Never use it for an uncertain write, commit, or lost provider response.
+// 仅用于可证明没有副作用的失败，包括写入前的确定性校验；提交或响应不明禁止使用。
 type ToolNoEffectError struct{ Err error }
 
 func (e ToolNoEffectError) Error() string { return "read-only tool failed" }

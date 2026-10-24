@@ -7,6 +7,7 @@ import (
 )
 
 func TestGovernedModelDeadlineConfiguration(t *testing.T) {
+	t.Setenv("PLATFORM_MODEL_DNS_OVER_HTTPS_HOSTS_JSON", "")
 	for _, item := range []struct {
 		name, request, header         string
 		valid                         bool
@@ -42,5 +43,28 @@ func TestGovernedModelDeadlineConfiguration(t *testing.T) {
 				t.Fatal("deadline or credential boundary changed")
 			}
 		})
+	}
+}
+
+func TestGovernedModelHTTPSDNSIsExplicitAndBounded(t *testing.T) {
+	t.Setenv("PLATFORM_MODEL_REQUEST_TIMEOUT_SECONDS", "")
+	t.Setenv("PLATFORM_MODEL_RESPONSE_HEADER_TIMEOUT_SECONDS", "")
+	for _, test := range []struct {
+		raw            string
+		valid, enabled bool
+	}{
+		{"", true, false}, {"[]", true, false}, {`["api.example"]`, true, true},
+		{"null", false, false}, {`[null]`, false, false}, {`{}`, false, false}, {`["localhost"]`, false, false},
+		{`["private-credential"]`, false, false}, {`["api.example","api.example"]`, false, false},
+		{strings.Repeat("x", 4097), false, false},
+	} {
+		t.Setenv("PLATFORM_MODEL_DNS_OVER_HTTPS_HOSTS_JSON", test.raw)
+		config, err := governedModelHTTPConfig("/protected", false)
+		if (err == nil) != test.valid || err == nil && (config.Resolver != nil) != test.enabled {
+			t.Fatalf("unexpected resolver configuration: %v", err)
+		}
+		if err != nil && strings.Contains(err.Error(), "private-credential") {
+			t.Fatal("operator configuration leaked")
+		}
 	}
 }

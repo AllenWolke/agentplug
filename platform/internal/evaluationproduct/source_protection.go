@@ -30,7 +30,7 @@ func JudgeDatasetReferences(d DatasetData) ([]agenteval.SourceReference, error) 
 		if json.Unmarshal(sample.Input, &tag) != nil {
 			return nil, ErrInvalid
 		}
-		if tag.Version != "agent-eval-judge-input/v1" {
+		if !agenteval.IsJudgeInputVersion(tag.Version) {
 			continue
 		}
 		if d.SourceType != "imported_redacted" {

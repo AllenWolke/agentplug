@@ -22,7 +22,9 @@ import (
 // SQLStore 是单平台进程使用的生产持久化仓储；表由平台模块拥有。
 type SQLStore struct {
 	db                         *sql.DB
+	waitingAuthorization       *WaitingAuthorizationPorts
 	recoveryCheckpoints        func(context.Context, *sql.Tx, sharedkernel.Scope, uint64) ([]contract.RecoveryCheckpointReference, error)
+	recoveryCheckpointSet      func(context.Context, *sql.Tx, sharedkernel.Scope, uint64, int) ([]contract.RecoveryCheckpointReference, error)
 	groupWaitCheckpoint        func(context.Context, *sql.Tx, sharedkernel.Scope, contract.AgentGroupHandoff) ([]contract.RecoveryCheckpointReference, error)
 	groupWaitPlan              func(context.Context, *sql.Tx, sharedkernel.Scope, contract.AgentGroupHandoff) error
 	groupStopBarrier           func(context.Context, *sql.Tx, sharedkernel.Scope, contract.AgentGroupHandoff) error
@@ -80,6 +82,12 @@ func (s *SQLStore) SetAgentGroupWaitPorts(capture func(context.Context, *sql.Tx,
 // snapshot. An absent port provides audit provenance only, not SDK recovery.
 func (s *SQLStore) SetRecoveryCheckpointCapture(capture func(context.Context, *sql.Tx, sharedkernel.Scope, uint64) ([]contract.RecoveryCheckpointReference, error)) {
 	s.recoveryCheckpoints = capture
+}
+
+// Optional capacity wiring never widens old publications. The immutable
+// runtime policy explicitly opts a Python graph into paged references.
+func (s *SQLStore) SetRecoveryCheckpointSetCapture(capture func(context.Context, *sql.Tx, sharedkernel.Scope, uint64, int) ([]contract.RecoveryCheckpointReference, error)) {
+	s.recoveryCheckpointSet = capture
 }
 
 func OpenSQLStore(ctx context.Context, driver, dsn string) (*SQLStore, error) {
@@ -349,13 +357,8 @@ func restoreParentRunID(run *platformruntime.Run) {
 	if run == nil || len(run.RequestJSON) == 0 {
 		return
 	}
-	var request struct {
-		Scope struct {
-			ParentRunID string `json:"parent_run_id"`
-		} `json:"scope"`
-	}
-	if json.Unmarshal(run.RequestJSON, &request) == nil {
-		run.Scope.ParentRunID = request.Scope.ParentRunID
+	if parent, err := durableParentIDs.Decode(run.RequestJSON); err == nil {
+		run.Scope.ParentRunID = parent
 	}
 }
 
@@ -372,7 +375,7 @@ type executionRunQueryer interface {
 // Recovery uses the same complete projection under its UPDATE lock, rather
 // than copying request or lease facts from a read before the transaction.
 func readExecutionRun(ctx context.Context, queryer executionRunQueryer, id, lock string) (platformruntime.Run, error) {
-	if queryer == nil || (lock != "" && lock != " FOR UPDATE") {
+	if queryer == nil || (lock != "" && lock != " FOR UPDATE" && lock != " FOR SHARE") {
 		return platformruntime.Run{}, platformruntime.ErrInvalidRequest
 	}
 	var run platformruntime.Run
@@ -505,6 +508,9 @@ func (s *SQLStore) transitionOutcome(id string, from, to platformruntime.Status,
 		return platformruntime.Run{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockExecutionAdvisory(context.Background(), tx, id, false); err != nil {
+		return platformruntime.Run{}, err
+	}
 	if outcome != nil && outcome.EventPayload["agent_group_handoff"] != nil {
 		if s.groupWaitFence == nil {
 			return platformruntime.Run{}, platformruntime.ErrInvalidTransition
@@ -657,6 +663,9 @@ func (s *SQLStore) cancelWithGuard(ctx context.Context, id string, expectedRevis
 		return platformruntime.Run{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockExecutionAdvisory(ctx, tx, id, false); err != nil {
+		return platformruntime.Run{}, err
+	}
 	var run platformruntime.Run
 	var status string
 	var leaseUntil sql.NullTime
@@ -821,6 +830,9 @@ func (s *SQLStore) PrepareResume(id string, input []byte) (platformruntime.Run, 
 		return platformruntime.Run{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockExecutionAdvisory(context.Background(), tx, id, false); err != nil {
+		return platformruntime.Run{}, err
+	}
 	var status string
 	var revision uint64
 	err = tx.QueryRow(sqlutil.Bind(`SELECT status, revision FROM platform_execution_run WHERE run_id=? FOR UPDATE`), id).Scan(&status, &revision)
@@ -881,7 +893,7 @@ func (s *SQLStore) EventsContext(ctx context.Context, id string, afterSeq uint64
 }
 
 func (s *SQLStore) AppendEvent(id, eventType string, payload map[string]any) (platformruntime.Event, error) {
-	if eventType == "" || eventType == "cancellation_stop_verified" {
+	if eventType == "" || eventType == "cancellation_stop_verified" || eventType == cancellationAcknowledgementEvent || eventType == waitingAuthorizationEvent {
 		return platformruntime.Event{}, platformruntime.ErrInvalidTransition
 	}
 	if _, err := s.Get(id); err != nil {
@@ -909,6 +921,9 @@ func (s *SQLStore) AcquireLease(id, token string, now time.Time, ttl time.Durati
 		return platformruntime.Run{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockExecutionAdvisory(context.Background(), tx, id, false); err != nil {
+		return platformruntime.Run{}, err
+	}
 	var currentToken string
 	var leaseUntil sql.NullTime
 	var revision uint64
@@ -960,6 +975,9 @@ func (s *SQLStore) HeartbeatContext(ctx context.Context, id, token string, expec
 		return platformruntime.Run{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockExecutionAdvisory(ctx, tx, id, false); err != nil {
+		return platformruntime.Run{}, err
+	}
 	result, err := tx.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_execution_run SET lease_until=?, updated_at=? WHERE run_id=? AND lease_token=? AND revision=? AND lease_until>? AND status='running'`), now.Add(ttl), now, id, token, expectedRevision, now)
 	if err != nil {
 		return platformruntime.Run{}, err

@@ -51,6 +51,9 @@ func (s *SQLStore) RecordInternalTaskStopped(ctx context.Context, owner sharedke
 		return err
 	}
 	defer tx.Rollback()
+	if err := lockExecutionAdvisory(ctx, tx, owner.RunID, false); err != nil {
+		return err
+	}
 	var status, actualToken string
 	var actualRevision uint64
 	if err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT status,revision,lease_token FROM platform_execution_run WHERE run_id=? FOR UPDATE`), owner.RunID).Scan(&status, &actualRevision, &actualToken); err != nil {

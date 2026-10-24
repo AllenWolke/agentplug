@@ -65,6 +65,7 @@ func TestRuntimeToolAuditLedgerOutboxAtomicityPostgres(t *testing.T) {
 	hash := ToolReceiptScopeHash(scope)
 	q := ToolReceiptQuery{Scope: scope, CallID: "step-one", Name: "fixture.read", Fingerprint: strings.Repeat("a", 64),
 		RuntimeAudit: &ToolRuntimeAuditBinding{Descriptor: RuntimeToolDescriptor{ExecutionType: "tool", Risk: "read_only", TimeoutSeconds: 3}, PolicyHash: strings.Repeat("b", 64)}}
+	q.InputEvidence = toolInputEvidence(map[string]any{"note": "SENSITIVE_AUDIT_SENTINEL", "password": "private-input-marker"})
 	ctx = context.WithValue(ctx, toolReceiptContextKey{}, q)
 	defer func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 3*time.Second)
@@ -148,6 +149,6 @@ func TestRuntimeToolAuditLedgerOutboxAtomicityPostgres(t *testing.T) {
 	assertState("executing", "completed", 3)
 	var leaked int
 	if err := db.QueryRowContext(ctx, sqlutil.Bind(`SELECT count(*) FROM platform_audit_event WHERE aggregate_id=? AND summary LIKE ?`), scope.RunID, "%SENSITIVE_AUDIT_SENTINEL%").Scan(&leaked); err != nil || leaked != 0 {
-		t.Fatal("runtime audit retained output body")
+		t.Fatal("runtime audit retained input or output body")
 	}
 }

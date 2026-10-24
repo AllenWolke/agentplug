@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from .capability_client import GatewayError
+from .checkpoint_capacity import reply_limit
 
 _STATE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 _HASH = re.compile(r"[a-f0-9]{64}")
@@ -266,15 +267,16 @@ async def prepare_runtime_recovery_state(
 
 
 def _metadata(response: Any, state_key: str, schema_id: str) -> dict[str, Any]:
-    if (not isinstance(response, dict) or set(response) != {"state_key", "checkpoint"}
+    if (not isinstance(response, dict) or set(response) - {"checkpoint_history"} != {"state_key", "checkpoint"}
             or response.get("state_key") != state_key):
         raise _deny()
+    limit = reply_limit(response)
     checkpoint = response.get("checkpoint")
     if checkpoint is None:
         return {"state_key": state_key, "checkpoint": None}
     required = {"revision", "schema_id", "value", "content_hash", "execution_revision", "expires_at"}
     if (not isinstance(checkpoint, dict) or set(checkpoint) != required
-            or type(checkpoint.get("revision")) is not int or not 1 <= checkpoint["revision"] <= 64
+            or type(checkpoint.get("revision")) is not int or not 1 <= checkpoint["revision"] <= limit
             or checkpoint.get("schema_id") != schema_id
             or not isinstance(checkpoint.get("value"), dict)
             or not isinstance(checkpoint.get("content_hash"), str)

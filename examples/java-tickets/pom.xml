@@ -1,10 +1,10 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <parent><groupId>com.lexagent</groupId><artifactId>agent-platform-java</artifactId><version>2.0.0</version><relativePath>../../sdk/java/pom.xml</relativePath></parent>
-  <artifactId>example-java-tickets</artifactId><version>0.2.7</version>
+  <parent><groupId>com.lexagent</groupId><artifactId>agent-platform-java</artifactId><version>2.1.0</version><relativePath>../../sdk/java/pom.xml</relativePath></parent>
+  <artifactId>example-java-tickets</artifactId><version>0.3.0</version>
   <dependencies>
-    <dependency><groupId>com.lexagent</groupId><artifactId>agent-platform-sdk</artifactId><version>2.0.0</version></dependency>
+    <dependency><groupId>com.lexagent</groupId><artifactId>agent-platform-sdk</artifactId><version>2.1.0</version></dependency>
     <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>5.11.4</version><scope>test</scope></dependency>
   </dependencies>
   <build><resources><resource><directory>${project.basedir}</directory><includes><include>manifest.json</include></includes></resource></resources><plugins>

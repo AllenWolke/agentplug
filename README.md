@@ -10,6 +10,8 @@
 
 </div>
 
+**公共能力更新：**模型路由与结构化输出、持久化工作流与检查点、引用权限复核、Kafka 通知和取消补偿已接入公共层；三语言 SDK 为 2.1.0、六种模板为 1.1.0，三个示例为 0.3.0 / v3 Schema。[功能与兼容说明](docs/releases/public-capabilities-2.1.zh.md)。
+
 AgentPlug 是面向企业的智能体开发、运行与治理平台。使用 **Go、Python、Java** 编写业务 Agent，将它独立部署，再提供给指定公司、部门和用户。Agent 通过 SDK 复用模型、知识检索、工具、记忆、检查点和协作能力，无需在每个业务项目中重建基础设施。
 
 控制台支持 **中文 / English**，登录页和顶部都有明显的语言切换按钮。本文面向开发者；业务用户从[用户手册](docs/用户手册/README.md)开始。
@@ -60,8 +62,10 @@ AgentPlug 是面向企业的智能体开发、运行与治理平台。使用 **G
 | 需求 | 平台提供什么 |
 | --- | --- |
 | 多个团队各自开发 Agent | 三语言 SDK、六种模板、统一执行协议、独立部署 |
-| 共享模型接入 | 模型网关、供应商密钥管理、版本、价格与预算治理 |
-| 企业知识和工具 | 带权限的知识检索、受控工具调用、记忆和 Skill |
+| 共享模型接入 | 模型路由、质量准入、有限故障切换、结构化输出、前缀缓存及缓存 Token 计价 |
+| 企业知识和工具 | 多来源融合检索、缓存和冻结引用当前鉴权、工具身份及原操作收据、记忆和 Skill |
+| 长流程与恢复 | 扩展 Harness、持久化阶段和步骤工作流、检查点容量与分页、原回执只读恢复 |
+| 通知与取消 | Kafka 投递、本人收件箱与通知撤回、停止确认、取消补偿和预算关闭证明 |
 | 把助手交给不同部门 | 公司工作空间 → 部门 → 可用 Agent；成员管理与批量赋权 |
 | 知道任务发生了什么 | 运行、事件、取消、会话历史、审计和评测证据 |
 | 二次开发平台 | 模块边界、公共契约、源码地图和扩展说明 |
@@ -99,7 +103,7 @@ python scripts/compose.py smoke --env-file .env
 
 ### 本地源码运行
 
-安装 Go 1.26.9+、Node.js 20+、Python 3.12+，准备 PostgreSQL 16 + pgvector。Java Agent 另需 JDK 21 和 Maven。按[本地部署步骤](docs/developer/zh/deployment.md#本地源码与主机进程)填写迁移、平台、前端、Runner 四份私有配置。
+安装 Go 1.26.10+、Node.js 20+、Python 3.12+，准备 PostgreSQL 16 + pgvector。Java Agent 另需 JDK 21 和 Maven。按[本地部署步骤](docs/developer/zh/deployment.md#本地源码与主机进程)填写迁移、平台、前端、Runner 四份私有配置。
 
 ```text
 python scripts/local.py build
@@ -196,7 +200,9 @@ flowchart LR
 | 发布、部署、绑定业务 Agent | [交付与授权](docs/developer/zh/delivery.md) |
 | 使用助手、管理成员 | [用户手册](docs/用户手册/README.md) |
 | 深入 SDK | [三语言 SDK 指南](docs/开发者指南/三语言SDK业务Agent开发指南.md) |
+| 了解本次公共能力与示例变化 | [SDK 2.1 功能、示例调整及兼容说明](docs/releases/public-capabilities-2.1.zh.md) |
 | 业务评测 | [Agent Evaluation](cli/agent-eval/README.md) |
+| GitHub Actions 上传前检查 | [CI 修复、回归结果与首次运行条件](docs/developer/zh/github-actions-acceptance-20261023.md) |
 | 备份和恢复 | [备份](deploy/backup/README.md) · [数据生命周期](docs/DATA-LIFECYCLE.md) · [运行恢复](docs/RUNTIME-RECOVERY.md) |
 
 平台在 `platform/` 运行 `go test ./...`；前端在 `frontend/` 运行 `npm ci`、`npm test`、`npm run build`。在根目录运行：

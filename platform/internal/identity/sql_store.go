@@ -93,6 +93,7 @@ type SQLStore struct {
 	capabilityResourceResolver     PermissionResourceResolver
 	permissionTaskResolver         PermissionTaskResolver
 	db                             *sql.DB
+	permissionDecode               *permissionDecodeCache
 	clock                          func() time.Time
 	accessDecisionRecorder         AgentAccessDecisionRecorder
 	principalLifecycleRecorder     PrincipalLifecycleRecorder
@@ -110,7 +111,7 @@ func identityPersistenceError(operation string, err error) error {
 }
 
 func NewSQLStore(db *sql.DB) *SQLStore {
-	return &SQLStore{db: db, clock: func() time.Time { return time.Now().UTC() }}
+	return &SQLStore{db: db, permissionDecode: newPermissionDecodeCache(), clock: func() time.Time { return time.Now().UTC() }}
 }
 
 func (s *SQLStore) EnsureSchema(ctx context.Context) error {
@@ -225,7 +226,19 @@ func (s *SQLStore) CreateMachineCredential(ctx context.Context, credential Machi
 func (s *SQLStore) GetMachineCredential(ctx context.Context, tenantID, principalID string) (MachineCredential, error) {
 	var result MachineCredential
 	var cidrsJSON string
-	err := s.db.QueryRowContext(ctx, sqlutil.Bind(`SELECT tenant_id,principal_id,secret_hash,network_cidrs_json,status,revision,created_at,updated_at
+	var reader interface {
+		QueryRowContext(context.Context, string, ...any) *sql.Row
+	} = s.db
+	if tx, joined, err := sqlutil.ContinuityTransaction(ctx, s.db); joined {
+		if err != nil {
+			return MachineCredential{}, err
+		}
+		if err := s.AcquirePermissionReadContinuity(ctx, tx); err != nil {
+			return MachineCredential{}, err
+		}
+		reader = tx
+	}
+	err := reader.QueryRowContext(ctx, sqlutil.Bind(`SELECT tenant_id,principal_id,secret_hash,network_cidrs_json,status,revision,created_at,updated_at
 		FROM platform_identity_machine_credential WHERE tenant_id=? AND principal_id=?`), tenantID, principalID).
 		Scan(&result.TenantID, &result.PrincipalID, &result.SecretHash, &cidrsJSON, &result.Status, &result.Revision, &result.CreatedAt, &result.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -916,3 +929,39 @@ func unmarshalStrings(raw string) []string {
 }
 
 var _ Store = (*SQLStore)(nil)
+
+func pageCompanyDirectory(ctx context.Context, reader permissionReader, tenantID, status string, page, pageSize int) (OrganizationPage[Tenant], error) {
+	page, pageSize, err := normalizeOrganizationPage(page, pageSize)
+	if err != nil {
+		return OrganizationPage[Tenant]{}, err
+	}
+	where, args := "1=1", []any{}
+	if tenantID != "" {
+		where, args = "id=?", []any{tenantID}
+	}
+	if status != "" {
+		where += " AND status=?"
+		args = append(args, status)
+	}
+	var total int64
+	if err := reader.QueryRowContext(ctx, sqlutil.Bind(`SELECT COUNT(*) FROM platform_identity_tenant WHERE `+where), args...).Scan(&total); err != nil {
+		return OrganizationPage[Tenant]{}, fmt.Errorf("count identity tenants: %w", err)
+	}
+	rows, err := reader.QueryContext(ctx, sqlutil.Bind(`SELECT id,code,name,status,revision,created_at FROM platform_identity_tenant WHERE `+where+` ORDER BY id LIMIT ? OFFSET ?`), append(args, pageSize, (page-1)*pageSize)...)
+	if err != nil {
+		return OrganizationPage[Tenant]{}, fmt.Errorf("page identity tenants: %w", err)
+	}
+	defer rows.Close()
+	items := make([]Tenant, 0, pageSize)
+	for rows.Next() {
+		var value Tenant
+		if err := rows.Scan(&value.ID, &value.Code, &value.Name, &value.Status, &value.Revision, &value.CreatedAt); err != nil {
+			return OrganizationPage[Tenant]{}, fmt.Errorf("scan identity tenant: %w", err)
+		}
+		items = append(items, value)
+	}
+	if err := rows.Err(); err != nil {
+		return OrganizationPage[Tenant]{}, fmt.Errorf("iterate identity tenants: %w", err)
+	}
+	return OrganizationPage[Tenant]{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
+}

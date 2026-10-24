@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -36,6 +37,18 @@ func governedModelHTTPConfig(secretRoot string, development bool) (modelgateway.
 	}
 	if config.ResponseHeaderTimeout > config.RequestTimeout {
 		return modelgateway.HTTPConfig{}, fmt.Errorf("model response-header deadline must not exceed request deadline")
+	}
+	if raw := strings.TrimSpace(os.Getenv("PLATFORM_MODEL_DNS_OVER_HTTPS_HOSTS_JSON")); raw != "" {
+		var hosts []string
+		if len(raw) > 4096 || json.Unmarshal([]byte(raw), &hosts) != nil || hosts == nil {
+			return modelgateway.HTTPConfig{}, fmt.Errorf("invalid model HTTPS DNS host configuration")
+		}
+		if len(hosts) > 0 {
+			config.Resolver, err = modelgateway.NewGoogleDoHResolver(hosts)
+			if err != nil {
+				return modelgateway.HTTPConfig{}, fmt.Errorf("invalid model HTTPS DNS host configuration")
+			}
+		}
 	}
 	return config, nil
 }

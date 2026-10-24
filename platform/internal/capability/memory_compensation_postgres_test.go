@@ -241,7 +241,19 @@ func TestMemoryCompensationTransactionContextOwnsAuthorizationCallbacksPostgres(
 	if err := f.memory.SetCancellationTransactionContext(func(ctx context.Context, _ *sql.Tx, _ sharedkernel.Scope) context.Context { return ctx }); !errors.Is(err, compensation.ErrInvalid) {
 		t.Fatal("startup binding replaced during execution")
 	}
+	executionFenced := false
+	f.memory.SetExecutionContinuityGuard(func(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope) error {
+		common, present, err := sqlutil.ContinuityTransaction(ctx, f.db)
+		if err != nil || !present || common != tx || tx != bound || scope != f.scope {
+			return errors.New("memory execution continuity escaped owner")
+		}
+		executionFenced = true
+		return nil
+	})
 	f.memory.SetAuthorizationContinuityGuard(func(ctx context.Context, tx *sql.Tx) error {
+		if !executionFenced {
+			return errors.New("IAM taken before execution parent protocol")
+		}
 		if tx != bound || ctx.Value(transactionKey{}) != tx {
 			t.Fatal("continuity guard detached")
 		}

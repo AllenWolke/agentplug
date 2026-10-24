@@ -2,7 +2,9 @@
 
 直接依赖仓库 `sdk/java/agent-platform-sdk`。业务仅生成带知识引用的工单回复草稿和建议，不连接工单系统、不提交或关闭工单，也不连接模型厂商或平台数据库。
 
-当前 Manifest 选择 `schema://example-java-tickets/input/v2` 与 `schema://example-java-tickets/output/v2`；`input.schema.json`/`output.schema.json` 是当前 v2 文件，原 Catalog 的 v1 契约保存在 `input.v1.schema.json`/`output.v1.schema.json`。v2 在原有工单字段、`notify_me`、`sandbox_check` 上新增可选 `collaborate`（默认 false）。输入 Schema 的字符长度是外层约束；Java 业务还检查 UTF-8 字节上限和不完整 Unicode。用户不能通过输入更换模型、身份、工具、知识库或协作目标。
+当前 Agent 为 **0.3.0**，使用仓库 **2.1.0** SDK。Manifest 选择 `schema://example-java-tickets/input/v3` 与 `schema://example-java-tickets/output/v3`；`input.schema.json` / `output.schema.json` 是当前 v3 文件。v3 输出增加 `model_metadata`，保留实际模型、路由、缓存与计费归属。旧 v2 和 v1 契约分别保存在对应版本文件，原输入沿用对应输出和恢复指纹，不覆盖历史 Catalog。业务输入保留工单字段及可选 `notify_me`、`sandbox_check`、`collaborate`，三个开关默认均为 false。输入 Schema 的字符长度是外层约束；Java 业务还检查 UTF-8 字节上限和不完整 Unicode。用户不能通过输入更换模型、身份、工具、知识库或协作目标。
+
+公共调用收敛到 `CapabilityClient.capabilities()` 及 SDK 工作流。使用冻结知识和最终返回引用前分别调用 `authorizeCachedResult` 复核当前权限；审批续接、未知调用的原收据恢复、限流和阶段观测使用公共语义。完整变化和配置见[公共能力更新说明](../../docs/releases/public-capabilities-2.1.zh.md)。
 
 业务依次复用公共记忆读取、已发布 Prompt、`runtime.inspect` 工具、`java-tickets` 知识检索、模型生成和记忆保存。SDK 负责上下文验签、请求绑定、HMAC、机器凭据、能力续期及运行生命周期；平台负责双身份与数据范围授权、模型幂等、预算、账本、审计和追踪。工具只检查可信执行上下文，不代表任何宿主或外部工单系统健康。
 
@@ -57,4 +59,4 @@ v2 输入可选 `collaborate`，缺省为 `false`。关闭时沿现有工单流�
 
 协作由平台 AgentGroup route/prepare/admit/gather 公共接口执行。等待时由 SDK 仅返回受控 group handoff；恢复须复读原 group 检查点并在当前权限下 fresh gather，未完成或未知的 child 不会释放工单 Harness。最终 `document_support` 只保留有界的子回答和引用 ID，按不可信支持材料呈现，不放入原工单 Harness 输入，也不作为工单已提交或变更的证明。平台需对当前用户与 Agent 机器身份分别配置 `documents.answer` 的允许目标、AgentGroup/跨 Agent 授权和数据范围；示例不会自动授予 crossGrant。
 
-默认 `collaborate:false` 不增加 AgentGroup 或 Documents 子任务用量。设为 `true` 会产生额外子 Agent/RAG 用量，由平台账本结算。启用协作需要平台已发布 Documents v2 Schema/版本、固定路由、目标安装及调用用户和两台机器各自的授权；v1 Catalog 契约保持不变。
+默认 `collaborate:false` 不增加 AgentGroup 或 Documents 子任务用量。设为 `true` 会产生额外子 Agent/RAG 用量，由平台账本结算。启用协作需要已发布匹配的 Documents Schema/版本、固定路由、目标安装及调用用户和两台机器各自的授权；新 v3 请求使用 v3 子契约，历史输入保留对应 v2 子契约，原 v1/v2 Catalog 均保留。

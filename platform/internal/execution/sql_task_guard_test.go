@@ -56,6 +56,12 @@ func TestSQLTaskCheckpointLeaseTransactionFence(t *testing.T) {
 		if err := store.CheckCapabilityLeaseTx(ctx, tx, candidate, binding); !errors.Is(err, want) {
 			t.Fatalf("signed capability fence: got %v, want %v", err, want)
 		}
+		if err := store.CheckCheckpointLeaseTx(ctx, tx, candidate, binding); !errors.Is(err, want) {
+			t.Fatalf("checkpoint shared fence: got %v, want %v", err, want)
+		}
+		if err := store.CheckCapabilityReadLeaseTx(ctx, tx, candidate, binding); !errors.Is(err, want) {
+			t.Fatalf("capability read fence: got %v, want %v", err, want)
+		}
 	}
 	check(scope, run.LeaseToken, run.Revision, nil)
 	for _, mutate := range []func(*sharedkernel.Scope){
@@ -100,6 +106,9 @@ func TestSQLTaskCheckpointLeaseTransactionFence(t *testing.T) {
 		if err := store.CheckCapabilityLeaseTx(ctx, tx, scope, sharedkernel.ExecutionLeaseBinding{Revision: run.Revision, TokenHash: fmt.Sprintf("%x", hash)}); !errors.Is(err, platformruntime.ErrLeaseConflict) {
 			t.Fatalf("invalid signed capability state accepted: %v", err)
 		}
+		if err := store.CheckCheckpointLeaseTx(ctx, tx, scope, sharedkernel.ExecutionLeaseBinding{Revision: run.Revision, TokenHash: fmt.Sprintf("%x", hash)}); !errors.Is(err, platformruntime.ErrLeaseConflict) {
+			t.Fatalf("invalid shared checkpoint lease accepted: %v", err)
+		}
 	}
 	alterThenReject(`UPDATE platform_execution_run SET lease_until=clock_timestamp()-INTERVAL '1 second' WHERE run_id=?`, id)
 	alterThenReject(`UPDATE platform_execution_session_lease SET lease_until=clock_timestamp()-INTERVAL '1 second' WHERE run_id=?`, id)
@@ -134,6 +143,45 @@ func TestSQLTaskCheckpointLeaseTransactionFence(t *testing.T) {
 		}
 	}
 	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	// Independent checkpoint writers share execution fences, while lifecycle
+	// mutation still requires an exclusive lock until both writers finish.
+	left, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer left.Rollback()
+	right, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer right.Rollback()
+	hash := sha256.Sum256([]byte(run.LeaseToken))
+	binding := sharedkernel.ExecutionLeaseBinding{Revision: run.Revision, TokenHash: fmt.Sprintf("%x", hash)}
+	if err := store.CheckCheckpointLeaseTx(ctx, left, scope, binding); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CheckCapabilityReadLeaseTx(ctx, right, scope, binding); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"platform_execution_run", "platform_execution_session_lease"} {
+		other, err := store.db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var value string
+		err = other.QueryRowContext(ctx, sqlutil.Bind(`SELECT run_id FROM `+table+` WHERE run_id=? FOR UPDATE NOWAIT`), id).Scan(&value)
+		other.Rollback()
+		var state interface{ SQLState() string }
+		if !errors.As(err, &state) || state.SQLState() != "55P03" {
+			t.Fatalf("%s not fenced by shared checkpoint writers: %v", table, err)
+		}
+	}
+	if err := left.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := right.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.BeginCancellation(id, run.Revision); err != nil {

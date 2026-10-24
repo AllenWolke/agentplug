@@ -5,6 +5,12 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "evidence_read_profile": {
+      "const": "bounded-large/v1"
+    },
+    "tool_argument_projection": {
+      "const": "tool-arguments/v2"
+    },
     "version": {
       "const": "agent-evaluation-trajectory/v1"
     },

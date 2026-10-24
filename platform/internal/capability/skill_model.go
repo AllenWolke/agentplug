@@ -88,6 +88,7 @@ func (r *SkillRegistry) ValidateModelBindings(ctx context.Context, scope sharedk
 }
 
 func (m *Module) checkModelSkillBindings(r *http.Request, op envelope) error {
+	defer capabilityPhase(r.Context(), "authority.skills")()
 	bindings, _ := r.Context().Value(skillModelBindingsKey{}).(map[string]SkillModelBinding)
 	if len(bindings) == 0 {
 		return nil

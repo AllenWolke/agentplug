@@ -3,7 +3,6 @@ package capability
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/lexagent/platform/internal/sqlutil"
@@ -41,14 +40,14 @@ func TestSQLUnsentProofSurvivesPartialRelease(t *testing.T) {
 		t.Fatal("model schema unavailable")
 	}
 	budgets := usagecost.NewSQLStore(db)
+	if err := store.SetModelBudgetClosureReader(budgets); err != nil {
+		t.Fatal(err)
+	}
 	if err := budgets.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
 	id := fmt.Sprintf("unsent-%d", time.Now().UnixNano())
-	// Quiescence covers every invocation in a session. Other tests intentionally
-	// leave reconciliation pending, so this fixture must own its session scope.
-	digest := sha256.Sum256([]byte(id))
-	scope, fp := hex.EncodeToString(digest[:]), strings.Repeat("b", 64)
+	scope, fp := fmt.Sprintf("%x", sha256.Sum256([]byte(id))), strings.Repeat("b", 64)
 	now := time.Now().UTC()
 	request := usagecost.ModelBudgetRequest{Scope: usagecost.ModelBudgetScope{TenantID: id, DepartmentID: "dept", ApplicationID: "app", AgentID: "qa", AgentVersionID: "v1"}, RunID: id, Window: usagecost.ModelBudgetWindow{Start: now.Add(-time.Minute), End: now.Add(time.Hour)}, RequestID: id, Fingerprint: fp, PriceVersionID: "price", BudgetLimitMicros: 100, ReserveMicros: 80, ExpiresAt: now.Add(time.Minute)}
 	reservation, err := budgets.Reserve(ctx, request)
@@ -114,7 +113,11 @@ func TestSQLUnsentProofSurvivesPartialRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restarted := &Module{modelStore: reopened, modelBudgets: usagecost.NewSQLStore(reopenedDB)}
+	restartedBudgets := usagecost.NewSQLStore(reopenedDB)
+	if err := reopened.SetModelBudgetClosureReader(restartedBudgets); err != nil {
+		t.Fatal(err)
+	}
+	restarted := &Module{modelStore: reopened, modelBudgets: restartedBudgets}
 	restarted.reconcileBilling(ctx)
 	restarted.reconcileBilling(ctx)
 	if restarted.billingStats.Completed.Load() != 1 || restarted.billingStats.Failed.Load() != 0 {

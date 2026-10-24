@@ -136,6 +136,11 @@ func TestSignedCancellationRecoveryReleasesSessionOnlyAfterStopAck(t *testing.T)
 		t.Fatal("unsettled model allowed lease reuse")
 	}
 	settled = true
+	// Advance the scheduling hint in this fixture to exercise the due retry
+	// without a wall-clock sleep. Production waits for the bounded delay.
+	retry := restarted.cancellationRetries[running.ID]
+	retry.next = time.Time{}
+	restarted.cancellationRetries[running.ID] = retry
 	restarted.reconcileCancellations(context.Background())
 	final, err := store.Get(running.ID)
 	if err != nil || final.Status != platformruntime.StatusCancelled || final.LeaseToken != "" || gateway.calls != 3 {

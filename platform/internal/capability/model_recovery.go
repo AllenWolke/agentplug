@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -23,8 +24,28 @@ type BillingRecovery struct {
 	PriceID      string                           `json:"price_id"`
 	Decision     *BillingDecision                 `json:"decision,omitempty"`
 	SendDeadline time.Time                        `json:"send_deadline,omitempty"`
-	AttemptToken string                           `json:"attempt_token,omitempty"`
-	Unsent       bool                             `json:"unsent,omitempty"`
+	// Empty is a legacy attempt: recovery must conservatively treat it as sent.
+	SendPhase    string `json:"send_phase,omitempty"`
+	AttemptToken string `json:"attempt_token,omitempty"`
+	Unsent       bool   `json:"unsent,omitempty"`
+	// Nonzero only while an atomic budget admission has not entered send.
+	AdmissionUntil time.Time `json:"admission_until,omitempty"`
+	FailureKind    string    `json:"failure_kind,omitempty"`
+	HoldConfirmed  bool      `json:"hold_confirmed,omitempty"`
+}
+
+// A zero time.Time does not obey omitempty in encoding/json. Keep old v1
+// recovery envelopes byte-compatible for exact replay during rolling upgrades.
+func (r BillingRecovery) MarshalJSON() ([]byte, error) {
+	type legacy BillingRecovery
+	var until *time.Time
+	if !r.AdmissionUntil.IsZero() {
+		until = &r.AdmissionUntil
+	}
+	return json.Marshal(struct {
+		legacy
+		AdmissionUntil *time.Time `json:"admission_until,omitempty"`
+	}{legacy(r), until})
 }
 
 type ModelBillingRecoveryStore interface {
@@ -39,6 +60,14 @@ type ModelSendLifecycleStore interface {
 	PromoteExpiredSend(context.Context, ModelInvocation) error
 	PersistUnsent(context.Context, string, string, string, string) (ModelInvocation, error)
 	FinishUnsent(context.Context, ModelInvocation) error
+}
+
+// Optional durable dispatch fence. A prepared attempt cannot call a provider
+// until this CAS wins; recovery closes only prepared attempts whose CAS cannot
+// subsequently win. A lost dispatch acknowledgment never authorizes a send.
+type ModelDispatchStore interface {
+	BeginModelDispatch(context.Context, string, string, string, string) error
+	PersistExpiredPrepared(context.Context, ModelInvocation) (ModelInvocation, error)
 }
 
 type BillingWorkerStats struct{ Runs, Completed, Failed atomic.Uint64 }
@@ -74,12 +103,34 @@ func (m *Module) reconcileBilling(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		writeCtx, stop := context.WithTimeout(ctx, 2*time.Second)
+		// Keep the recovery write bounded at 5s: the run-row lease admission no
+		// longer holds this row, but a long write would still extend the
+		// root/window contention. A failed write is deferred, never a missing amount.
+		writeCtx, stop := context.WithTimeout(ctx, 5*time.Second)
+		err = nil
+		// A cancellation may request reconciliation before an attempt is due.
+		// An active deadline is a wait condition, not a failed recovery. Known
+		// decisions/results take priority over any older deadline metadata.
+		if record.Recovery != nil && record.Recovery.Decision == nil && record.Recovery.Event == nil &&
+			(record.Recovery.SendDeadline.After(time.Now()) || record.Recovery.AdmissionUntil.After(time.Now())) {
+			stop()
+			continue
+		}
 		if record.RecoveryCorrupt {
 			// Isolate one bad row; backoff below rotates it out of the next page.
 			// 单条损坏记录只进入退避，不结算、不释放预算，也不阻断其他记录。
 			err = errors.New("corrupt saved billing recovery")
-		} else if record.Recovery != nil && !record.Recovery.SendDeadline.IsZero() {
+		} else if record.Recovery != nil && record.Recovery.Decision == nil && record.Recovery.Event == nil && !record.Recovery.AdmissionUntil.IsZero() {
+			hold, supported := m.modelBudgets.(usagecost.ModelBudgetReconciliationStore)
+			if !supported || record.Recovery.AdmissionUntil.After(time.Now()) {
+				err = ErrModelInvocationConflict
+			} else {
+				err = hold.MarkReconciliationNeeded(writeCtx, record.Recovery.Reservation)
+				if err == nil {
+					err = m.abortUnsentModel(writeCtx, record.ScopeHash, record.Key, record.Fingerprint, record.Recovery.Reservation, record.Recovery.AttemptToken)
+				}
+			}
+		} else if record.Recovery != nil && record.Recovery.Decision == nil && record.Recovery.Event == nil && !record.Recovery.SendDeadline.IsZero() {
 			hold, supported := m.modelBudgets.(usagecost.ModelBudgetReconciliationStore)
 			lifecycle, durable := m.modelStore.(ModelSendLifecycleStore)
 			if !supported || !durable || record.Recovery.SendDeadline.After(time.Now()) {
@@ -87,7 +138,27 @@ func (m *Module) reconcileBilling(ctx context.Context) {
 			} else {
 				err = hold.MarkReconciliationNeeded(writeCtx, record.Recovery.Reservation)
 				if err == nil {
-					err = lifecycle.PromoteExpiredSend(writeCtx, record)
+					if record.Recovery.SendPhase == "prepared" {
+						if dispatch, ok := m.modelStore.(ModelDispatchStore); ok {
+							var unsent ModelInvocation
+							unsent, err = dispatch.PersistExpiredPrepared(writeCtx, record)
+							if err == nil {
+								release, supported := m.modelBudgets.(usagecost.ModelBudgetManualReleaseStore)
+								if !supported {
+									err = errors.New("unsent accounting unavailable")
+								} else {
+									err = release.ResolveUncharged(writeCtx, unsent.Recovery.Reservation, unsent.Recovery.Decision.ProviderRef)
+									if err == nil {
+										err = lifecycle.FinishUnsent(writeCtx, unsent)
+									}
+								}
+							}
+						} else {
+							err = errors.New("model dispatch fence unavailable")
+						}
+					} else {
+						err = lifecycle.PromoteExpiredSend(writeCtx, record)
+					}
 				}
 			}
 		} else if record.Recovery != nil && record.Recovery.Decision != nil {
@@ -99,7 +170,21 @@ func (m *Module) reconcileBilling(ctx context.Context) {
 				if !ok {
 					err = errors.New("manual release store unavailable")
 				} else {
-					err = release.ResolveUncharged(writeCtx, record.Recovery.Reservation, record.Recovery.Decision.ProviderRef)
+					// An owner-return proof can precede the first hold transition.
+					// Replay the original transition before releasing its reservation.
+					if strings.HasPrefix(record.Recovery.Decision.ID, "returned-") {
+						if hold, ok := m.modelBudgets.(usagecost.ModelBudgetReconciliationStore); ok {
+							err = hold.MarkReconciliationNeeded(writeCtx, record.Recovery.Reservation)
+							if errors.Is(err, usagecost.ErrBudgetReservationClosed) {
+								err = nil
+							}
+						} else {
+							err = errors.New("original return hold recovery unavailable")
+						}
+					}
+					if err == nil {
+						err = release.ResolveUncharged(writeCtx, record.Recovery.Reservation, record.Recovery.Decision.ProviderRef)
+					}
 				}
 			} else if record.Recovery.Decision.Outcome == "charged" && record.Recovery.Event != nil {
 				_, err = m.modelBudgets.Settle(writeCtx, record.Recovery.Reservation, *record.Recovery.Event, record.Recovery.PriceID)
@@ -140,7 +225,7 @@ func (m *Module) reconcileBilling(ctx context.Context) {
 		if err != nil {
 			m.billingStats.Failed.Add(1)
 			telemetry.Failed(span, "BILLING_RECOVERY_WRITE_FAILED")
-			log.Print("model billing reconciliation failed code=BILLING_RECOVERY_WRITE_FAILED")
+			log.Printf("model billing reconciliation failed code=BILLING_RECOVERY_WRITE_FAILED detail=%v", err)
 			deferCtx, done := context.WithTimeout(ctx, 2*time.Second)
 			if deferErr := store.DeferBillingRecovery(deferCtx, record.ScopeHash, record.Key, record.Fingerprint); deferErr != nil {
 				log.Print("model billing reconciliation failed code=BILLING_RECOVERY_BACKOFF_FAILED")
@@ -176,6 +261,9 @@ func (s *memoryModelInvocationStore) SaveBillingRecovery(ctx context.Context, sc
 	if record.AttemptToken != recovery.AttemptToken || record.Status == "running" && record.AttemptToken != "" && !record.PreparationUntil.After(time.Now()) {
 		return ErrModelInvocationConflict
 	}
+	if !recovery.AdmissionUntil.IsZero() || record.Recovery != nil && !record.Recovery.AdmissionUntil.IsZero() && (!record.PreparationUntil.After(time.Now()) || !budgetRecoveryMatches(record.Recovery.Reservation, recovery.Reservation)) {
+		return ErrModelInvocationConflict
+	}
 	// Snapshot caller-owned objects before publishing recovery to another worker.
 	// 复制调用者对象，防止对账线程与请求线程共享可变状态。
 	raw, err := json.Marshal(recovery)
@@ -196,7 +284,7 @@ func (s *memoryModelInvocationStore) ListBillingRecovery(_ context.Context, limi
 	defer s.mu.Unlock()
 	var out []ModelInvocation
 	for _, record := range s.records {
-		if record.Status == "reconcile" && record.Recovery != nil && (record.Recovery.Event != nil || record.Recovery.Decision != nil || !record.Recovery.SendDeadline.IsZero()) && !record.RetryAt.After(time.Now()) {
+		if record.Status == "reconcile" && record.Recovery != nil && (record.Recovery.Event != nil || record.Recovery.Decision != nil || !record.Recovery.SendDeadline.IsZero() || !record.Recovery.AdmissionUntil.IsZero()) && !record.RetryAt.After(time.Now()) {
 			out = append(out, cloneInvocation(record))
 			if len(out) >= limit {
 				break
@@ -219,9 +307,19 @@ func (s *memoryModelInvocationStore) DeferBillingRecovery(_ context.Context, sco
 }
 
 func (s *SQLModelInvocationStore) SaveBillingRecovery(ctx context.Context, scope, key, fingerprint string, response map[string]any, cost int64, recovery BillingRecovery) error {
-	raw, err := json.Marshal(response)
-	if err != nil {
-		return err
+	if !recovery.AdmissionUntil.IsZero() {
+		return ErrModelInvocationConflict
+	}
+	// A nil response is absence, not a JSON response containing null. Keep
+	// the same SQL representation as MarkReconciliationNeeded so the atomic
+	// dispatch fence can distinguish it from a real (even empty) response.
+	var raw []byte
+	var err error
+	if response != nil {
+		raw, err = json.Marshal(response)
+		if err != nil {
+			return err
+		}
 	}
 	intent, err := json.Marshal(recovery)
 	if err != nil {
@@ -235,7 +333,11 @@ func (s *SQLModelInvocationStore) SaveBillingRecovery(ctx context.Context, scope
 	if !recovery.SendDeadline.IsZero() {
 		state, retryAt = "inflight", recovery.SendDeadline.UTC()
 	}
-	result, err := s.db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_model_invocation SET status='reconcile',response_json=?,cost_cents=?,billing_recovery_json=?,billing_state=?,billing_retry_at=?,updated_at=clock_timestamp() WHERE scope_hash=? AND idempotency_key=? AND fingerprint=? AND invocation_token=? AND status IN ('running','reconcile') AND (billing_state IN ('','manual','pending','inflight') OR billing_state='preparing' AND preparation_deadline>clock_timestamp())`), nullableJSON(raw), cost, string(intent), state, retryAt, scope, key, fingerprint, recovery.AttemptToken)
+	reservationJSON, err := json.Marshal(recovery.Reservation)
+	if err != nil {
+		return err
+	}
+	result, err := s.db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_model_invocation SET status='reconcile',response_json=?,cost_cents=?,billing_recovery_json=?,billing_state=?,billing_retry_at=?,updated_at=clock_timestamp() WHERE scope_hash=? AND idempotency_key=? AND fingerprint=? AND invocation_token=? AND status IN ('running','reconcile') AND (billing_state IN ('','manual','pending','inflight') OR billing_state='preparing' AND preparation_deadline>clock_timestamp() OR billing_state='admitted' AND preparation_deadline>clock_timestamp() AND billing_recovery_json::jsonb->'reservation'=?::jsonb)`), nullableJSON(raw), cost, string(intent), state, retryAt, scope, key, fingerprint, recovery.AttemptToken, string(reservationJSON))
 	if err != nil {
 		return err
 	}
@@ -253,7 +355,7 @@ func (s *SQLModelInvocationStore) ListBillingRecovery(ctx context.Context, limit
 	if limit < 1 || limit > 64 {
 		return nil, errors.New("invalid billing recovery page size")
 	}
-	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT scope_hash,idempotency_key,fingerprint,response_json,cost_cents,billing_recovery_json FROM platform_model_invocation WHERE status='reconcile' AND billing_state IN ('pending','decision_pending','inflight') AND (billing_retry_at IS NULL OR billing_retry_at<=clock_timestamp()) ORDER BY updated_at LIMIT ?`), limit)
+	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT scope_hash,idempotency_key,fingerprint,response_json,cost_cents,billing_recovery_json FROM platform_model_invocation WHERE status='reconcile' AND billing_state IN ('pending','decision_pending','inflight','admitted') AND (billing_retry_at IS NULL OR billing_retry_at<=clock_timestamp()) ORDER BY updated_at LIMIT ?`), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -277,5 +379,21 @@ func (s *SQLModelInvocationStore) ListBillingRecovery(ctx context.Context, limit
 
 func (s *SQLModelInvocationStore) DeferBillingRecovery(ctx context.Context, scope, key, fingerprint string) error {
 	_, err := s.db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_model_invocation SET billing_retry_at=(clock_timestamp() + INTERVAL '5 seconds'),updated_at=clock_timestamp() WHERE scope_hash=? AND idempotency_key=? AND fingerprint=? AND status='reconcile'`), scope, key, fingerprint)
+	return err
+}
+
+// ExpediteBillingRecovery makes a run's in-doubt model calls immediately due for
+// the existing reconciliation worker, so a finalizing run does not have to wait
+// for a settlement backoff. Active sends and admissions retain their absolute
+// deadline; making them due early cannot establish whether they were sent.
+func (s *SQLModelInvocationStore) ExpediteBillingRecovery(ctx context.Context, scopeHash string) error {
+	if s == nil || s.db == nil || len(scopeHash) != 64 {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_model_invocation
+SET billing_retry_at=clock_timestamp(),updated_at=clock_timestamp()
+WHERE scope_hash=? AND status='reconcile'
+  AND billing_state IN ('pending','decision_pending')
+  AND (billing_retry_at IS NULL OR billing_retry_at>clock_timestamp())`), scopeHash)
 	return err
 }

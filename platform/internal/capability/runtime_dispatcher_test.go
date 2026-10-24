@@ -201,3 +201,43 @@ func TestRuntimeObservationWriteRiskRequiresApprovalEvenWhenPolicyOmitsIt(t *tes
 		t.Fatal("revoked permission overrode risk guard")
 	}
 }
+
+type policyGatedFixture struct {
+	runtimeDispatchFixture
+	gated bool
+}
+
+func (p *policyGatedFixture) PolicyGatedWrite(name string) bool { return p.gated && name == p.name }
+
+func TestRuntimeConfirmationFollowsPolicyOnlyForPolicyGatedLocalWrites(t *testing.T) {
+	cases := []struct {
+		name       string
+		descriptor RuntimeToolDescriptor
+		gated      bool
+		policy     []string
+		want       bool
+	}{
+		{"gated write, policy omits", RuntimeToolDescriptor{ExecutionType: "tool", Risk: "write", TimeoutSeconds: 5}, true, nil, false},
+		{"gated write, policy lists", RuntimeToolDescriptor{ExecutionType: "tool", Risk: "write", TimeoutSeconds: 5}, true, []string{"fixture.write"}, true},
+		{"ungated write", RuntimeToolDescriptor{ExecutionType: "tool", Risk: "write", TimeoutSeconds: 5}, false, nil, true},
+		{"api write claims gating", RuntimeToolDescriptor{ExecutionType: "api", Risk: "write", TimeoutSeconds: 5}, true, nil, true},
+		{"high risk claims gating", RuntimeToolDescriptor{ExecutionType: "tool", Risk: "high", TimeoutSeconds: 5}, true, nil, true},
+		{"read only", RuntimeToolDescriptor{ExecutionType: "tool", Risk: "read_only", TimeoutSeconds: 3}, false, nil, false},
+	}
+	for _, tc := range cases {
+		m := NewModule("internal-token", "signing-secret", nil, "platform", "agent-runtime")
+		p := &policyGatedFixture{runtimeDispatchFixture{name: "fixture.write", descriptor: tc.descriptor}, tc.gated}
+		d, err := NewExecutionDispatcher(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.SetToolProvider(d)
+		if got := m.runtimeConfirmationRequired(tc.policy, "fixture.write"); got != tc.want {
+			t.Fatalf("%s: confirmation=%v want %v", tc.name, got, tc.want)
+		}
+	}
+	m := NewModule("internal-token", "signing-secret", nil, "platform", "agent-runtime")
+	if !m.runtimeConfirmationRequired(nil, "send_notification") || !m.runtimeConfirmationRequired(nil, "unregistered") {
+		t.Fatal("outbound or unknown tool skipped confirmation")
+	}
+}

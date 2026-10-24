@@ -82,6 +82,16 @@ func TestTaskEmbeddingSessionVerifiesScopeGrantAndLifetime(t *testing.T) {
 				if err == nil || session.Call != nil || gateway.calls != 0 {
 					t.Fatal("invalid session admitted", err)
 				}
+				if mode == "expired" || mode == "resource-denied" {
+					var admission *KnowledgeModelError
+					want := "CONTEXT_EXPIRED"
+					if mode == "resource-denied" {
+						want = "RESOURCE_AUTHORITY"
+					}
+					if !errors.As(err, &admission) || admission.Code != "CAPABILITY_DENIED" || admission.DiagnosticCode != want {
+						t.Fatal("admission stage missing or public code changed", err)
+					}
+				}
 				return
 			}
 			if err != nil {

@@ -39,6 +39,16 @@ func main() {
 	if err != nil || capability == nil || capability.WorkloadClientID == "" {
 		log.Fatal("platform capability wiring is incomplete")
 	}
+	limiter, limitError := agentplatform.NewCapabilitySendLimiter(16)
+	if limitError != nil {
+		log.Fatal("invalid capability concurrency")
+	}
+	capability.SendLimiter = limiter
+	if os.Getenv("AGENT_PLATFORM_CAPABILITY_TIMING") == "1" {
+		capability.ObserveCall = func(sample agentplatform.CapabilityObservation) {
+			log.Printf("capability_observation path=%q status=%q elapsed_ms=%.3f", agentplatform.SafeCapabilityPath(sample.Path), sample.Status, sample.WallMS)
+		}
+	}
 	// Absence of a collector must never fail startup; telemetry.Setup returns
 	// the no-op tracer for an empty endpoint.
 	// 缺失收集器绝不能导致启动失败；端点为空时 telemetry.Setup 返回 no-op tracer。
@@ -52,7 +62,7 @@ func main() {
 		Issuer:       issuerFromEnv(),
 		Audience:     audienceFromEnv(),
 		AgentID:      agentID,
-		AgentVersion: "0.2.6",
+		AgentVersion: "0.3.0",
 		Manifest:     publishedManifest,
 		// The lifecycle entries travel together so a started run can always be
 		// observed, resumed and cancelled.

@@ -20,7 +20,7 @@ const codeCancellationProvider = "platform.code.sandbox"
 // An absent/UNKNOWN receipt cannot prove no effect or block late execution.
 type codeCancellationPort struct {
 	provider *CodeToolProvider
-	ledger   compensation.EffectRegistry
+	ledger   compensation.EffectLedger
 	tools    *SQLToolInvocationStore
 	version  string
 }
@@ -60,7 +60,7 @@ func (p *CodeToolProvider) cancellationStep(q ToolReceiptQuery, version string) 
 	return step, step.Validate()
 }
 
-func (p *CodeToolProvider) CancellationBinding(ledger compensation.EffectRegistry, tools *SQLToolInvocationStore) (RuntimeCancellationBinding, error) {
+func (p *CodeToolProvider) CancellationBinding(ledger compensation.EffectLedger, tools *SQLToolInvocationStore) (RuntimeCancellationBinding, error) {
 	if ledger == nil || tools == nil {
 		return RuntimeCancellationBinding{}, compensation.ErrUnavailable
 	}

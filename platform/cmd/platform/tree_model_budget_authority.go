@@ -14,6 +14,13 @@ type treeModelBudgetAuthority struct {
 	models *capability.SQLModelInvocationStore
 }
 
+func (a treeModelBudgetAuthority) RecordAdmission(ctx context.Context, tx *sql.Tx, reservation usagecost.ModelBudgetReservation) error {
+	if tx == nil || a.models == nil {
+		return usagecost.ErrBudgetScopeMismatch
+	}
+	return a.models.RecordBudgetAdmissionTx(ctx, tx, reservation)
+}
+
 func (a treeModelBudgetAuthority) ReserveCommand(ctx context.Context, tx *sql.Tx, request usagecost.ModelBudgetRequest) (sharedkernel.Scope, usagecost.RunTreeBudgetCommand, error) {
 	if tx == nil || a.tree == nil || a.models == nil {
 		return sharedkernel.Scope{}, usagecost.RunTreeBudgetCommand{}, usagecost.ErrBudgetScopeMismatch

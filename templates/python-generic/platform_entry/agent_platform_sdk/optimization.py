@@ -23,6 +23,14 @@ def authority_failure(error: BaseException) -> bool:
     """Errors that must stop a batch rather than be hidden as degradation."""
     code = str(getattr(error, "code", "")).upper()
     status = getattr(error, "status_code", None)
+    # These exact operational errors grant no authority and authorize no
+    # retry. Preserve a per-item failure without cancelling independent work.
+    # A real 401/403 always wins, including a contradictory error envelope.
+    if status not in {401, 403} and code in {
+        "MODEL_BUDGET_UNAVAILABLE", "MODEL_BUDGET_ADMISSION_DEFERRED",
+        "RUNTIME_BUDGET_UNAVAILABLE",
+    }:
+        return False
     return status in {401, 403} or any(part in code for part in (
         "DENIED", "UNAUTHORIZED", "FORBIDDEN", "SIGNATURE", "CONTEXT_INVALID",
         "CONTEXT_EXPIRED", "POLICY_", "AUTHORIZATION_", "WORKLOAD_",
@@ -88,7 +96,8 @@ class StageRecorder:
         if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", name):
             raise ValueError("invalid stage label")
         allowed = {"calls", "input_tokens", "output_tokens", "retry_count",
-                   "cache_hits", "cache_misses", "queue_depth", "queue_wait_ms", "documents", "chunks"}
+                   "cache_hits", "cache_misses", "queue_depth", "admission_ms",
+                   "queue_wait_ms", "documents", "chunks"}
         if set(counts) - allowed or any(type(value) is not int or value < 0 for value in counts.values()):
             raise ValueError("invalid stage counters")
         start, cpu = time.monotonic(), time.process_time()
@@ -159,31 +168,56 @@ async def retry_bounded(
 
 async def bounded_map(
     values: Iterable[T], handler: Callable[[T, DeadlineBudget], Awaitable[R]], *,
-    workers: int = 8, queue_factor: int = 2, item_timeout: float = 30,
+    workers: int = 8, queue_factor: int = 1, item_timeout: float = 30,
     batch_timeout: float = 300, maximum_calls: int = 16,
     recorder: StageRecorder | None = None,
+    admit_item: Callable[[T, DeadlineBudget], Awaitable[None]] | None = None,
 ) -> list[R]:
-    """A producer and fixed workers; no task is allocated for every item.
+    """Two layers: an unbounded pending source and a bounded admission window.
 
-    Each item's deadline begins before waiting for queue admission. Batch
-    cancellation/authority failure stops producer and all workers and awaits
-    their exits before returning. The handler owns safe partial-result storage.
+    Pending values hold no deadline. The producer acquires one in-flight slot
+    per item before creating that item's deadline and (optionally) durably
+    admitting it, so admission, handoff and execution are inside the item
+    budget while waiting for spare capacity is not. ``queue_factor=1`` keeps at
+    most one admitted item per worker; a larger factor adds pre-admitted
+    buffering but moves queue wait back inside the deadline.
+
+    Batch cancellation/authority failure stops producer and all workers and
+    awaits their exits before returning. The handler owns safe partial-result
+    storage; a durably admitted item cancelled before dispatch must be
+    reconciled by its durable receipt.
     """
-    if not 1 <= workers <= 64 or not 1 <= queue_factor <= 8:
+    if not 1 <= workers <= 64 or not 1 <= queue_factor <= 8 or admit_item is not None and not callable(admit_item):
         raise ValueError("invalid bounded worker configuration")
+    inflight = workers * queue_factor
     batch = DeadlineBudget.after(batch_timeout, maximum_calls)
-    queue: asyncio.Queue[tuple[int, T, DeadlineBudget] | None] = asyncio.Queue(workers * queue_factor)
+    queue: asyncio.Queue[tuple[int, T, DeadlineBudget, float] | None] = asyncio.Queue(inflight)
+    slots = asyncio.Semaphore(inflight)
     results: list[R | None] = []
     parent = asyncio.current_task()
     aborting = False
 
     async def produce() -> None:
         for value in values:
-            index = len(results)
-            results.append(None)
-            item = DeadlineBudget.after(item_timeout, maximum_calls)
-            item.expires_at = min(item.expires_at, batch.expires_at)
-            await queue.put((index, value, item))
+            # Backpressure: a pending value consumes no deadline and no queue
+            # slot until a worker has actually freed capacity.
+            await slots.acquire()
+            try:
+                index = len(results)
+                results.append(None)
+                item = DeadlineBudget.after(item_timeout, maximum_calls)
+                item.expires_at = min(item.expires_at, batch.expires_at)
+                if admit_item is not None:
+                    # The item budget starts here. A supplied adapter may
+                    # tighten, never extend, the admission-start deadline.
+                    original_expiry = item.expires_at
+                    await admit_item(value, item)
+                    item.expires_at = min(item.expires_at, original_expiry)
+                admitted_at = time.monotonic()
+                await queue.put((index, value, item, admitted_at))
+            except BaseException:
+                slots.release()
+                raise
         for _ in range(workers):
             await queue.put(None)
 
@@ -194,12 +228,13 @@ async def bounded_map(
             try:
                 if work is None:
                     return
-                index, value, item = work
+                index, value, item, admitted_at = work
                 if recorder is None:
                     results[index] = await handler(value, item)
                 else:
                     with recorder.stage("queue.worker", queue_depth=queue.qsize(),
-                                        queue_wait_ms=int((time.monotonic()-item.created_at)*1000)):
+                                        admission_ms=max(0, int((admitted_at-item.created_at)*1000)),
+                                        queue_wait_ms=max(0, int((time.monotonic()-admitted_at)*1000))):
                         results[index] = await handler(value, item)
             except asyncio.CancelledError:
                 if parent is not None and not aborting and parent.cancelling() == 0:
@@ -210,6 +245,8 @@ async def bounded_map(
                 raise
             finally:
                 queue.task_done()
+                if work is not None:
+                    slots.release()
 
     try:
         async with asyncio.timeout(batch.remaining()):

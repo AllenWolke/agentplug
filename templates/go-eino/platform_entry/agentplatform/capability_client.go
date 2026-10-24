@@ -21,6 +21,8 @@ import (
 // CapabilityConfig is deployment wiring, not an Agent-owned model credential.
 // CapabilityConfig 仅装配平台网关；业务 Agent 不持有模型厂商凭据。
 type CapabilityConfig struct {
+	SendLimiter                            SendLimiter
+	ObserveCall                            func(CapabilityObservation)
 	BaseURL, InternalToken, SigningSecret  string
 	WorkloadClientID, WorkloadClientSecret string
 	Transport                              http.RoundTripper
@@ -30,6 +32,7 @@ type CapabilityConfig struct {
 // CapabilityClient belongs to one verified execution. Never share across Runs.
 // CapabilityClient 只属于一个已验证运行，不得跨 Run 共享上下文。
 type CapabilityClient struct {
+	checkpointLimits         map[string]uint64
 	config                   CapabilityConfig
 	client                   *http.Client
 	mu                       sync.Mutex
@@ -90,6 +93,8 @@ func NewCapabilityClient(config CapabilityConfig, request ExecuteRequest) (*Capa
 // Post renews first, then signs the actual method/target/body; failures never
 // fall back to a direct provider. / 先续签再签实际请求，失败绝不直连厂商。
 func (c *CapabilityClient) Post(ctx context.Context, path string, payload map[string]any) (map[string]any, error) {
+	ctx, cancel := context.WithTimeout(ctx, 310*time.Second)
+	defer cancel()
 	if !strings.HasPrefix(path, "/internal/") || strings.ContainsAny(path, "?#") || strings.Contains(path, "..") || path == "/internal/context/renew" {
 		return nil, &AppError{Code: "REQUEST_INVALID", Message: "invalid capability path"}
 	}
@@ -108,7 +113,8 @@ func (c *CapabilityClient) Post(ctx context.Context, path string, payload map[st
 	if err != nil {
 		return nil, &AppError{Code: "REQUEST_INVALID", Message: "invalid capability input"}
 	}
-	return c.send(ctx, path, body, token, 1<<20)
+	result, sendError := c.send(ctx, path, body, token, 1<<20)
+	return c.recoverToolObservation(ctx, path, payload, result, sendError)
 }
 
 func tokenClaims(token string) (map[string]any, error) {
@@ -204,11 +210,32 @@ func (c *CapabilityClient) send(ctx context.Context, path string, body []byte, t
 		r.Header.Set("X-Agent-Client-ID", c.config.WorkloadClientID)
 		r.Header.Set("X-Agent-Client-Secret", c.config.WorkloadClientSecret)
 	}
+	if c.config.SendLimiter != nil {
+		release, limitError := c.config.SendLimiter.Acquire(ctx)
+		if limitError != nil {
+			return nil, limitError
+		}
+		if release == nil {
+			return nil, publicError("CAPABILITY_LIMITER_INVALID")
+		}
+		defer release()
+	}
+	started := time.Now()
+	status := "failed"
+	if c.config.ObserveCall != nil {
+		defer func() {
+			defer func() { _ = recover() }()
+			c.config.ObserveCall(CapabilityObservation{path, float64(time.Since(started)) / float64(time.Millisecond), status})
+		}()
+	}
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, &AppError{Code: "CAPABILITY_RENEWAL_UNAVAILABLE", Message: "platform capability unavailable", Retryable: true}
+		return nil, &capabilityTransportFailure{&AppError{Code: "CAPABILITY_RENEWAL_UNAVAILABLE", Message: "platform capability unavailable", Retryable: true}}
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		status = "succeeded"
+	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if (resp.StatusCode == 401 || resp.StatusCode == 403) && path == "/internal/context/renew" {
 		return nil, &AppError{Code: "CAPABILITY_RENEWAL_DENIED", Message: "current execution denied"}
@@ -227,9 +254,9 @@ func (c *CapabilityClient) send(ctx context.Context, path string, body []byte, t
 			}
 			_ = json.Unmarshal(failure.Data, &observation)
 			if observation.Observation.Version == "runtime-observation/v1" && observation.Observation.Effect == "unknown" {
-				return nil, &AppError{Code: "TOOL_RESULT_UNKNOWN", Message: "tool effect requires reconciliation", Retryable: false}
+				return nil, &capabilityHTTPFailure{&AppError{Code: "TOOL_RESULT_UNKNOWN", Message: "tool effect requires reconciliation", Retryable: false}, resp.StatusCode}
 			}
-			return nil, &AppError{Code: failure.Code, Message: "platform capability rejected", Retryable: resp.StatusCode >= 500, Details: childStopControlErrorDetails(failure.Code, resp.StatusCode, failure.Data)}
+			return nil, &capabilityHTTPFailure{&AppError{Code: failure.Code, Message: "platform capability rejected", Retryable: resp.StatusCode >= 500, Details: childStopControlErrorDetails(failure.Code, resp.StatusCode, failure.Data)}, resp.StatusCode}
 		}
 	}
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
@@ -250,7 +277,7 @@ func (c *CapabilityClient) send(ctx context.Context, path string, body []byte, t
 		} `json:"data"`
 	}
 	versionedTool := path == "/internal/tool/invoke" && json.Unmarshal(raw, &receiptHeader) == nil && receiptHeader.Data.Observation.Version == "runtime-observation/v1"
-	if path == "/internal/state/checkpoint" || versionedTool {
+	if path == "/internal/state/checkpoint" || path == "/internal/tool/receipt" || path == "/internal/model/receipt" || versionedTool {
 		// Business checkpoint integers must survive a restore without being
 		// rounded through float64. Keep legacy response types on other routes.
 		decode.UseNumber()

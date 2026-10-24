@@ -52,3 +52,22 @@ func (r publishedPermissionResourceResolver) ResolvePermissionResource(ctx conte
 	}
 	return resource, nil
 }
+
+func (r publishedPermissionResourceResolver) ResolveAgentUseRequirements(ctx context.Context, scope sharedkernel.Scope) (identity.AgentUseRequirements, error) {
+	result, err := permissionresources.NewPublishedResolver(r.catalog, r.policies).ResolveAgentUseRequirements(ctx, scope)
+	if err != nil {
+		return result, err
+	}
+	for _, item := range result.Requirements {
+		if item.ResourceType == "skill" {
+			if _, err := r.ResolvePermissionResource(ctx, scope, "skill", item.ResourceID); err != nil {
+				return identity.AgentUseRequirements{}, err
+			}
+		}
+	}
+	return result, nil
+}
+
+func (r publishedPermissionResourceResolver) ValidateWorkloadBindingVersions(ctx context.Context, scope sharedkernel.Scope, versions []string) error {
+	return permissionresources.NewPublishedResolver(r.catalog, r.policies).ValidateWorkloadBindingVersions(ctx, scope, versions)
+}

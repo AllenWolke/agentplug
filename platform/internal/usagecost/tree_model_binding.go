@@ -20,6 +20,27 @@ type RunTreeModelBinding struct {
 	HoldTokens int64
 }
 
+// UniqueFailedPreparationAdmissionTx supplies accounting metadata to the model
+// module's legacy pre-send recovery. It grants no send or release authority.
+// The caller separately proves the preparation's durable terminal transition.
+func (s *SQLRunTreeBudgetStore) UniqueFailedPreparationAdmissionTx(ctx context.Context, tx *sql.Tx, r ModelBudgetReservation, started, failed time.Time) (bool, error) {
+	if started.IsZero() || failed.Before(started) {
+		return false, ErrInvalidUsage
+	}
+	if _, err := s.ModelBindingTx(ctx, tx, r); err != nil {
+		return false, err
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT count(*) FROM platform_model_budget_reservation WHERE tenant_id=? AND department_id=? AND application_id=? AND agent_id=? AND agent_version_id=? AND run_id=? AND request_fingerprint=?`), r.Scope.TenantID, r.Scope.DepartmentID, r.Scope.ApplicationID, r.Scope.AgentID, r.Scope.AgentVersionID, r.RunID, r.Fingerprint).Scan(&count); err != nil {
+		return false, err
+	}
+	if count != 1 {
+		return false, nil
+	}
+	err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT count(*) FROM platform_model_budget_reservation WHERE reservation_id=? AND request_id=? AND status='pending' AND COALESCE(event_id,'')='' AND created_at>=? AND created_at<=?`), r.ReservationID, r.RequestID, started, failed).Scan(&count)
+	return count == 1, err
+}
+
 func modelBindingKey(scope ModelBudgetScope, runID, requestID string) string {
 	raw, _ := json.Marshal([]any{scope, runID, requestID})
 	hash := sha256.Sum256(raw)

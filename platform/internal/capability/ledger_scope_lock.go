@@ -18,3 +18,10 @@ func lockLedgerScope(ctx context.Context, tx *sql.Tx, namespace, scope string) e
 	_, err := tx.ExecContext(ctx, sqlutil.Bind(`SELECT pg_advisory_xact_lock(?)`), key)
 	return err
 }
+
+func shareLedgerScope(ctx context.Context, tx *sql.Tx, namespace, scope string) error {
+	digest := sha256.Sum256([]byte(namespace + "\x00" + scope))
+	key := int64(binary.BigEndian.Uint64(digest[:8]))
+	_, err := tx.ExecContext(ctx, sqlutil.Bind(`SELECT pg_advisory_xact_lock_shared(?)`), key)
+	return err
+}

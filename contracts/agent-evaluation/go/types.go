@@ -59,26 +59,28 @@ type Measurements struct {
 	CacheLookups   *int64   `json:"cache_lookups"`
 }
 type Trajectory struct {
-	Version           string          `json:"version"`
-	Source            string          `json:"source"`
-	RunID             string          `json:"run_id"`
-	ParentRunID       string          `json:"parent_run_id,omitempty"`
-	Agent             Agent           `json:"agent"`
-	Status            string          `json:"status"`
-	StartedAt         string          `json:"started_at"`
-	FinishedAt        string          `json:"finished_at,omitempty"`
-	TraceID           string          `json:"trace_id"`
-	InputHash         string          `json:"input_hash,omitempty"`
-	BusinessInputHash string          `json:"business_input_hash,omitempty"`
-	OutputHash        string          `json:"output_hash,omitempty"`
-	Output            json.RawMessage `json:"output,omitempty"`
-	Events            []Event         `json:"events"`
-	Children          []string        `json:"children,omitempty"`
-	Descendants       []RunSummary    `json:"descendants,omitempty"`
-	Missing           []string        `json:"missing"`
-	Complete          bool            `json:"complete"`
-	Coverage          map[string]bool `json:"coverage,omitempty"`
-	Measurements      Measurements    `json:"measurements"`
+	EvidenceReadProfile    string          `json:"evidence_read_profile,omitempty"`
+	ToolArgumentProjection string          `json:"tool_argument_projection,omitempty"`
+	Version                string          `json:"version"`
+	Source                 string          `json:"source"`
+	RunID                  string          `json:"run_id"`
+	ParentRunID            string          `json:"parent_run_id,omitempty"`
+	Agent                  Agent           `json:"agent"`
+	Status                 string          `json:"status"`
+	StartedAt              string          `json:"started_at"`
+	FinishedAt             string          `json:"finished_at,omitempty"`
+	TraceID                string          `json:"trace_id"`
+	InputHash              string          `json:"input_hash,omitempty"`
+	BusinessInputHash      string          `json:"business_input_hash,omitempty"`
+	OutputHash             string          `json:"output_hash,omitempty"`
+	Output                 json.RawMessage `json:"output,omitempty"`
+	Events                 []Event         `json:"events"`
+	Children               []string        `json:"children,omitempty"`
+	Descendants            []RunSummary    `json:"descendants,omitempty"`
+	Missing                []string        `json:"missing"`
+	Complete               bool            `json:"complete"`
+	Coverage               map[string]bool `json:"coverage,omitempty"`
+	Measurements           Measurements    `json:"measurements"`
 	// Checks contain evidence-backed outcomes from explicit graders/reviewers.
 	// Missing checks are unknown, never implicit success.
 	Checks map[string]bool `json:"checks,omitempty"`
@@ -204,18 +206,20 @@ type ReviewSummary struct {
 // Version is deliberately excluded: the same cohort can compare Agent releases.
 // Gold, workload and measurement protocol must remain identical.
 type Cohort struct {
-	AgentID             string `json:"agent_id"`
-	DatasetHash         string `json:"dataset_hash"`
-	Mode                string `json:"mode"`
-	Repeat              int    `json:"repeat"`
-	Concurrency         int    `json:"concurrency"`
-	Currency            string `json:"currency,omitempty"`
-	ScorerVersion       string `json:"scorer_version"`
-	SimulationProfile   string `json:"simulation_profile,omitempty"`
-	LimitTokens         int64  `json:"limit_tokens"`
-	LimitMicros         int64  `json:"limit_micros"`
-	TimeoutSeconds      int    `json:"timeout_seconds"`
-	MeasurementProtocol string `json:"measurement_protocol,omitempty"`
-	ThresholdHash       string `json:"threshold_hash,omitempty"`
-	ReviewProtocolHash  string `json:"review_protocol_hash,omitempty"`
+	EvidenceReadProfile    string `json:"evidence_read_profile,omitempty"`
+	ToolArgumentProjection string `json:"tool_argument_projection,omitempty"`
+	AgentID                string `json:"agent_id"`
+	DatasetHash            string `json:"dataset_hash"`
+	Mode                   string `json:"mode"`
+	Repeat                 int    `json:"repeat"`
+	Concurrency            int    `json:"concurrency"`
+	Currency               string `json:"currency,omitempty"`
+	ScorerVersion          string `json:"scorer_version"`
+	SimulationProfile      string `json:"simulation_profile,omitempty"`
+	LimitTokens            int64  `json:"limit_tokens"`
+	LimitMicros            int64  `json:"limit_micros"`
+	TimeoutSeconds         int    `json:"timeout_seconds"`
+	MeasurementProtocol    string `json:"measurement_protocol,omitempty"`
+	ThresholdHash          string `json:"threshold_hash,omitempty"`
+	ReviewProtocolHash     string `json:"review_protocol_hash,omitempty"`
 }

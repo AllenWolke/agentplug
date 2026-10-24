@@ -121,9 +121,19 @@ func (r *SQLResolver) Resolve(ctx context.Context, scope sharedkernel.Scope, age
 	if r == nil || r.db == nil || scope.Validate() != nil || agentVersionID == "" {
 		return Snapshot{}, ErrScopeMismatch
 	}
+	var reader interface {
+		QueryRowContext(context.Context, string, ...any) *sql.Row
+	} = r.db
+	if pool, ok := r.db.(*sql.DB); ok {
+		joined, err := sqlutil.ContinuityReader(ctx, pool)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		reader = joined
+	}
 	var snapshot Snapshot
 	var modelJSON, promptJSON, toolJSON, memoryJSON, knowledgeJSON, runtimeJSON, ruleJSON []byte
-	err := r.db.QueryRowContext(ctx, sqlutil.Bind(`
+	err := reader.QueryRowContext(ctx, sqlutil.Bind(`
 	SELECT model_profile_id, prompt_version_id, tool_policy_id, memory_policy_id,
        knowledge_policy_id, runtime_policy_id, revision, snapshot_hash,
        model_policy_json, prompt_policy_json, tool_policy_json, memory_policy_json,
@@ -157,7 +167,8 @@ WHERE tenant_id=? AND department_id=? AND application_id=? AND agent_id=? AND ag
 	if err := json.Unmarshal(memoryJSON, &snapshot.Memory); err != nil {
 		return Snapshot{}, fmt.Errorf("decode memory policy: %w", err)
 	}
-	if err := json.Unmarshal(knowledgeJSON, &snapshot.Knowledge); err != nil {
+	snapshot.Knowledge, err = knowledgePolicyDecode.Decode(knowledgeJSON)
+	if err != nil {
 		return Snapshot{}, fmt.Errorf("decode knowledge policy: %w", err)
 	}
 	if err := json.Unmarshal(runtimeJSON, &snapshot.Runtime); err != nil {

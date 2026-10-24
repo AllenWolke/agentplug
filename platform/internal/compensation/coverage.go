@@ -12,11 +12,21 @@ import (
 // RecordedEffectsTx exposes immutable effect bindings to the composition root.
 // It never exposes before-images, tool output, credentials or inverse leases.
 // The caller must first fence the exact Run through its execution owner.
+//
+// This read intentionally takes no row lock. A step row share lock held here
+// (the previous `FOR SHARE`) is acquired before the cancellation-operation row
+// in the stop/finalize path, while the compensation worker claims the
+// cancellation-operation row before locking a step row. That lock-order
+// inversion produced PostgreSQL SQLSTATE 40P01 deadlocks under concurrent
+// cancellation. Coverage is validation only: enrollment already runs under the
+// job lock and FinalizeTx re-validates every step under FOR UPDATE after it
+// locks the operation row, so dropping the share lock keeps the authoritative
+// fence and makes the lock order uniform.
 func (s *SQLStore) RecordedEffectsTx(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope) ([]Step, error) {
 	if s == nil || ctx == nil || tx == nil || scope.ValidateTrusted() != nil {
 		return nil, ErrInvalid
 	}
-	rows, err := tx.QueryContext(ctx, sqlutil.Bind(`SELECT step_id,spec_digest,spec_json FROM platform_compensation_step WHERE run_id=? ORDER BY ordinal LIMIT ? FOR SHARE`), scope.RunID, MaxSteps+1)
+	rows, err := tx.QueryContext(ctx, sqlutil.Bind(`SELECT step_id,spec_digest,spec_json FROM platform_compensation_step WHERE run_id=? ORDER BY ordinal LIMIT ?`), scope.RunID, MaxSteps+1)
 	if err != nil {
 		return nil, err
 	}

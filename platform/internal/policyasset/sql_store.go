@@ -17,7 +17,24 @@ import (
 
 // SQLStore owns the versioned management records and publishes effective
 // snapshots into the read-only table consumed by SQLResolver.
-type SQLStore struct{ db *sql.DB }
+type SQLStore struct {
+	db               *sql.DB
+	routingValidator ModelRoutingPublicationValidator
+}
+
+func (s *SQLStore) SetModelRoutingPublicationValidator(v ModelRoutingPublicationValidator) {
+	s.routingValidator = v
+}
+
+func (s *SQLStore) validateRoutingPublication(ctx context.Context, scope Scope, model ModelPolicy) error {
+	if model.Routing == nil && model.ContextCache == nil {
+		return nil
+	}
+	if model.ValidateRouting() != nil || model.ValidateContextCache() != nil || s.routingValidator == nil {
+		return ErrInvalidAsset
+	}
+	return s.routingValidator.ValidateModelRoutingPublication(ctx, scope, model)
+}
 
 func NewSQLStore(db *sql.DB) *SQLStore { return &SQLStore{db: db} }
 
@@ -235,6 +252,15 @@ func (s *SQLStore) PublishAsset(ctx context.Context, scope Scope, typ AssetType,
 	if current.Status != AssetDraft {
 		return Asset{}, ErrAssetConflict
 	}
+	if typ == AssetModel {
+		var model ModelPolicy
+		if json.Unmarshal(current.Content, &model) != nil {
+			return Asset{}, ErrInvalidAsset
+		}
+		if err := s.validateRoutingPublication(ctx, scope, model); err != nil {
+			return Asset{}, err
+		}
+	}
 	next := current
 	next.Revision++
 	next.Status = AssetPublished
@@ -282,6 +308,12 @@ func (s *SQLStore) PublishSnapshot(ctx context.Context, req PublishSnapshotReque
 	}
 	snapshot, err := snapshotFromAssets(req, assets)
 	if err != nil {
+		return Snapshot{}, err
+	}
+	if snapshot.Model.Routing != nil && snapshot.Model.Routing.ExecutionContextSHA256 != RoutingExecutionContextSHA256(snapshot) {
+		return Snapshot{}, ErrInvalidSnapshot
+	}
+	if err := s.validateRoutingPublication(ctx, req.Scope, snapshot.Model); err != nil {
 		return Snapshot{}, err
 	}
 	currentRevision, err := lockSnapshotRevision(ctx, tx, req.Scope)

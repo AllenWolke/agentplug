@@ -20,7 +20,7 @@ func (a capabilityExecutionAuthority) AuthenticateWorkload(ctx context.Context, 
 	if !ok {
 		return identity.ErrPermissionDenied
 	}
-	caller, err := store.PermissionSnapshot(ctx, identity.PrincipalType(scope.PrincipalType), scope.PrincipalID)
+	caller, err := workloadPrincipalFacts(ctx, store, identity.PrincipalType(scope.PrincipalType), scope.PrincipalID)
 	if err != nil {
 		return err
 	}
@@ -61,12 +61,28 @@ func (a capabilityExecutionAuthority) AuthenticateWorkload(ctx context.Context, 
 	if !allowed {
 		return identity.ErrPermissionDenied
 	}
-	executor, err := store.PermissionSnapshot(ctx, identity.PrincipalServicePrincipal, clientID)
+	executor, err := workloadPrincipalFacts(ctx, store, identity.PrincipalServicePrincipal, clientID)
 	if err != nil {
 		return err
 	}
-	if executor.Mode != "v2" || !executor.Principal.IsActive || executor.Principal.Type != identity.PrincipalServicePrincipal || executor.Principal.ID != clientID || executor.Principal.TenantID != scope.TenantID {
+	if executor.Mode != "v2" || !executor.IsActive || executor.Type != identity.PrincipalServicePrincipal || executor.ID != clientID || executor.TenantID != scope.TenantID {
 		return identity.ErrPermissionDenied
 	}
 	return nil
+}
+
+func workloadPrincipalFacts(ctx context.Context, store interface {
+	PermissionSnapshot(context.Context, identity.PrincipalType, string) (identity.PermissionSnapshot, error)
+}, kind identity.PrincipalType, id string) (identity.PrincipalPolicyFacts, error) {
+	if reader, ok := store.(interface {
+		PrincipalPolicyFacts(context.Context, identity.PrincipalType, string) (identity.PrincipalPolicyFacts, error)
+	}); ok {
+		return reader.PrincipalPolicyFacts(ctx, kind, id)
+	}
+	// Alternate IAM adapters retain their existing contract. The SQL adapter
+	// avoids loading every grant merely to check mode and principal liveness.
+	snapshot, err := store.PermissionSnapshot(ctx, kind, id)
+	return identity.PrincipalPolicyFacts{ID: snapshot.Principal.ID, Type: snapshot.Principal.Type,
+		TenantID: snapshot.Principal.TenantID, IsActive: snapshot.Principal.IsActive,
+		Revision: snapshot.Principal.Revision, Mode: snapshot.Mode}, err
 }

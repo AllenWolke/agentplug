@@ -104,6 +104,10 @@ func main() {
 	var auditStore *audit.SQLStore
 	// Candidate gate stays explicit until write-provider coverage is complete.
 	cancellationEnabled := envBool("PLATFORM_CANCELLATION_COMPENSATION_ENABLED", false)
+	recoveryPolicy, holdErr := readAutomaticRecoveryPolicy(os.Getenv("PLATFORM_AUTOMATIC_RECOVERY_HOLD_FILE"), os.Getenv("PLATFORM_AUTOMATIC_RECOVERY_HOLD_SHA256"))
+	if holdErr != nil {
+		log.Fatal("automatic recovery hold configuration rejected")
+	}
 	var cancellationChannel *agentNotificationChannel
 	if cancellationEnabled {
 		cancellationChannel = &agentNotificationChannel{}
@@ -193,6 +197,9 @@ func main() {
 		conversationStore = conversation.NewSQLStore(sqlStore.DB())
 		conversationStore.SetDeletionContinuityGuard(identityStore.AcquirePermissionReadContinuity)
 		usageStore = usagecost.NewSQLStore(sqlStore.DB())
+		if err := usageStore.SetEvaluationPriceCurrencyReader(modelGovernanceStore); err != nil {
+			log.Fatal(err)
+		}
 		auditStore = audit.NewSQLStoreWithOutbox(sqlStore.DB(), notificationStore)
 		conversationStore.SetDeletionApprovalReplayChecker(func(ctx context.Context, tx *sql.Tx, scope conversation.Scope, item conversation.DeletionRequest) (bool, error) {
 			return auditStore.MatchesCommittedActorTx(ctx, tx, audit.Event{ID: "deletion-approval-" + item.ID, TenantID: scope.TenantID, DepartmentID: scope.DepartmentID, ApplicationID: scope.ApplicationID, ActorType: scope.PrincipalType, ActorID: scope.PrincipalID, AggregateType: "conversation_deletion", AggregateID: item.ID, Action: "conversation.deletion.approved", Outcome: "success", CreatedAt: item.ApprovedAt})
@@ -333,10 +340,12 @@ func main() {
 			}
 			gateway := agentgateway.RemoteAdapter{
 				Transport: agentgateway.RoutingTransport{
-					HTTP: agentgateway.NewHTTPTransport(&http.Client{Timeout: 5 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}),
+					// The dispatcher applies the immutable per-Run 300s/1800s
+					// policy. Transport ceilings must not truncate a valid profile.
+					HTTP: agentgateway.NewHTTPTransport(&http.Client{Timeout: time.Hour, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}),
 					GRPC: agentgateway.GRPCTransport{},
 				},
-				Timeout: 5 * time.Minute,
+				Timeout: time.Hour,
 			}
 			executionModule = execution.NewModuleWithDispatcherAndSharedRepository(config.Runtime.InternalToken, sqlStore, execution.NewDispatcherWithGateway(sqlStore, config.Runtime.InternalToken, gateway, workers))
 		} else {
@@ -358,24 +367,25 @@ func main() {
 		}
 		memoryStore = persistentMemory
 		persistentMemory.SetAuthorizationContinuityGuard(identityStore.AcquirePermissionReadContinuity)
+		persistentMemory.SetExecutionContinuityGuard(func(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope) error {
+			return lockCheckpointContinuity(ctx, tx, identityStore, sqlStore, evaluationBudgetAuthority, scope)
+		})
 		persistentState, err := capability.NewSQLCheckpointStore(sqlStore.DB())
 		if err != nil {
 			log.Fatal(err)
 		}
 		persistentState.SetContinuityGuard(func(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope, lease sharedkernel.ExecutionLeaseBinding) error {
-			if err := identityStore.AcquirePermissionReadContinuity(ctx, tx); err != nil {
-				return err
-			}
 			// The later current-authority check reads parent leases. Take their
 			// Run fences before locking this child, matching parent stop control.
-			if err := lockCheckpointAncestors(ctx, tx, sqlStore, evaluationBudgetAuthority, scope); err != nil {
+			if err := lockCheckpointContinuity(ctx, tx, identityStore, sqlStore, evaluationBudgetAuthority, scope); err != nil {
 				return err
 			}
-			return sqlStore.CheckCapabilityLeaseTx(ctx, tx, scope, lease)
+			return sqlStore.CheckCheckpointLeaseTx(ctx, tx, scope, lease)
 		})
 		persistentState.SetAuditRecorder(auditStore)
 		checkpointStore = persistentState
 		sqlStore.SetRecoveryCheckpointCapture(persistentState.CaptureRecoveryCheckpointsTx)
+		sqlStore.SetRecoveryCheckpointSetCapture(persistentState.CaptureRecoveryCheckpointSetTx)
 		executionModule.SetRecoveryCheckpointReader(func(ctx context.Context, scope sharedkernel.Scope, reference contract.RecoveryCheckpointReference) (map[string]any, error) {
 			checkpoint, err := persistentState.LoadReference(ctx, scope, reference)
 			if err != nil {
@@ -400,11 +410,17 @@ func main() {
 			log.Fatal(err)
 		}
 		modelInvocationStore = persistentModelStore
+		if err := persistentModelStore.SetModelBudgetClosureReader(usageStore); err != nil {
+			log.Fatal(err)
+		}
 		persistentToolStore, err := capability.NewSQLToolInvocationStore(sqlStore.DB())
 		if err != nil {
 			log.Fatal(err)
 		}
 		persistentToolStore.SetAuditRecorder(auditStore)
+		if err := persistentToolStore.SetAutomaticRecoveryHolds(recoveryPolicy.toolHolds); err != nil {
+			log.Fatal("automatic tool recovery holds unavailable")
+		}
 		toolInvocationStore = persistentToolStore
 	}
 	var checkCoordinatedAncestry func(context.Context, sharedkernel.Scope) error
@@ -447,6 +463,17 @@ func main() {
 		catalogModule = catalog.NewModuleWithScopeValidator(catalogStore, config.Runtime.InternalToken, identityStore)
 		if identityStore != nil {
 			identityStore.SetCapabilityResourceResolver(publishedPermissionResourceResolver{catalog: catalogStore, policies: policyResolver})
+			executionModule.SetPinnedRunTargetResolver(func(ctx context.Context, scope sharedkernel.Scope, endpoint string) error {
+				binding, err := identityStore.ResolveWorkloadIdentity(ctx, scope)
+				if err != nil || binding.AgentVersionID != scope.AgentVersionID {
+					return errors.New("retained workload version denied")
+				}
+				target, err := catalogModule.ResolveRetainedExecutionTarget(ctx, scope, endpoint)
+				if err != nil || target.InstallationID != scope.InstallationID || target.AgentVersionID != scope.AgentVersionID || target.Endpoint != endpoint {
+					return errors.New("pinned deployment denied")
+				}
+				return nil
+			})
 			catalogModule.SetAgentAccessChecker(identityCatalogAccess{store: identityStore})
 			catalogModule.SetControlAuthorizer(identityCatalogControl{store: identityStore})
 			if identityModule != nil {
@@ -487,6 +514,11 @@ func main() {
 	}
 	if policyAssetStore != nil {
 		policyModule := policyasset.NewModule(policyAssetStore, identityPolicyAssetControl{store: identityStore}, config.Runtime.InternalToken)
+		if receipts, ok := modelInvocationStore.(*capability.SQLModelInvocationStore); ok && modelGovernanceStore != nil && evaluationProductStore != nil {
+			policyAssetStore.SetModelRoutingPublicationValidator(modelRoutingPublicationValidator{models: modelGovernanceStore,
+				reuseCatalog: catalogStore, reusePolicies: policyAssetStore,
+				evaluations: evaluationProductStore, caseModels: routingQualificationCaseModels{runs: sqlStore, receipts: receipts, identity: identityStore}})
+		}
 		if err := modules.Register(policyModule); err != nil {
 			log.Fatal(err)
 		}
@@ -555,6 +587,9 @@ func main() {
 		}
 		var eventBus notification.EventBus
 		if config.Runtime.EventBusMode == "kafka" {
+			if len(recoveryPolicy.offsets) > 0 && recoveryPolicy.group != config.Runtime.KafkaNotificationGroup {
+				log.Fatal("Kafka recovery boundary belongs to a different consumer group")
+			}
 			bus, err := notification.NewKafkaGoEventBus(notification.KafkaGoConfig{
 				Brokers:          splitCSV(config.Runtime.KafkaBrokers),
 				ClientID:         config.Runtime.KafkaClientID,
@@ -565,6 +600,7 @@ func main() {
 				MaxAttempts:      config.Runtime.KafkaMaxAttempts,
 				RetryBackoff:     config.Runtime.KafkaRetryBackoff,
 				DeadLetters:      deadLetters,
+				MinimumOffsets:   recoveryPolicy.offsets,
 			})
 			if err != nil {
 				log.Fatal(err)
@@ -604,7 +640,17 @@ func main() {
 			},
 		)
 		conversationModule.SetErasureWorkerEnabled(envBool("PLATFORM_CONVERSATION_ERASURE_ENABLED", true))
-		conversationModule.SetRunReplayResolver(conversationRunReplay{repository: sqlStore, sessions: conversationStore})
+		var modelSelectionStore policyasset.ModelSelectionStore
+		if selections, ok := modelInvocationStore.(policyasset.ModelSelectionStore); ok {
+			modelSelectionStore = selections
+			conversationModule.SetModelSelectionStore(selections)
+			executionModule.SetModelSelectionStore(selections)
+			if summaries, ok := modelInvocationStore.(policyasset.ModelRoutingSummaryReader); ok {
+				executionModule.SetModelRoutingSummaryReader(summaries)
+			}
+		}
+		conversationModule.SetRunReplayResolver(conversationRunReplay{repository: sqlStore, sessions: conversationStore, modelSelections: modelSelectionStore})
+		conversationModule.SetRunProgressResolver(conversationRunProgress{repository: sqlStore, sessions: conversationStore})
 		conversationStore.SetPublicShareAccessControl(identityConversationAccess{store: identityStore})
 		if identityStore != nil {
 			conversationModule.SetPrincipalRoleResolver(func(ctx context.Context, scope conversation.Scope) ([]string, error) {
@@ -641,42 +687,24 @@ func main() {
 		if contextSigner != nil {
 			conversationModule.SetContextTokenSigner(contextSigner)
 			executionModule.SetMachineRunContextSigner(contextSigner)
-			executionModule.SetDispatchSecurity(contextSigner, func(ctx context.Context, scope sharedkernel.Scope) error {
-				if scope.ParentRunID != "" {
+			dispatchAccess := dispatchAuthority{execution: executionModule,
+				identity: identityConversationAgentRunAuthorizer{store: identityStore},
+				// These dependencies are wired later during composition. Preserve
+				// the original late lookup instead of capturing their current nil.
+				ancestry: func(ctx context.Context, scope sharedkernel.Scope) error {
 					if checkCoordinatedAncestry == nil {
 						return errors.New("parented execution authority denied")
 					}
-					if err := checkCoordinatedAncestry(ctx, scope); err != nil {
-						// Keep lock-wait errors so a heartbeat can tell an
-						// unfinished ancestor row from a finished denial.
-						// Rewriting the SQLSTATE makes that tick cancel the child.
-						if ancestryLockWait(err) {
-							return err
-						}
-						return errors.New("parented execution authority denied")
+					return checkCoordinatedAncestry(ctx, scope)
+				},
+				pinRoot: func(ctx context.Context, scope sharedkernel.Scope) error {
+					if coordinationRouteStore == nil {
+						return nil
 					}
-				} else {
-					epoch, versionErr := (identityConversationAgentRunAuthorizer{store: identityStore}).CurrentAuthorizationEpoch(ctx, scope, "run")
-					if versionErr != nil || epoch != scope.AuthorizationEpoch {
-						return errors.New("execution IAM authorization version changed")
-					}
-					allowed, err := (identityConversationAgentRunAuthorizer{store: identityStore}).AuthorizeConversationRun(ctx, scope)
-					if err != nil || !allowed {
-						return errors.New("current execution grant denied")
-					}
-					if coordinationRouteStore != nil {
-						pinRoute := agentRouteAuthority{identity: identityStore, runs: sqlStore, routes: coordinationRouteStore}
-						if pinRoute.PinRootMachineAuthority(ctx, scope) != nil {
-							return errors.New("root workload authority changed")
-						}
-					}
-				}
-				target, err := catalogModule.ResolveEvaluationAgentTarget(ctx, scope, scope.AgentID, scope.AgentVersionID)
-				if err != nil || target.InstallationID != scope.InstallationID || target.AgentVersionID != scope.AgentVersionID {
-					return errors.New("current execution installation denied")
-				}
-				return nil
-			})
+					return (agentRouteAuthority{identity: identityStore, runs: sqlStore,
+						routes: coordinationRouteStore}).PinRootMachineAuthority(ctx, scope)
+				}}
+			executionModule.SetDispatchSecurity(contextSigner, dispatchAccess.Authorize)
 		}
 		if err := modules.Register(conversationModule); err != nil {
 			log.Fatal(err)
@@ -689,6 +717,15 @@ func main() {
 	var evaluationProductModule *evaluationproduct.Module
 	if evaluationProductStore != nil {
 		evaluationSources := evaluationInspection{catalog: catalogModule, execution: executionModule, runs: sqlStore, identity: identityStore, audit: auditStore, usage: usageStore}
+		if evidence, ok := toolInvocationStore.(capability.ToolEvaluationEvidencePort); ok {
+			evaluationSources.tools = evidence
+		}
+		if evidence, ok := modelInvocationStore.(capability.ModelEvaluationEvidencePort); ok {
+			evaluationSources.models = evidence
+		}
+		if evidence, ok := modelInvocationStore.(capability.ModelPerformanceEvidencePort); ok {
+			evaluationSources.modelPerformance = evidence
+		}
 		telemetry.SetEvaluationQueueSource(func(ctx context.Context) (telemetry.EvaluationQueueMetrics, error) {
 			snapshot, err := evaluationProductStore.QueueSnapshot(ctx)
 			return telemetry.EvaluationQueueMetrics{Depth: snapshot.Depth, OldestQueuedAt: snapshot.OldestQueuedAt}, err
@@ -731,6 +768,9 @@ func main() {
 		productModule.SetModeAdmission(evaluationModes)
 		productModule.SetInspection(evaluationSources)
 		productModule.SetSourceAuthorizer(evaluationSources)
+		if receipts, ok := modelInvocationStore.(*capability.SQLModelInvocationStore); ok {
+			productModule.SetRoutingCaseModelVerifier(routingQualificationCaseModels{runs: sqlStore, receipts: receipts, identity: identityStore})
+		}
 		if err := modules.Register(productModule); err != nil {
 			log.Fatal(err)
 		}
@@ -764,9 +804,17 @@ func main() {
 	if knowledgeDB != nil {
 		defer knowledgeDB.Close()
 	}
+	remoteKnowledge, externalKnowledgeError := externalKnowledgeProvider()
+	if externalKnowledgeError != nil {
+		log.Fatal("external knowledge configuration unavailable")
+	}
+	knowledgeProvider = capability.NewFederatedKnowledgeProvider(knowledgeProvider, remoteKnowledge)
 	capabilityModule := capability.NewModuleWithGovernanceAndToolLedger(config.Runtime.InternalToken, config.Runtime.InternalSigningSecret, publicKey, config.Runtime.PlatformContextIssuer, config.Runtime.PlatformContextAudience, knowledgeProvider, policyResolver, memoryStore, modelInvocationStore, toolInvocationStore)
 	capabilityModule.EnableDevelopmentMock(config.Runtime.Environment)
 	capabilityModule.SetCheckpointStore(checkpointStore)
+	if sqlStore != nil {
+		capabilityModule.SetRecoveryCheckpointPager(sqlStore)
+	}
 	if sqlStore != nil {
 		sqlStore.SetRecoveryFailureDisposition(func(err error) bool {
 			return errors.Is(err, capability.ErrStateContinuityLost)
@@ -981,6 +1029,10 @@ func main() {
 		log.Fatal("shared Run budget requires persistent execution, identity, coordination, audit and model billing")
 	}
 	if usageStore != nil {
+		if auditStore != nil {
+			capabilityModule.SetPerformanceRecorder(auditStore)
+			capabilityModule.SetModelAttemptRecorder(auditStore)
+		}
 		capabilityModule.SetUsageRecorder(usageStore)
 		if modelGovernanceStore != nil {
 			var modelBudgets usagecost.ModelBudgetStore = usageStore
@@ -1033,6 +1085,7 @@ func main() {
 	if identityStore != nil {
 		identityStore.SetPermissionTaskResolver(permissionTaskResolver{runs: executionModule})
 	}
+	(waitingRunAuthorization{iam: identityStore, runs: sqlStore, execution: executionModule, catalog: catalogModule, policies: policyResolver, resources: knowledgeAuthority, routes: coordinationRouteStore, audit: auditStore}).configure()
 	if err := modules.Register(capabilityModule); err != nil {
 		log.Fatal(err)
 	}
@@ -1054,12 +1107,17 @@ func main() {
 		if !memoryOK || !toolsOK {
 			log.Fatal("cancellation requires persistent effect owners")
 		}
-		setup := cancellationSetup{runs: sqlStore, execution: executionModule, routes: coordinationRouteStore, capabilities: capabilityModule, tools: tools, memory: memory, tree: cancellationBudgetTree, iam: identityStore, evaluation: evaluationBudgetAuthority, outbox: notificationStore, notifications: cancellationNotifications, channel: cancellationChannel, audit: auditStore, domain: cancellationDomain}
+		setup := cancellationSetup{runs: sqlStore, execution: executionModule, routes: coordinationRouteStore, capabilities: capabilityModule, tools: tools, memory: memory, tree: cancellationBudgetTree, iam: identityStore, evaluation: evaluationBudgetAuthority, outbox: notificationStore, notifications: cancellationNotifications, channel: cancellationChannel, audit: auditStore, domain: cancellationDomain, recoveryHolds: recoveryPolicy.holds}
 		owner, err := setup.configure(ctx)
 		if err != nil {
 			log.Fatal("cancellation compensation composition unavailable; check migrated schema and installed owners")
 		}
 		indexCompensation = owner
+	}
+	if executionModule != nil {
+		if err := executionModule.SetAutomaticRecoveryHolds(recoveryPolicy.holds); err != nil {
+			log.Fatal("automatic recovery hold composition rejected")
+		}
 	}
 	if root := strings.TrimSpace(os.Getenv("PLATFORM_INDEX_WORKLOAD_SECRET_ROOT")); root != "" {
 		if knowledgeModule == nil || sqlStore == nil || identityStore == nil || auditStore == nil || contextSigner == nil {
@@ -1074,6 +1132,7 @@ func main() {
 			log.Fatal("configure knowledge index worker failed")
 		}
 	}
+
 	// Fail closed if a production composition accidentally drops a trusted
 	// module or reintroduces a legacy process as an in-process module.  The
 	// manifest is data-only; future remote adapters can replace individual

@@ -33,6 +33,7 @@ type KafkaGoConfig struct {
 	Dialer           *kafka.Dialer
 	Transport        *kafka.Transport
 	DeadLetters      DeadLetterSink
+	MinimumOffsets   []KafkaStartOffset
 }
 
 // KafkaGoEventBus implements EventBus and OffsetEventConsumer over kafka-go.
@@ -40,13 +41,14 @@ type KafkaGoConfig struct {
 // A ChannelAdapter failure leaves the source message uncommitted so Kafka can
 // replay it after the bounded retry backoff or process restart.
 type KafkaGoEventBus struct {
-	writer      kafkaMessageWriter
-	reader      kafkaMessageReader
-	dlqTopic    string
-	max         int
-	backoff     time.Duration
-	group       string
-	deadLetters DeadLetterSink
+	writer         kafkaMessageWriter
+	reader         kafkaMessageReader
+	dlqTopic       string
+	max            int
+	backoff        time.Duration
+	group          string
+	deadLetters    DeadLetterSink
+	minimumOffsets map[kafkaPartition]int64
 
 	closeOnce sync.Once
 	closeErr  error
@@ -90,6 +92,22 @@ func NewKafkaGoEventBus(cfg KafkaGoConfig) (*KafkaGoEventBus, error) {
 	if err != nil {
 		return nil, err
 	}
+	minimumOffsets, err := kafkaStartOffsetMap(cfg.MinimumOffsets)
+	if err != nil {
+		return nil, err
+	}
+	for key := range minimumOffsets {
+		found := false
+		for _, topic := range topics {
+			if topic == key.topic {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, errors.New("Kafka offset boundary is outside consumer topics")
+		}
+	}
 	transport := cfg.Transport
 	if transport == nil {
 		transport = &kafka.Transport{ClientID: cfg.ClientID}
@@ -118,7 +136,7 @@ func NewKafkaGoEventBus(cfg KafkaGoConfig) (*KafkaGoEventBus, error) {
 		StartOffset:    kafka.FirstOffset,
 		Dialer:         dialer,
 	})
-	return &KafkaGoEventBus{writer: writer, reader: reader, dlqTopic: cfg.DLQTopic, max: cfg.MaxAttempts, backoff: cfg.RetryBackoff, group: cfg.GroupID, deadLetters: cfg.DeadLetters}, nil
+	return &KafkaGoEventBus{writer: writer, reader: reader, dlqTopic: cfg.DLQTopic, max: cfg.MaxAttempts, backoff: cfg.RetryBackoff, group: cfg.GroupID, deadLetters: cfg.DeadLetters, minimumOffsets: minimumOffsets}, nil
 }
 
 func kafkaConsumerTopics(cfg KafkaGoConfig) ([]string, error) {
@@ -199,6 +217,14 @@ func (b *KafkaGoEventBus) ConsumeMessages(ctx context.Context, handler func(cont
 		message, err := b.reader.FetchMessage(ctx)
 		if err != nil {
 			return err
+		}
+		// Check before decoding or recording delivery/DLQ attempts. A lost group
+		// offset must never turn a historical or malformed record into a new effect.
+		if minimum, held := b.minimumOffsets[kafkaPartition{message.Topic, message.Partition}]; held && message.Offset < minimum {
+			if err := b.reader.CommitMessages(ctx, message); err != nil {
+				return err
+			}
+			continue
 		}
 		group := b.group
 		if group == "" {

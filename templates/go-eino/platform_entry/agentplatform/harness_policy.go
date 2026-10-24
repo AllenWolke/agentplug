@@ -185,7 +185,10 @@ func harnessLimitOutput(previous map[string]any, finishReason string) map[string
 		"termination_reason": "HARNESS_LIMIT_EXCEEDED",
 		"finish_reason":      finishReason,
 	}
-	for _, key := range []string{"text", "model", "usage", "billing", "run_budget", "prompt_template_hash"} {
+	// Same canonical preserved set as harnessBudgetOutput and the Python/Java
+	// harness: a round/tool/elapsed limit must not drop routing and model
+	// attribution needed for billing and audit.
+	for _, key := range []string{"text", "model", "usage", "billing", "run_budget", "prompt_template_hash", "routing", "route_execution", "context_cache", "response_schema", "model_version_id", "provider_id", "model_id", "step_id"} {
 		if value, exists := previous[key]; exists {
 			output[key] = value
 		}

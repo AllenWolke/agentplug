@@ -25,7 +25,15 @@ public final class HarnessRunner {
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private HarnessRunner() {}
 
-    public record Options(String key, int maxRounds, int maxToolCalls, String confirmationToken) {
+    @FunctionalInterface public interface ActionValidator { boolean allow(Map<String,Object> operation,Map<String,Object> view) throws CapabilityClient.Failure; }
+    @FunctionalInterface public interface ProgressEvaluator { Map<String,Object> evaluate(Map<String,Object> observation,Map<String,Object> view) throws CapabilityClient.Failure; }
+    public record Options(String key, int maxRounds, int maxToolCalls, String confirmationToken,
+            String extensionId, Long deadlineMs, ActionValidator actionValidator, ProgressEvaluator progressEvaluator) {
+        public Options(String key,int rounds,int tools,String token){this(key,rounds,tools,token,"",null,null,null);}
+        boolean extended(){return (extensionId!=null&&!extensionId.isEmpty())||deadlineMs!=null||actionValidator!=null||progressEvaluator!=null;}
+        String namespace(){return extended()?"harness-v2":"harness";}
+        String schema(){return extended()?"schema://agentplug/harness-loop/v2":STATE_SCHEMA;}
+
         public Options(String key, int maxRounds, int maxToolCalls) { this(key, maxRounds, maxToolCalls, ""); }
         @Override public String toString() { return "HarnessRunner.Options[redacted]"; }
     }
@@ -227,7 +235,7 @@ public final class HarnessRunner {
     private static ObjectNode budgetOutput(JsonNode previous, String reason) {
         ObjectNode output = JSON.createObjectNode();
         output.put("completion_status", "incomplete"); output.put("finish_reason", reason);
-        for (String field : List.of("text", "model", "usage", "billing", "run_budget", "prompt_template_hash"))
+        for (String field : List.of("text", "model", "usage", "billing", "run_budget", "prompt_template_hash", "routing", "route_execution", "context_cache", "response_schema", "model_version_id", "provider_id", "model_id", "step_id"))
             if (previous.has(field)) output.set(field, previous.get(field).deepCopy());
         if (reason.equals("budget_exhausted")) output.put("termination_reason", "MODEL_BUDGET_EXCEEDED");
         return output;
@@ -236,7 +244,7 @@ public final class HarnessRunner {
         ObjectNode output = JSON.createObjectNode();
         output.put("completion_status", "incomplete"); output.put("termination_reason", "HARNESS_LIMIT_EXCEEDED");
         output.put("finish_reason", reason);
-        for (String field : List.of("text", "model", "usage", "billing", "run_budget", "prompt_template_hash"))
+        for (String field : List.of("text", "model", "usage", "billing", "run_budget", "prompt_template_hash", "routing", "route_execution", "context_cache", "response_schema", "model_version_id", "provider_id", "model_id", "step_id"))
             if (previous != null && previous.has(field)) output.set(field, previous.get(field).deepCopy());
         return output;
     }
@@ -261,7 +269,7 @@ public final class HarnessRunner {
     /** Stable fingerprint for a planned first Harness checkpoint. */
     public static String inputFingerprint(Map<String, Object> input, Options options) throws CapabilityClient.Failure {
         if (input == null || options == null) throw stop("HARNESS_CONFIG_INVALID");
-        return digest(List.of(input, options.maxRounds(), options.maxToolCalls()));
+        return options.extended()?digest(java.util.Arrays.asList(input,options.maxRounds(),options.maxToolCalls(),options.extensionId(),options.actionValidator()!=null,options.progressEvaluator()!=null,options.deadlineMs())):digest(List.of(input, options.maxRounds(), options.maxToolCalls()));
     }
     private static String stepKey(String key, int round, String phase) throws CapabilityClient.Failure {
         return "function-" + digest(List.of(key, round, phase));
@@ -336,7 +344,7 @@ public final class HarnessRunner {
         Duration timeout = clock.timeout(port);
         if (force && clock.expired(port)) timeout = Duration.ofSeconds(5);
         JsonNode receipt = JSON.valueToTree(port.postWithin("/internal/state/checkpoint", Map.of(
-                "operation", "save", "namespace", "harness", "key", options.key(), "schema_id", STATE_SCHEMA,
+                "operation", "save", "namespace", options.namespace(), "key", options.key(), "schema_id", options.schema(),
                 "idempotency_key", "loop-" + (revision + 1), "expected_revision", revision, "value", object(state)), timeout));
         JsonNode next = receipt.path("checkpoint").path("revision");
         if (!next.isIntegralNumber() || next.asLong() != revision + 1) throw stop("HARNESS_STATE_REJECTED");
@@ -351,6 +359,7 @@ public final class HarnessRunner {
         if (options == null || options.key() == null || options.key().isBlank() || options.maxRounds() < 1 || options.maxRounds() > 8
                 || options.maxToolCalls() < 1 || options.maxToolCalls() > 16 || options.confirmationToken() == null
                 || options.confirmationToken().getBytes(StandardCharsets.UTF_8).length > 8192) throw stop("HARNESS_CONFIG_INVALID");
+        if(options.extended()&&(options.extensionId()==null||!options.extensionId().matches("[A-Za-z0-9_.:/-]{1,128}")||options.deadlineMs()!=null&&(options.deadlineMs()<1||options.deadlineMs()>9_007_199_254_740_991L)))throw stop("HARNESS_CONFIG_INVALID");
         JsonNode original = JSON.valueToTree(input);
         if (!original.isObject() || !original.path("messages").isArray() || original.path("messages").isEmpty()
                 || !original.path("idempotency_key").isTextual() || original.path("idempotency_key").asText().isBlank()) throw stop("REQUEST_INVALID");
@@ -360,26 +369,28 @@ public final class HarnessRunner {
         long policyClockStarted = port.monotonicNanos();
         PublishedPolicy policy = loadPolicy(port);
         ObjectNode state = JSON.createObjectNode();
-        state.put("version", "harness-loop/v1"); state.put("input_hash", inputHash); state.put("phase", "model");
+        state.put("version", options.extended()?"harness-loop/v2":"harness-loop/v1"); state.put("input_hash", inputHash); state.put("phase", "model");
         state.put("round", 0); state.put("tool_count", 0); state.set("messages", original.path("messages").deepCopy()); state.putArray("pending");
+        if(options.extended()){state.put("extension_id",options.extensionId());state.putArray("model_receipts");state.putArray("observations");}
         long revision = 0;
         JsonNode loaded = JSON.valueToTree(port.postWithin("/internal/state/checkpoint", Map.of(
-                "operation", "load", "namespace", "harness", "key", options.key(), "schema_id", STATE_SCHEMA, "revision", 0), Duration.ofSeconds(5)));
-        if (!loaded.isObject() || !fieldNames(loaded).equals(Set.of("state_key", "checkpoint"))
+                "operation", "load", "namespace", options.namespace(), "key", options.key(), "schema_id", options.schema(), "revision", 0), Duration.ofSeconds(5)));
+        if (!loaded.isObject() || !(fieldNames(loaded).equals(Set.of("state_key", "checkpoint"))||fieldNames(loaded).equals(Set.of("state_key","checkpoint","checkpoint_history")))
                 || !loaded.path("state_key").isTextual() || !loaded.path("state_key").asText().matches("[a-f0-9]{64}"))
             throw stop("HARNESS_STATE_REJECTED");
         JsonNode checkpoint = loaded.path("checkpoint");
         if ((checkpoint.isMissingNode() || checkpoint.isNull()) && resumeRequest
-                && (recoveryBinding == null || !recoveryBinding.consumeStart("harness", options.key(), STATE_SCHEMA,
+                && (recoveryBinding == null || !recoveryBinding.consumeStart(options.namespace(), options.key(), options.schema(),
                         inputHash, loaded.path("state_key").asText()))) throw stop("HARNESS_STATE_REJECTED");
         boolean restored = !checkpoint.isMissingNode() && !checkpoint.isNull();
         if (!checkpoint.isMissingNode() && !checkpoint.isNull()) {
             if (!checkpoint.path("revision").isIntegralNumber() || !checkpoint.path("revision").canConvertToLong()
                     || checkpoint.path("revision").asLong() < 1 || !checkpoint.path("value").isObject()
-                    || !checkpoint.path("value").path("version").asText().equals("harness-loop/v1")
+                    || !checkpoint.path("value").path("version").asText().equals(options.extended()?"harness-loop/v2":"harness-loop/v1")
                     || !checkpoint.path("value").path("input_hash").asText().equals(inputHash)) throw stop("HARNESS_STATE_REJECTED");
             revision = checkpoint.path("revision").asLong(); state = (ObjectNode) checkpoint.path("value").deepCopy();
         }
+        if(options.extended()&&(!options.extensionId().equals(state.path("extension_id").asText())||!state.path("observations").isArray()||state.path("observations").size()>16||!state.path("model_receipts").isArray()||state.path("model_receipts").size()>8))throw stop("HARNESS_STATE_REJECTED");
         String phase = state.path("phase").asText();
         boolean dispatching = phase.equals("model_dispatch") || phase.equals("tool_dispatch");
         boolean legacyPolicyState = restored && !hasAnyPolicyState(state);
@@ -391,8 +402,10 @@ public final class HarnessRunner {
             if (matchesPolicy(state, policy)) validatePolicyState(state, policy);
         } else {
             clock = newClockWithStart(port, policy, policyClockStarted);
+            if(options.deadlineMs()!=null)clock=new LoopClock(policy,Math.min(clock.deadlineMs,options.deadlineMs()),policyClockStarted);
             if (!restored) bindPolicy(state, policy, clock.deadlineMs, JSON.createObjectNode());
         }
+        if(options.deadlineMs()!=null&&clock.deadlineMs>options.deadlineMs())throw stop("HARNESS_STATE_REJECTED");
         boolean promptHashProvided = original.has("prompt_template_hash");
         JsonNode requestedPromptHash = original.get("prompt_template_hash");
         if (!state.path("round").isIntegralNumber() || !state.path("round").canConvertToInt() || state.path("round").asInt() < 0 || state.path("round").asInt() > 8
@@ -420,7 +433,9 @@ public final class HarnessRunner {
             if (phase.equals("done")) {
                 if (hasCompletePolicyState(state) && !matchesPolicy(state, policy)) throw stop("HARNESS_POLICY_CHANGED");
                 if (state.path("limit_error").asBoolean(false)) throw stop("HARNESS_LIMIT_EXCEEDED");
-                return Map.of("status", state.path("output").path("completion_status").asText().equals("incomplete") ? "incomplete" : "completed", "output", object(state.path("output")));
+                Map<String,Object> finalResult=new LinkedHashMap<>();finalResult.put("status",state.path("output").path("completion_status").asText().equals("incomplete")?"incomplete":"completed");finalResult.put("output",object(state.path("output")));
+                if(options.extended())finalResult.put("execution",Map.of("version","harness-execution/v2","extension_id",options.extensionId(),"deadline_ms",clock.deadlineMs,"decision_count",state.path("model_receipts").size(),"tool_count",state.path("tool_count").asInt(),"model_receipts",JSON.convertValue(state.path("model_receipts"),List.class),"observations",JSON.convertValue(state.path("observations"),List.class)));
+                return finalResult;
             }
             boolean recoveringModel = phase.equals("model_dispatch");
             boolean recoveringTool = phase.equals("tool_dispatch");
@@ -462,6 +477,7 @@ public final class HarnessRunner {
                     current.remove("skill_requests"); current.remove("skill_bindings");
                     if (state.path("skill_bindings").size() > 0) current.put("skill_bindings", JSON.convertValue(state.path("skill_bindings"), Object.class));
                     current.put("prompt_template_hash", context.path("prompt_template_hash").asText());
+                    current.remove("deadline_ms");if(options.extended())current.put("deadline_ms",clock.deadlineMs);
                     state.set("model_request", JSON.valueToTree(current)); state.put("phase", "model_dispatch"); revision = save(port, options, revision, state, clock, false);
                 }
                 JsonNode request = state.path("model_request");
@@ -500,6 +516,7 @@ public final class HarnessRunner {
                     finishForLimit(port, options, state, revision, result, "elapsed_limit", policy, clock);
                     revision++; continue;
                 }
+                if(options.extended()){ObjectNode entry=JSON.createObjectNode();entry.put("idempotency_key",request.path("idempotency_key").asText());entry.set("receipt",result.deepCopy());((ArrayNode)state.path("model_receipts")).add(entry);}
                 JsonNode calls = result.path("tool_calls");
                 if (budgetExhausted(result) && calls.isArray() && !calls.isEmpty()) {
                     state.put("phase", "done"); state.remove("pending"); state.put("repeat_counted_call_id", ""); state.set("output", budgetOutput(result, "budget_exhausted"));
@@ -533,6 +550,7 @@ public final class HarnessRunner {
                     ObjectNode operation = JSON.createObjectNode(); operation.put("name", name); operation.put("call_id", stepKey(key, round, id)); operation.put("model_call_id", id); operation.set("payload", arguments); pending.add(operation);
                 }
                 ObjectNode assistant = JSON.createObjectNode(); assistant.put("role", "assistant"); assistant.put("content", result.path("text").asText()); assistant.set("tool_calls", calls);
+                if(options.actionValidator()!=null)for(JsonNode candidate:pending)if(!options.actionValidator().allow(object(candidate.deepCopy()),extensionView(state))){state.put("phase","done");state.putArray("pending");state.set("output",budgetOutput(result,"action_rejected"));save(port,options,revision,state,clock,true);throw stop("HARNESS_ACTION_REJECTED");}
                 ((ArrayNode) state.path("messages")).add(assistant); state.set("pending", pending); state.put("phase", "tool");
                 state.set("output", budgetOutput(result, "tools_pending")); revision = save(port, options, revision, state, clock, true);
                 if (restored && hasCompletePolicyState(state) && !matchesPolicy(state, policy)) throw stop("HARNESS_POLICY_CHANGED");
@@ -541,6 +559,7 @@ public final class HarnessRunner {
                 if (revision >= 62) throw stop("HARNESS_STATE_LIMIT");
                 ArrayNode pending = (ArrayNode) state.path("pending"); if (pending.isEmpty()) throw stop("HARNESS_STATE_REJECTED");
                 JsonNode operation = pending.get(0); Map<String, Object> view = object(operation); view.put("run_id", runId);
+                if(!recovering&&options.actionValidator()!=null&&!options.actionValidator().allow(object(operation.deepCopy()),extensionView(state)))throw stop("HARNESS_ACTION_REJECTED");
                 if (phase.equals("approval_required") && token.isEmpty()) return Map.of("status", "approval_required", "pending", view);
                 if (!recovering) {
                     if (state.path("tool_count").asInt() >= effectiveToolCalls) {
@@ -593,6 +612,7 @@ public final class HarnessRunner {
                     ObjectNode bounded = JSON.createObjectNode();
                     for (String field : List.of("version", "tool_name", "status", "error_type", "effect", "instruction_trust", "context_output", "context_truncated")) if (observation.has(field)) bounded.set(field, observation.get(field));
                     bounded.put("output_truncated", observation.path("truncated").asBoolean());
+                    if(options.extended()){ObjectNode entry=JSON.createObjectNode();entry.set("operation",operation.deepCopy());entry.set("observation",bounded.deepCopy());((ArrayNode)state.path("observations")).add(entry);}
                     ObjectNode message = JSON.createObjectNode(); message.put("role", "tool"); message.put("tool_call_id", operation.path("model_call_id").asText()); message.put("content", JSON.writeValueAsString(bounded)); ((ArrayNode) state.path("messages")).add(message);
                 } catch (CapabilityClient.Failure error) { throw error; }
                 catch (Exception ignored) { throw stop("TOOL_OBSERVATION_REJECTED"); }
@@ -614,6 +634,7 @@ public final class HarnessRunner {
                     repeats.put(digest, repeats.path(digest).asInt(0) + 1);
                 } else if (recovering) throw stop("HARNESS_STATE_REJECTED");
                 if (pending.isEmpty()) { state.put("round", round + 1); state.put("phase", "model"); }
+                if(options.progressEvaluator()!=null){Map<String,Object> outcome=options.progressEvaluator().evaluate(object(observation.deepCopy()),extensionView(state));if(outcome!=null){if(!Set.of("completed","incomplete").contains(String.valueOf(outcome.get("completion_status"))))throw stop("HARNESS_PROGRESS_REJECTED");state.put("phase","done");state.putArray("pending");state.set("output",JSON.valueToTree(outcome));}}
                 revision = save(port, options, revision, state, clock, true);
                 if (restored && hasCompletePolicyState(state) && !matchesPolicy(state, policy)) throw stop("HARNESS_POLICY_CHANGED");
                 if (clock.expired(port)) {
@@ -624,6 +645,7 @@ public final class HarnessRunner {
         }
     }
 
+    private static Map<String,Object> extensionView(ObjectNode state){return Map.of("round",state.path("round").asInt(),"tool_count",state.path("tool_count").asInt(),"observations",JSON.convertValue(state.path("observations").deepCopy(),List.class));}
     private static Set<String> fieldNames(JsonNode node) {
         Set<String> names = new HashSet<>();
         node.fieldNames().forEachRemaining(names::add);

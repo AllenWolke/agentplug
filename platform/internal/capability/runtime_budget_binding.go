@@ -14,7 +14,16 @@ type runtimeBudgetContextKey struct{}
 // supply it. Composition validates its lease inside the budget transaction.
 func RuntimeBudgetExecutionAuthority(ctx context.Context, scope sharedkernel.Scope) (sharedkernel.ExecutionLeaseBinding, policyasset.Snapshot, error) {
 	bound, ok := ctx.Value(runtimeBudgetContextKey{}).(skillRuntimeContext)
-	if !ok || bound.Scope != scope || bound.Check == nil || bound.Check(ctx) != nil {
+	if !ok || bound.Scope != scope || bound.Check == nil {
+		return sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, usagecost.ErrBudgetScopeMismatch
+	}
+	if err := bound.Check(ctx); err != nil {
+		if ctx.Err() != nil {
+			return sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, ctx.Err()
+		}
+		if budgetAdmissionDeferred(err) {
+			return sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, err
+		}
 		return sharedkernel.ExecutionLeaseBinding{}, policyasset.Snapshot{}, usagecost.ErrBudgetScopeMismatch
 	}
 	return bound.Lease, bound.Policy, nil

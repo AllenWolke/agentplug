@@ -352,6 +352,10 @@ func derive(t Trial) map[string]observation {
 					continue
 				}
 				actual, ok := lookup(e.Arguments, key)
+				if ok && UnknownArgumentEvidence(actual) {
+					parameterEvidenceComplete = false
+					continue
+				}
 				param++
 				if ok && equalJSON(actual, value) {
 					validParam++

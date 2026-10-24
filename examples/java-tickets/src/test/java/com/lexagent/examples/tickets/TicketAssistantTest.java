@@ -16,7 +16,7 @@ final class TicketAssistantTest {
         var scope = new ExecutionContract.ScopeKey("tenant", "department", "app", "installation", "installation",
                 TicketAgent.AGENT_ID, "version", "user", "demo.java.user", "session", "run", 1, "a".repeat(32), "", 0);
         return new ExecutionContract.ExecuteRequest(ExecutionContract.PROTOCOL_VERSION, "fixture-token", scope,
-                "invoke", "command-key", TicketAssistant.INPUT_SCHEMA, input);
+                "invoke", "command-key", TicketAssistant.INPUT_SCHEMA_V3, input);
     }
 
     static final class Fixture implements TicketAssistant.Calls {
@@ -42,7 +42,8 @@ final class TicketAssistantTest {
             }
             return switch (path) {
                 case "/internal/prompt/resolve" -> Map.of("template", "Prepare a cited ticket response", "template_hash", promptHash);
-                case "/internal/knowledge/search" -> Map.of("references", List.of(Map.of("document_id", "handbook", "content", "Ask for reproduction steps")));
+                case "/internal/knowledge/search" -> Map.of("references", List.of(Map.of("document_id", "handbook", "content", "Ask for reproduction steps", "source","platform-knowledge","provider_knowledge_base_id","java-tickets","provider_document_id","handbook","document_version","v1")));
+                case "/internal/knowledge/references/authorize" -> Map.of("version","knowledge-reference-authorization/v1","authorized",true,"reference_count",((List<?>)payload.get("references")).size(),"model_requests_sent",0);
                 case "/internal/model/generate" -> Map.of("text", "Request a minimal reproduction [handbook].", "usage", Map.of("input_tokens", 10));
                 default -> Map.of("value", Map.of("ticket_id", "previous"));
             };
@@ -70,15 +71,26 @@ final class TicketAssistantTest {
         var events = new ArrayList<String>();
         var result = new TicketAssistant().assist(request(Map.of("ticket_id", "T-100", "summary", "Cannot sign in")),
                 fixture, (type, payload) -> events.add((String) payload.get("stage")), () -> false);
-        assertEquals(TicketAssistant.OUTPUT_SCHEMA, result.get("schema"));
+        assertEquals(TicketAssistant.OUTPUT_SCHEMA_V3, result.get("schema"));
+        assertInstanceOf(Map.class, result.get("model_metadata"));
         assertEquals("T-100", result.get("ticket_id"));
-        assertEquals(8, fixture.paths.size()); assertEquals(8, events.size());
+        assertEquals(10, fixture.paths.size()); assertEquals(10, events.size());
         assertEquals("java-tickets", fixture.payloads.get(4).get("knowledge_scope"));
-        assertEquals("command-key:ticket-draft:v2", fixture.payloads.get(6).get("idempotency_key"));
-        assertEquals("published-hash", fixture.payloads.get(6).get("prompt_template_hash"));
-        assertEquals("save", fixture.payloads.get(7).get("operation"));
-        assertFalse(fixture.payloads.get(6).containsKey("model"));
-        assertFalse(fixture.payloads.get(6).containsKey("provider"));
+        assertEquals("command-key:ticket-draft:v2", fixture.payloads.get(7).get("idempotency_key"));
+        assertEquals("published-hash", fixture.payloads.get(7).get("prompt_template_hash"));
+        assertEquals("save", fixture.payloads.get(9).get("operation"));
+        assertFalse(fixture.payloads.get(7).containsKey("model"));
+        assertFalse(fixture.payloads.get(7).containsKey("provider"));
+    }
+
+    @Test void historicalV2RetainsPublishedOutputShape() throws Exception {
+        var current=request(Map.of("ticket_id","T-100","summary","Cannot sign in"));
+        for(String version:List.of("v1","v2")) {
+            var historical=new ExecutionContract.ExecuteRequest(current.protocolVersion(),current.contextToken(),current.scope(),current.operation(),current.idempotencyKey(),"schema://example-java-tickets/input/"+version,current.input());
+            var result=new TicketAssistant().assist(historical,new Fixture(),null,()->false);
+            assertEquals("schema://example-java-tickets/output/"+version,result.get("schema"));
+            assertFalse(result.containsKey("model_metadata"));
+        }
     }
 
     @Test void recoveryHarnessCheckpointUsesSdkSchemaAndRejectsMismatch() throws Exception {

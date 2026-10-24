@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lexagent/platform/internal/sharedkernel"
 )
@@ -31,6 +32,17 @@ func (m *Module) permissionRequests(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/permission-requests" {
 		switch r.Method {
 		case http.MethodPost:
+			if actor.Policy != nil {
+				system, err := systemManagementAccount(*actor.Policy, time.Now().UTC())
+				if err != nil {
+					m.permissionError(w, err)
+					return
+				}
+				if system {
+					m.error(w, http.StatusForbidden, "SYSTEM_ADMIN_PERSONAL_REQUEST_DISABLED")
+					return
+				}
+			}
 			var c PermissionRequestCreate
 			if decode(r, &c) != nil {
 				m.error(w, http.StatusBadRequest, "INVALID_REQUEST")

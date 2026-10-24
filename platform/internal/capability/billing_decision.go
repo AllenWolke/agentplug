@@ -76,7 +76,12 @@ func (s *SQLModelInvocationStore) AcceptBillingDecision(ctx context.Context, sco
 	return s.acceptBillingDecision(ctx, scope, key, fingerprint, d, "manual", "")
 }
 
-func (s *SQLModelInvocationStore) acceptBillingDecision(ctx context.Context, scope, key, fingerprint string, d BillingDecision, expectedState, attemptToken string) error {
+type preparedBillingProof struct {
+	Recovery      BillingRecovery
+	OwnerReturned bool // Private handler proof, never accepted from an HTTP body.
+}
+
+func (s *SQLModelInvocationStore) acceptBillingDecision(ctx context.Context, scope, key, fingerprint string, d BillingDecision, expectedState, attemptToken string, prepared ...preparedBillingProof) error {
 	if !validBillingDecision(d) {
 		return ErrModelInvocationConflict
 	}
@@ -95,8 +100,19 @@ func (s *SQLModelInvocationStore) acceptBillingDecision(ctx context.Context, sco
 	if r.Fingerprint != fingerprint || !intent.Valid || json.Unmarshal([]byte(intent.String), &r.Recovery) != nil || response.Valid && json.Unmarshal([]byte(response.String), &r.Response) != nil || r.Recovery == nil {
 		return ErrModelInvocationConflict
 	}
-	if expectedState == "inflight" && (attemptToken == "" || r.Recovery.AttemptToken != attemptToken) {
+	systemUnsent := attemptToken != ""
+	if (expectedState == "inflight" || expectedState == "admitted" || systemUnsent) && (attemptToken == "" || r.Recovery.AttemptToken != attemptToken) {
 		return ErrModelInvocationConflict
+	}
+	ownerReturned := len(prepared) == 1 && prepared[0].OwnerReturned
+	if expectedState == "admitted" && (r.Recovery.AdmissionUntil.IsZero() || !ownerReturned && r.Recovery.AdmissionUntil.After(time.Now()) || !r.Recovery.SendDeadline.IsZero()) {
+		return ErrModelInvocationConflict
+	}
+	if expectedState == "manual" && systemUnsent {
+		expected, err := unsentDecision(r, attemptToken)
+		if err != nil || modelRouteHash(expected) != modelRouteHash(d) {
+			return ErrModelInvocationConflict
+		}
 	}
 	rawDecision, err := json.Marshal(d)
 	if err != nil {
@@ -118,12 +134,31 @@ func (s *SQLModelInvocationStore) acceptBillingDecision(ctx context.Context, sco
 	if billingState != expectedState {
 		return ErrModelInvocationConflict
 	}
+	if len(prepared) > 0 {
+		if len(prepared) != 1 {
+			return ErrModelInvocationConflict
+		}
+		if ownerReturned {
+			expectedDecision, proofErr := returnedBeforeDispatchDecision(r, attemptToken)
+			if proofErr != nil || modelRouteHash(expectedDecision) != modelRouteHash(d) {
+				return ErrModelInvocationConflict
+			}
+		} else if r.Recovery.SendPhase != "prepared" || r.Recovery.SendDeadline.IsZero() || r.Recovery.SendDeadline.After(time.Now()) {
+			return ErrModelInvocationConflict
+		}
+		expected, err := json.Marshal(prepared[0].Recovery)
+		actual, actualErr := json.Marshal(r.Recovery)
+		if err != nil || actualErr != nil || string(expected) != string(actual) {
+			return ErrModelInvocationConflict
+		}
+	}
 	recovery, err := decisionIntent(r, d)
 	if err != nil {
 		return err
 	}
-	if expectedState == "inflight" {
+	if expectedState == "inflight" || expectedState == "admitted" || systemUnsent {
 		recovery.Unsent = true
+		recovery.AdmissionUntil = time.Time{}
 	}
 	raw, err := json.Marshal(recovery)
 	if err != nil {

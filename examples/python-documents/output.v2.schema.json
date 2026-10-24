@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://example-python-documents/output/v2",
+  "type": "object",
+  "required": [
+    "schema",
+    "question",
+    "answer",
+    "references",
+    "retrieved_ids",
+    "citation_ids",
+    "evaluation_citations",
+    "evaluation_claims",
+    "answer_cache_hit",
+    "usage",
+    "billing",
+    "collaborate"
+  ],
+  "properties": {
+    "schema": {
+      "const": "schema://example-python-documents/output/v2"
+    },
+    "question": {
+      "type": "string"
+    },
+    "answer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32768
+    },
+    "references": {
+      "type": "array",
+      "minItems": 1
+    },
+    "citation_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "retrieved_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      }
+    },
+    "evaluation_citations": {
+      "type": "array",
+      "minItems": 1
+    },
+    "evaluation_claims": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1
+    },
+    "answer_cache_hit": {
+      "type": "boolean"
+    },
+    "usage": {
+      "type": "object"
+    },
+    "billing": {
+      "type": "object"
+    },
+    "workflow_mode": {
+      "type": "string",
+      "enum": [
+        "direct",
+        "tool_loop"
+      ]
+    },
+    "tool_loop_usage": {
+      "type": "object"
+    },
+    "notify_me": {
+      "type": "boolean",
+      "description": "Echo of caller intent, not proof of delivery"
+    },
+    "sandbox_check": {
+      "type": "boolean",
+      "description": "Echo of caller selection, not proof that Code Runtime was invoked or completed"
+    },
+    "collaborate": {
+      "type": "boolean",
+      "description": "Echo of the fixed collaboration selection; does not imply cross-Agent authorization"
+    },
+    "collaboration": {
+      "type": "object",
+      "required": ["instruction_trust", "task_type", "children"],
+      "properties": {
+        "instruction_trust": {"const": "untrusted_data"},
+        "task_type": {"const": "operations.diagnosis"},
+        "children": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["child_key", "input_fingerprint", "output_digest", "output_schema", "service", "answer"],
+            "properties": {
+              "child_key": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "input_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "output_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "output_schema": {"const": "schema://example-go-operations/output/v2"},
+              "service": {"const": "python-documents"},
+              "answer": {"type": "string", "minLength": 1, "maxLength": 16384}
+            }
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"collaborate": {"const": true}}, "required": ["collaborate"]},
+      "then": {"required": ["collaboration"]},
+      "else": {"not": {"required": ["collaboration"]}}
+    }
+  ]
+}

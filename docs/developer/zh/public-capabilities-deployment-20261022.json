@@ -1,0 +1,664 @@
+{
+  "schema": "agentplug-public-capabilities-delivery/v1",
+  "project": "agentplug",
+  "acceptance_date": "2026-10-22",
+  "source_base_commit": "dcdbbc81875e82e0d04be98615643b684c914a54",
+  "source_state": "local workspace changes; no Git commit or remote publication performed",
+  "versions": {
+    "go_sdk": "2.1.0 capability release; existing Go module paths retained",
+    "python_sdk": "2.1.0",
+    "java_sdk": "2.1.0",
+    "templates": "1.1.0",
+    "business_agents": "0.3.0",
+    "input_output_schema": "v3; historical v2 and Java v1 retained"
+  },
+  "deployment": {
+    "origin": "http://127.0.0.1:38080",
+    "compose_project": "agentplug",
+    "services": [
+      {
+        "service": "code-runtime",
+        "image_id": "sha256:d92e7e834d32fd5e68a0e71a82306bb8e3b01878325bb43a3e3d3800ea46f530",
+        "container_id": "5e5da7ec2388d87f17661e1924d29b4301cfd98a763bd794f6b7f26f8d064f4f",
+        "health": "running",
+        "named_volumes": [
+          "agentplug_code-runtime-state"
+        ]
+      },
+      {
+        "service": "example-go",
+        "image_id": "sha256:3d841d42684d47a1a313987f72a9c1163713b7c9512e6a128b20cc2759e25f3a",
+        "container_id": "756910b92162076b1204a49ab456437d4a889b64d4fe242abd8e9b72549686a8",
+        "health": "running",
+        "named_volumes": []
+      },
+      {
+        "service": "example-java",
+        "image_id": "sha256:1613babe3496bfc764a78664a13ef3ba65401e41decce76c5809f69e9ffe3219",
+        "container_id": "dfd7608b68383944fe82057ede45271a3b57db449aa4cffc51fa18afb535846a",
+        "health": "running",
+        "named_volumes": []
+      },
+      {
+        "service": "example-python",
+        "image_id": "sha256:cae7a7f9094dfaf9fc3fcafe1cc7392c527bacb518a2fc40696602ed68e755a2",
+        "container_id": "5e46d8218119a0c95ea75919bae24941f1418ddb7cb06dcd8ea98ec2d5bb8d55",
+        "health": "running",
+        "named_volumes": []
+      },
+      {
+        "service": "frontend",
+        "image_id": "sha256:e28d94bb2006088919230380b3cf5bb09634764878c91ae9342d48681ea799c0",
+        "container_id": "721b491056bc011c85a7bdd2e070566029f7221079f9c8c5a2bbc754c11dcdcb",
+        "health": "healthy",
+        "named_volumes": []
+      },
+      {
+        "service": "kafka",
+        "image_id": "sha256:44a48f9d78af26959fa4d61accb9be35f939a79bfdae05cad6df4baca8e22eeb",
+        "container_id": "4bfd75b2044b5ca5a46c11d348ef68f6b0a5ea36b64577ba6ab5aab27c55c7af",
+        "health": "healthy",
+        "named_volumes": [
+          "6a597cefa0cfbb0b530dfc7da8745a66fe518f1b0120f7fda95f103989941d23",
+          "c9f554d467fdf01ed4c5179d49d8a7722641bb7c0e4385639a77f3fe7443a1ce",
+          "agentplug_modular-kafka-data"
+        ]
+      },
+      {
+        "service": "metric-runner",
+        "image_id": "sha256:a422ad5ce6cfce56d50fd964339b5bad70d0c2da908d927dd5062c588aa5b7ab",
+        "container_id": "888061bdd37b6dcf533ad8ae92a91c98e1f58c7aeb52fd0c7c74e8a1f0cedf3b",
+        "health": "healthy",
+        "named_volumes": []
+      },
+      {
+        "service": "platform-app",
+        "image_id": "sha256:5e92a6dfa5ff4afa4d6d92dcecad38f0e429027dae41db5b78309c43b2c256ab",
+        "container_id": "f52f508c34fbcad016191e796db812f9fa485baa43664230362d385e8cefd92d",
+        "health": "healthy",
+        "named_volumes": []
+      },
+      {
+        "service": "postgres",
+        "image_id": "sha256:f1447071e6c8449dcf4056aa0994c81d3566ce5ee232de36b04dc25696a116dd",
+        "container_id": "78c777f84705b78c04522fa8f2ef0d1e4490adc4cee5eb39b4c08efcd219b5d5",
+        "health": "healthy",
+        "named_volumes": [
+          "agentplug_modular-postgres-data"
+        ]
+      }
+    ],
+    "examples": [
+      {
+        "language": "go",
+        "agent_id": "example-go-operations",
+        "installation_id": "example-go-operations-installation",
+        "version_id": "example-go-operations-v0-3-0-20261022",
+        "semantic_version": "0.3.0",
+        "manifest_hash": "sha256:88e5bc5585b28f32307e77bb89b06873694561c75ff5ce7704cf3034e50dc293",
+        "artifact_digest": "sha256:3d841d42684d47a1a313987f72a9c1163713b7c9512e6a128b20cc2759e25f3a",
+        "old_version": "example-go-operations-v9",
+        "old_version_and_snapshot_unchanged": true,
+        "independent_author_and_reviewer": true,
+        "root_cross_profile_read": "PASS",
+        "new_policy_revision": 1
+      },
+      {
+        "language": "python",
+        "agent_id": "example-python-documents",
+        "installation_id": "example-python-documents-installation",
+        "version_id": "example-python-documents-v0-3-0-20261022",
+        "semantic_version": "0.3.0",
+        "manifest_hash": "sha256:79d85e2659dcce9b5328a489e2a825b6c086ebe88ebe4694eab5049e8272818d",
+        "artifact_digest": "sha256:cae7a7f9094dfaf9fc3fcafe1cc7392c527bacb518a2fc40696602ed68e755a2",
+        "old_version": "example-python-documents-v10",
+        "old_version_and_snapshot_unchanged": true,
+        "independent_author_and_reviewer": true,
+        "root_cross_profile_read": "PASS",
+        "new_policy_revision": 3
+      },
+      {
+        "language": "java",
+        "agent_id": "example-java-tickets",
+        "installation_id": "example-java-tickets-installation",
+        "version_id": "example-java-tickets-v0-3-0-20261022",
+        "semantic_version": "0.3.0",
+        "manifest_hash": "sha256:023d4e867ecde9d9c80cad7ef2d4f1e5237a6acbe267386835624e9f2b2b790e",
+        "artifact_digest": "sha256:1613babe3496bfc764a78664a13ef3ba65401e41decce76c5809f69e9ffe3219",
+        "old_version": "example-java-tickets-v11",
+        "old_version_and_snapshot_unchanged": true,
+        "independent_author_and_reviewer": true,
+        "root_cross_profile_read": "PASS",
+        "new_policy_revision": 1
+      }
+    ],
+    "preserved_named_volumes": [
+      "agentplug_code-runtime-state",
+      "agentplug_modular-kafka-data",
+      "agentplug_modular-postgres-data"
+    ],
+    "migration_versions": [
+      {
+        "version": 2026100304,
+        "checksum": "10e36754ba14abddd6ec42e5d80c4a6d3c836a802cc1325f65fc00c8992a77aa"
+      },
+      {
+        "version": 2026100409,
+        "checksum": "b8400b8b89294da11586e3cc97bed9d3e809120f841a171ffb52c3fc0420e99c"
+      },
+      {
+        "version": 2026100501,
+        "checksum": "437529dc482c967bc8d8e4d6c2c7eb88ed2b50d5b7300580a218b12a21ccad00"
+      },
+      {
+        "version": 2026100601,
+        "checksum": "ec84ad0fc98feba0797b9053347922c2aa8510ffb299e0cbdf7f1c76239334f5"
+      },
+      {
+        "version": 2026100906,
+        "checksum": "4e002253cf7222fa5958447d6144287ac52af591dcb8702e9d94ebef25947422"
+      },
+      {
+        "version": 2026101001,
+        "checksum": "b51d8a75065aa4f0e3eb37ad16e2e95d1b423d4135ccad2ee42b195efd14956f"
+      },
+      {
+        "version": 2026101004,
+        "checksum": "dc0047785f7f61b58b2b583b53d264da842080fad24a8e6ab2ad2ef283a693f1"
+      },
+      {
+        "version": 2026102201,
+        "checksum": "72cd0226da21e5bfe45bfee271c37e6a4be0a428518391e3062654db7baf362b"
+      }
+    ],
+    "feature_flags": {
+      "automatic_model_routing": "explicit opt-in",
+      "python_workflow_default": "direct",
+      "event_bus": "disabled; retained existing native configuration",
+      "cancellation_compensation": false,
+      "external_reference_knowledge_service_used": false
+    }
+  },
+  "regression": {
+    "platform_full_go": {
+      "passed": 3449,
+      "failed": 0,
+      "skipped": 82,
+      "package_passed": 41,
+      "package_failed": 0,
+      "packages_without_test_files": 11
+    },
+    "required_go_tests": "all pass",
+    "conditional_skips_reconciled": 82,
+    "critical_coverage": "all nine packages passed; original thresholds retained",
+    "python": [
+      {
+        "name": "sdk",
+        "total": 563,
+        "failed": [],
+        "skipped": []
+      },
+      {
+        "name": "example",
+        "total": 13,
+        "failed": [],
+        "skipped": []
+      },
+      {
+        "name": "python-generic",
+        "total": 43,
+        "failed": [],
+        "skipped": []
+      },
+      {
+        "name": "python-langgraph",
+        "total": 52,
+        "failed": [],
+        "skipped": []
+      }
+    ],
+    "java": {
+      "tests": 69,
+      "failures": 0,
+      "skipped": 0
+    },
+    "frontend_tests_passed": 164,
+    "release_and_static_e2e_tests_passed": 372,
+    "final_native_configuration_tests_passed": 16,
+    "generated_template_projects": 6,
+    "generated_template_http_cases": 78,
+    "static_checks": [
+      {
+        "check": "scan_secrets",
+        "result": "PASS"
+      },
+      {
+        "check": "test_scan_secrets",
+        "result": "PASS"
+      },
+      {
+        "check": "sync_public_sdks",
+        "result": "PASS"
+      },
+      {
+        "check": "check_gofmt",
+        "result": "PASS"
+      },
+      {
+        "check": "check_contract_breaking",
+        "result": "PASS"
+      },
+      {
+        "check": "lint_execution_contract",
+        "result": "PASS"
+      },
+      {
+        "check": "verify_modular_boundaries",
+        "result": "PASS"
+      },
+      {
+        "check": "verify_modular_process",
+        "result": "PASS"
+      },
+      {
+        "check": "verify_productization_behavior",
+        "result": "PASS"
+      },
+      {
+        "check": "check_agent_code_ownership",
+        "result": "PASS"
+      },
+      {
+        "check": "check_agent_productization_contracts",
+        "result": "PASS"
+      },
+      {
+        "check": "check_removed_architecture",
+        "result": "PASS"
+      },
+      {
+        "check": "check_publication",
+        "result": "PASS"
+      },
+      {
+        "check": "check_markdown_links",
+        "result": "PASS"
+      }
+    ],
+    "optional_business": {
+      "schema": "agentplug-optional-business-acceptance/v1",
+      "project": "agentplug-test-public-cf0a8c6d2293",
+      "checked_at": "2026-10-22T12:23:43.956926+00:00",
+      "cases": [
+        {
+          "language": "go",
+          "run_id": "optional-20261022-go-receipt-v3-run",
+          "result": "PASS",
+          "approval_resume_count": 2,
+          "sandbox_stdout": "4",
+          "sandbox_container_removed": true,
+          "event_stream_approval": true,
+          "notification": {
+            "outbox": "published",
+            "delivery": "published",
+            "inbox": "delivered"
+          },
+          "notification_event_id": "agent-tool-f2c93c118d6cd89582b8bc9593ccddeab72203fac04a39f068016dcc0bc48cad",
+          "fixed_child": {
+            "target_installation_id": "example-python-documents-installation",
+            "version": "example-python-documents-v0-3-0-20261022",
+            "status": "completed",
+            "run_id": "child-e8f79d372e058610f55a1f13f3ab8cb181cf79801025ece8",
+            "schema": "schema://example-python-documents/input/v3",
+            "run_status": "succeeded"
+          },
+          "recipient_inbox_read": "PASS",
+          "other_recipients_absent": true
+        },
+        {
+          "language": "java",
+          "run_id": "optional-20261022-java-receipt-v3-run",
+          "result": "PASS",
+          "approval_resume_count": 2,
+          "sandbox_stdout": "4",
+          "sandbox_container_removed": true,
+          "event_stream_approval": true,
+          "notification": {
+            "outbox": "published",
+            "delivery": "published",
+            "inbox": "delivered"
+          },
+          "notification_event_id": "agent-tool-febd36221439f890c3847dae3b8933f677cdfaf9bffa987c9b1af3779ec795c0",
+          "fixed_child": {
+            "target_installation_id": "example-python-documents-installation",
+            "version": "example-python-documents-v0-3-0-20261022",
+            "status": "completed",
+            "run_id": "child-145b65f7f27be2470d5062573fae0d80ab24c5f9a8d7ce23",
+            "schema": "schema://example-python-documents/input/v3",
+            "run_status": "succeeded"
+          },
+          "recipient_inbox_read": "PASS",
+          "other_recipients_absent": true
+        },
+        {
+          "language": "python",
+          "run_id": "optional-20261022-python-receipt-v3-run",
+          "result": "PASS",
+          "approval_resume_count": 2,
+          "sandbox_stdout": "4",
+          "sandbox_container_removed": true,
+          "event_stream_approval": true,
+          "notification": {
+            "outbox": "published",
+            "delivery": "published",
+            "inbox": "delivered"
+          },
+          "notification_event_id": "agent-tool-6ecdd2175e65d2b53f540784d50265a1af34274e742bcd97b21387ebb872b5bb",
+          "fixed_child": {
+            "target_installation_id": "example-go-operations-installation",
+            "version": "example-go-operations-v0-3-0-20261022",
+            "status": "completed",
+            "run_id": "child-5463c27f4e52847e1b77f2a1cb96004b300a1bee4c9a4a38",
+            "schema": "schema://example-go-operations/input/v3",
+            "run_status": "succeeded"
+          },
+          "recipient_inbox_read": "PASS",
+          "other_recipients_absent": true
+        }
+      ],
+      "foreign_owner_event_status": 404,
+      "real_provider_requests": 0,
+      "result": "PASS",
+      "fixture_scope": "owned metadata clone, internal model/platform networks, frontend-only loopback operator ingress",
+      "historical_failed_fixture_case_preserved": true
+    },
+    "optional_stack_cleanup": {
+      "project": "agentplug-test-public-cf0a8c6d2293",
+      "removed_containers": 10,
+      "removed_volumes": [
+        "agentplug-test-public-cf0a8c6d2293_code-runtime-state",
+        "agentplug-test-public-cf0a8c6d2293_modular-kafka-data",
+        "agentplug-test-public-cf0a8c6d2293_modular-postgres-data"
+      ],
+      "removed_networks": [
+        "agentplug-test-public-cf0a8c6d2293_code-runtime-control",
+        "agentplug-test-public-cf0a8c6d2293_default",
+        "agentplug-test-public-cf0a8c6d2293_metric-control",
+        "agentplug-test-public-cf0a8c6d2293_operator-ingress"
+      ],
+      "native_project_untouched": true,
+      "reference_resources_used": false,
+      "private_evidence_retained": true,
+      "checked_at": "2026-10-22T12:24:32.162081+00:00",
+      "result": "PASS"
+    },
+    "native_acceptance": [
+      {
+        "username": "platform.recovery",
+        "logout_revoked": true,
+        "result": "PASS"
+      },
+      {
+        "username": "system.admin",
+        "logout_revoked": true,
+        "result": "PASS"
+      },
+      {
+        "username": "permission.admin",
+        "logout_revoked": true,
+        "result": "PASS"
+      },
+      {
+        "username": "demo.go.user",
+        "owner_events": {
+          "status": 200,
+          "event_count": 2
+        },
+        "foreign_events_status": 404,
+        "default_flow_history": "PASS",
+        "logout_revoked": true,
+        "result": "PASS"
+      },
+      {
+        "username": "demo.python.user",
+        "owner_events": {
+          "status": 403,
+          "result": "EXPECTED_DENY",
+          "reason": "original execution authority was invalidated by later permission changes; durable conversation history remains readable",
+          "proof_epoch": 1,
+          "current_run_epoch": 3
+        },
+        "foreign_events_status": 404,
+        "default_flow_history": "PASS",
+        "logout_revoked": true,
+        "result": "PASS"
+      },
+      {
+        "username": "demo.java.user",
+        "owner_events": {
+          "status": 200,
+          "event_count": 2
+        },
+        "foreign_events_status": 404,
+        "default_flow_history": "PASS",
+        "logout_revoked": true,
+        "result": "PASS"
+      }
+    ],
+    "native_zero_model_cancel": "PASS"
+  },
+  "preservation": {
+    "old_policy_snapshots_unchanged": 34,
+    "historical_tables_unchanged_by_upgrade": 124,
+    "old_manual_model_unknowns_preserved": 5,
+    "old_cancelling_runs_preserved": 31,
+    "native_go_test_preservation": {
+      "project": "agentplug",
+      "native_top_level_go_tests_checked": 175,
+      "missing": [],
+      "missing_named_subtests": [],
+      "result": "PASS"
+    },
+    "reference_baseline_files_unchanged": 484,
+    "reference_project_actions": "read-only selected source reference; no writes, builds, tests, service or volume operations"
+  },
+  "paid_requests": {
+    "initial_authorized_probes": {
+      "maximum": 4,
+      "used": 4
+    },
+    "additional_authorization": {
+      "maximum": 18,
+      "used": 17
+    },
+    "optional_regression_real_provider_requests": 0,
+    "unknown_requests_resent": false
+  },
+  "backup": {
+    "directory": ".tmp/public-capability-upgrade/backups/20261022T041433Z",
+    "volumes": [
+      {
+        "name": "agentplug_code-runtime-state",
+        "archive": "agentplug_code-runtime-state.tar.gz",
+        "bytes": 24018,
+        "sha256": "6619ffd2a5cbc534c5496d904a54d7fb66499123cc4e4f07a512cd3a60022eab"
+      },
+      {
+        "name": "agentplug_modular-kafka-data",
+        "archive": "agentplug_modular-kafka-data.tar.gz",
+        "bytes": 8756303,
+        "sha256": "035ec0acacd7d4bf78f673e258f8f4d6253f1bf7c0b5bc3f397506beb3f8a2be"
+      },
+      {
+        "name": "agentplug_modular-postgres-data",
+        "archive": "agentplug_modular-postgres-data.tar.gz",
+        "bytes": 32408900,
+        "sha256": "3e9a644784278061449a7d777cf98a18a9dfe16ea43853cdcefe533d89c80cf7"
+      }
+    ],
+    "restore_drill": [
+      {
+        "source_volume": "agentplug_code-runtime-state",
+        "restored_to": "agentplug-test-backup-20261022t041433z-code-runtime-state",
+        "file_hashes_match": true
+      },
+      {
+        "source_volume": "agentplug_modular-kafka-data",
+        "restored_to": "agentplug-test-backup-20261022t041433z-modular-kafka-data",
+        "file_hashes_match": true
+      },
+      {
+        "source_volume": "agentplug_modular-postgres-data",
+        "restored_to": "agentplug-test-backup-20261022t041433z-modular-postgres-data",
+        "file_hashes_match": true
+      }
+    ],
+    "source_zip_sha256": "44e1e5fa3b922ce790d67da4128d15a29360ca5a6b9ba03c44b06dc07809e1d0",
+    "rollback_images": [
+      {
+        "source": "agentplug:platform-company-navigation-20261011-v5",
+        "image_id": "sha256:5b9caa70339cf91d39cf3ceaf87e4885ce5541ac71224625f1a045a44d7a79cc",
+        "rollback_tag": "agentplug:pre-public-upgrade-20261022-platform-company-v5"
+      },
+      {
+        "source": "agentplug:frontend-company-navigation-20261011-v9",
+        "image_id": "sha256:0190c3cb4c9ae07302cf8a3a1bef746af5489196211c6842d860bc755ecb88b5",
+        "rollback_tag": "agentplug:pre-public-upgrade-20261022-frontend-company-v9"
+      },
+      {
+        "tag": "agentplug:example-go",
+        "available": true,
+        "image_id": "sha256:76ebf96613cb12dfe25f1b04e7895c68ed44a28b594d15ff4e5458da79299c30",
+        "rollback_tag": "agentplug:pre-public-upgrade-20261022-example-go",
+        "created": "2026-10-06T23:20:05.419349195Z"
+      },
+      {
+        "tag": "agentplug:example-python",
+        "available": true,
+        "image_id": "sha256:76a65355af33fc1ab489bfd3d2c89b8c5447be0f40b5c7ebb7aa7587a4f05dc8",
+        "rollback_tag": "agentplug:pre-public-upgrade-20261022-example-python",
+        "created": "2026-10-07T07:07:53.21388035Z"
+      },
+      {
+        "tag": "agentplug:example-java",
+        "available": true,
+        "image_id": "sha256:abf446adbd03d426ba52ac1d7b5d1d026007a33bedba93afb6de8261dca19dfd",
+        "rollback_tag": "agentplug:pre-public-upgrade-20261022-example-java",
+        "created": "2026-10-07T12:37:03.502902992Z"
+      },
+      {
+        "tag": "agentplug:metric-runner",
+        "available": true,
+        "image_id": "sha256:d27cbf4b6c617858394621915be9f2964f0e1219759ca11de73a960b1fb5cce3",
+        "rollback_tag": "agentplug:pre-public-upgrade-20261022-metric-runner",
+        "created": "2026-10-03T16:03:00.345331203Z"
+      },
+      {
+        "tag": "agentplug:code-runtime",
+        "available": true,
+        "image_id": "sha256:9bb89c85a632323e872705f995c678eb3bed352ee602be78ed6a3f9d464bfc2d",
+        "rollback_tag": "agentplug:pre-public-upgrade-20261022-code-runtime",
+        "created": "2026-10-05T04:43:03.087536214Z"
+      }
+    ],
+    "unreadable_unused_offline_drafts": {
+      "paths": [
+        ".local-secrets/public-examples/policies/go.static-plan.json",
+        ".local-secrets/public-examples/policies/java.static-plan.json",
+        ".local-secrets/public-examples/policies/python.static-plan.json"
+      ],
+      "policy_resolver": "sql",
+      "no_policy_bootstrap_file": true,
+      "referenced_by_environment": false,
+      "referenced_by_compose": false,
+      "backup_status": "not backed up; unused offline policy publication drafts, not SQL published snapshots"
+    }
+  },
+  "evidence": [
+    {
+      "path": ".tmp/public-capability-upgrade/native-final-acceptance.json",
+      "sha256": "7ee2e405aa67a679eca9392331baa0cf630f9480290da255456ebddda744b266"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/optional-business-final.json",
+      "sha256": "647ab014c2d3b9ddf522aa54c59a7e8ca3c7f2550211e3a3d55ea0eecde62fab"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/optional-stack-cleanup.json",
+      "sha256": "4af50279b8723f4c5fb0c9ef6b9e3524769737d9edee47add3ec66b6ea27b37e"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/reference-baseline-check.json",
+      "sha256": "a0a95afd738b377369f54d0c8af6d2ea72cc2ee7417c877e6e8f94d828af10e0"
+    },
+    {
+      "path": "docs/新增需求/github作品改造/T3-11-平台全量Go隔离PostgreSQL测试实际验证-public-upgrade-20261022-full12.json",
+      "sha256": "7bbadec3da6272b1886e42cf06255bbb6a9b851b2adad598b321ac47fbcd9d1f"
+    },
+    {
+      "path": "docs/新增需求/github作品改造/T3-04A-PostgreSQL身份全量SQL实际验证-public-upgrade-20261022-coverage08.json",
+      "sha256": "357d384040d03c6f0ccff99b054a23ed467e21bd6b526f2971ad144ffc349337"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/isolated-regression-gate.json",
+      "sha256": "dbc24e1bc8a4459a01e24733eb1985645f549247349e44caf63b2cbbb17f4bb6"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/python-linux-report.json",
+      "sha256": "819e53dae770fd4b48a93ad20d888c5f43980042bc9d5a6b8d657b1fe847d887"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/generated-template-conformance.json",
+      "sha256": "ebc55146a72b519ac88c105470ee6f7057960e1a5578f297ca0986c7937f4463"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/models-linux-report.json",
+      "sha256": "78cc041e85ccae7185fca5e969f5ab05ff927de146da6cd5c17906916b16261a"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/native-business-live.json",
+      "sha256": "dbc250e2b48f7ff540e91b075a20d899915ce7c29e9e1636db752cc6107c5d3f"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/native-cancel-recovery-smoke.json",
+      "sha256": "8c04ece5a8beff0e81b95bc2f8d883a6e0c00aadb35f8f4ab8a87d49a222dea6"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/backups/20261022T041433Z/manifest.json",
+      "sha256": "a6dd79f2245c2f62c200647abed424e859b92cafb1034eedb21180967b072cf0"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/backups/20261022T041433Z/supplement.json",
+      "sha256": "7d5d18973465f05fba1d737eee48e3397170a061bfabb68721c51709893d0264"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/migration-drill.json",
+      "sha256": "b052dbcd48e780deab8f65b08b4721cdf6c85c9d12ea595f72d721537fb45096"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/backups/20261022T041433Z/image-versions-before-build.json",
+      "sha256": "eb01a86930011c4e35bb8cd389b7f45e787f6d4e7e6b9935ff5e7e3ce7bbf346"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/native-publication-versions.json",
+      "sha256": "2d25b5c1ce9c3bcd4909e361f71ba75c5f6b66c215ae5ee6515370a9b2dc56ca"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/native-publication-policies.json",
+      "sha256": "a10ae2f8a223545cee930cc4cfa7407421790c96dcd964e0383c57de05c3375f"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/native-publication-deployments.json",
+      "sha256": "43e45a22ce44cb9a6bccbd96d5788f4db2de321d30c549190ed79cdad4c9ec7c"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/native-publication-workloads.json",
+      "sha256": "b3376e923c0ebdb6fec714ea3bc78269beee6036ae13bc3a8aa40e68aa04e904"
+    },
+    {
+      "path": ".tmp/public-capability-upgrade/native-test-preservation-audit.json",
+      "sha256": "35e3dfdfba96ce12d32237e554486c3ff65797b29468f164d8ef197835be8712"
+    }
+  ],
+  "result": "PASS"
+}

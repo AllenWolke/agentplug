@@ -2,7 +2,6 @@ package identity
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,6 +60,9 @@ CREATE INDEX IF NOT EXISTS idx_change_subject ON platform_identity_authorization
 			return err
 		}
 	}
+	if err := s.EnsureDepartmentAgentPackageSchema(ctx); err != nil {
+		return err
+	}
 	if err := s.EnsureDepartmentAgentAccessSchema(ctx); err != nil {
 		return err
 	}
@@ -85,7 +87,7 @@ CREATE INDEX IF NOT EXISTS idx_change_subject ON platform_identity_authorization
 	return s.EnsureWorkloadBindingSchema(ctx)
 }
 
-func seedPermissionDirectory(ctx context.Context, db *sql.DB, kind, code string, version uint64, value any) error {
+func seedPermissionDirectory(ctx context.Context, db sqlutil.SchemaWriter, kind, code string, version uint64, value any) error {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -113,4 +115,23 @@ func seedPermissionDirectory(ctx context.Context, db *sql.DB, kind, code string,
 		return fmt.Errorf("immutable %s definition %s/%d differs; publish a new version", kind, code, version)
 	}
 	return nil
+}
+
+func (s *SQLStore) PublishPermissionDirectory(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return errors.New("identity database is required")
+	}
+	return sqlutil.WithSchemaTransaction(ctx, s.db, func(tx sqlutil.SchemaWriter) error {
+		for _, role := range BuiltinRoleDefinitions() {
+			if err := seedPermissionDirectory(ctx, tx, "role", role.Code, role.Version, role); err != nil {
+				return err
+			}
+		}
+		for _, preset := range BuiltinIdentityPresets() {
+			if err := seedPermissionDirectory(ctx, tx, "preset", preset.Code, preset.Version, preset); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

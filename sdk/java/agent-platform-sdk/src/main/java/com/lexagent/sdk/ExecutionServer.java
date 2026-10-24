@@ -599,11 +599,11 @@ public final class ExecutionServer {
         RuntimeRecovery recovery;
         ExecutionTracker.RecoveryCandidate expected;
         try {
-            recovery = parseRuntimeRecovery(request, claims, capability.nowEpochSeconds());
+            recovery = parseRuntimeRecovery(request, claims, capability.nowEpochSeconds(),CheckpointReferenceSet.expand(capability,request.resumeInput()),"runtime-recovery/v2".equals(request.resumeInput().get("version"))?8192:128);
             expected = executions.inspectRecovery(request, claims, recovery.stoppedRevision(),
                     recovery.bodyHash(), recovery.leaseHash(), recovery.originOperation(),
                     recovery.groupResume() == null ? null : recovery.groupResume().handoff());
-        } catch (RuntimeException rejected) {
+        } catch (RuntimeException | CapabilityClient.Failure rejected) {
             writeError(exchange, 409, "RESUME_RECOVERY_REJECTED", "verified recovery reference cannot be applied");
             return;
         }
@@ -991,12 +991,15 @@ public final class ExecutionServer {
     }
 
     private static boolean isRuntimeRecovery(Map<String, Object> resumeInput) {
-        return resumeInput != null && "runtime-recovery/v1".equals(resumeInput.get("version"));
+        return resumeInput != null && ("runtime-recovery/v1".equals(resumeInput.get("version"))||"runtime-recovery/v2".equals(resumeInput.get("version")));
     }
 
     private RuntimeRecovery parseRuntimeRecovery(ExecuteRequest request,
             ExecutionContract.CapabilityClaims claims, long nowEpochSeconds) {
-        Map<?, ?> marker = request.resumeInput();
+        return parseRuntimeRecovery(request,claims,nowEpochSeconds,request.resumeInput(),128);
+    }
+    private RuntimeRecovery parseRuntimeRecovery(ExecuteRequest request,ExecutionContract.CapabilityClaims claims,long nowEpochSeconds,Map<String,Object> normalized,int maximumCheckpoints){
+        Map<?, ?> marker = normalized;
         Set<String> markerFields = Set.of("version", "origin_operation", "reference");
         Set<String> markerWithToken = Set.of("version", "origin_operation", "reference", "confirmation_token");
         Set<String> markerWithGroup = Set.of("version", "origin_operation", "reference", "group_resume");
@@ -1072,7 +1075,7 @@ public final class ExecutionServer {
         } else throw new IllegalArgumentException();
 
         if (!(raw.get("checkpoints") instanceof List<?> checkpointValues)
-                || checkpointValues.isEmpty() || checkpointValues.size() > 128) throw new IllegalArgumentException();
+                || checkpointValues.isEmpty() || checkpointValues.size() > maximumCheckpoints) throw new IllegalArgumentException();
         List<RecoveryCheckpoint> checkpoints = new ArrayList<>(checkpointValues.size());
         String previousKey = "";
         for (Object value : checkpointValues) {
@@ -1087,7 +1090,7 @@ public final class ExecutionServer {
             String expiresAtText = text(checkpoint.get("expires_at"));
             Instant expiresAt = Instant.parse(expiresAtText);
             if (!HANDOFF_DIGEST.matcher(stateKey).matches() || stateKey.compareTo(previousKey) <= 0
-                    || revision < 1 || revision > 64
+                    || revision < 1 || revision > 4096
                     || schemaId.length() <= "schema://".length() || schemaId.getBytes(StandardCharsets.UTF_8).length > 256
                     || !schemaId.startsWith("schema://") || schemaId.chars().anyMatch(ch -> "\u0000\r\n\t* ".indexOf(ch) >= 0)
                     || !HANDOFF_DIGEST.matcher(contentHash).matches() || executionRevision < 1

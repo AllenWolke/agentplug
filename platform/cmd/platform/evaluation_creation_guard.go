@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 
 	"github.com/lexagent/platform/internal/agentcoordination"
 	"github.com/lexagent/platform/internal/contract"
@@ -14,7 +13,7 @@ func (a evaluationExecutionAuthority) AuthorizeSynchronousCreationTx(ctx context
 	scope := created.Scope
 	var request contract.ExecuteRequest
 	if tx == nil || scope.ValidateTrusted() != nil || created.ID != scope.RunID || created.AgentVersionID != scope.AgentVersionID ||
-		json.Unmarshal(created.RequestJSON, &request) != nil || request.Validate() != nil || request.Operation != "invoke" || request.ResumeInput != nil || request.Scope != evaluationContractScope(scope) || request.Scope.DelegationDepth != 0 || request.IdempotencyKey != created.IdempotencyKey {
+		contract.DecodeJSONPreservingNumbers(created.RequestJSON, &request) != nil || request.Validate() != nil || request.Operation != "invoke" || request.ResumeInput != nil || request.Scope != evaluationContractScope(scope) || request.Scope.DelegationDepth != 0 || request.IdempotencyKey != created.IdempotencyKey {
 		return agentcoordination.ErrDenied
 	}
 	fingerprint, err := contract.CanonicalExecuteBodyHash(request)

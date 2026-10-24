@@ -137,6 +137,12 @@ type AgentInvoker interface {
 	InvokeEvaluationCase(context.Context, InvocationRequest) (InvocationResult, error)
 }
 
+// Reusing a historical measurement still requires current installation and
+// source authority. The check must not invoke an Agent or create a model Run.
+type EvaluationCaseReuseAuthorizer interface {
+	AuthorizeEvaluationCaseReuse(context.Context, InvocationRequest) error
+}
+
 type InvocationRequest struct {
 	Scope                Scope
 	RunID                string
@@ -150,6 +156,7 @@ type InvocationRequest struct {
 }
 
 type InvocationResult struct {
+	ExecutionRunID    string
 	Output            json.RawMessage
 	ProviderMode      string
 	CitationGrounding string
@@ -247,40 +254,44 @@ type EvaluationLimits struct {
 }
 
 type EvidenceData struct {
-	RunID              string          `json:"run_id"`
-	SuiteID            string          `json:"suite_id"`
-	SuiteSnapshotHash  string          `json:"suite_snapshot_hash"`
-	DatasetContentHash string          `json:"dataset_content_hash"`
-	AgentVersionID     string          `json:"agent_version_id"`
-	Status             string          `json:"status"`
-	ProviderMode       string          `json:"provider_mode"`
-	SourceType         string          `json:"source_type"`
-	SampleCount        int             `json:"sample_count"`
-	Metrics            []MetricOutcome `json:"metrics"`
-	MetricsPresent     bool            `json:"metrics_present"`
-	ArtifactsPresent   bool            `json:"artifacts_present"`
-	CitationGrounding  string          `json:"citation_grounding"`
-	DomainGrounding    string          `json:"domain_grounding"`
-	ReportHash         string          `json:"report_hash"`
-	ProducedAt         time.Time       `json:"produced_at"`
-	Gate               GateDecision    `json:"gate"`
-	CaseResultIDs      []string        `json:"case_result_ids"`
+	MeasurementProtocol string          `json:"measurement_protocol,omitempty"`
+	RunID               string          `json:"run_id"`
+	SuiteID             string          `json:"suite_id"`
+	SuiteSnapshotHash   string          `json:"suite_snapshot_hash"`
+	DatasetContentHash  string          `json:"dataset_content_hash"`
+	AgentVersionID      string          `json:"agent_version_id"`
+	Status              string          `json:"status"`
+	ProviderMode        string          `json:"provider_mode"`
+	SourceType          string          `json:"source_type"`
+	SampleCount         int             `json:"sample_count"`
+	Metrics             []MetricOutcome `json:"metrics"`
+	MetricsPresent      bool            `json:"metrics_present"`
+	ArtifactsPresent    bool            `json:"artifacts_present"`
+	CitationGrounding   string          `json:"citation_grounding"`
+	DomainGrounding     string          `json:"domain_grounding"`
+	ReportHash          string          `json:"report_hash"`
+	ProducedAt          time.Time       `json:"produced_at"`
+	Gate                GateDecision    `json:"gate"`
+	CaseResultIDs       []string        `json:"case_result_ids"`
 }
 
 // CaseResultData stores privacy-preserving, per-case/per-metric execution
 // evidence. Inputs and outputs remain in their scoped Artifact Store; only
 // content hashes and scorer outcomes are held in the product database.
 type CaseResultData struct {
-	RunID             string          `json:"run_id"`
-	Index             int             `json:"index"`
-	InputHash         string          `json:"input_hash"`
-	OutputHash        string          `json:"output_hash"`
-	OutputArtifactID  string          `json:"output_artifact_id"`
-	ProviderMode      string          `json:"provider_mode"`
-	CitationGrounding string          `json:"citation_grounding"`
-	DomainGrounding   string          `json:"domain_grounding"`
-	Metrics           []MetricOutcome `json:"metrics"`
-	ProducedAt        time.Time       `json:"produced_at"`
+	ReusedFrom          *CaseReuseReference `json:"reused_from,omitempty"`
+	MeasurementProtocol string              `json:"measurement_protocol,omitempty"`
+	ExecutionRunID      string              `json:"execution_run_id,omitempty"`
+	RunID               string              `json:"run_id"`
+	Index               int                 `json:"index"`
+	InputHash           string              `json:"input_hash"`
+	OutputHash          string              `json:"output_hash"`
+	OutputArtifactID    string              `json:"output_artifact_id"`
+	ProviderMode        string              `json:"provider_mode"`
+	CitationGrounding   string              `json:"citation_grounding"`
+	DomainGrounding     string              `json:"domain_grounding"`
+	Metrics             []MetricOutcome     `json:"metrics"`
+	ProducedAt          time.Time           `json:"produced_at"`
 }
 
 type MetricOutcome struct {

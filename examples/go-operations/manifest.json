@@ -1,7 +1,7 @@
 {
   "manifest_version": "agent-manifest/v1",
   "agent_id": "example-go-operations",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "execution_protocols": [
     "agent-execution/v2"
   ],
@@ -13,8 +13,8 @@
     "events"
   ],
   "schemas": {
-    "input": "schema://example-go-operations/input/v2",
-    "output": "schema://example-go-operations/output/v2",
+    "input": "schema://example-go-operations/input/v3",
+    "output": "schema://example-go-operations/output/v3",
     "event": "schema://agent-platform/event/v1",
     "checkpoint": "schema://agent-platform/checkpoint/v1"
   },
@@ -40,11 +40,13 @@
       "state.checkpoint",
       "context.prepare",
       "model.receipt",
-      "skill.load:example.operations.guidance"
+      "skill.load:example.operations.guidance",
+      "knowledge.references.authorize"
     ],
     "harness": "harness-loop/v1; pinned evidence/Skill; inspect function; optional sandbox_check exposes sandbox_python mapped to operator-bound tool.invoke:code.python and requires independent approval; optional notify_me exposes notify_self mapped to tool.invoke:notify.self; optional collaborate uses the fixed documents.answer AgentGroup plan and durable gather recovery; all use current IAM and public capability receipts; process-local execution transport remains L1; latest source not accepted",
     "route_task_types": [
       "operations.diagnosis"
-    ]
+    ],
+    "sdk_capabilities_version": "2.1.0"
   }
 }

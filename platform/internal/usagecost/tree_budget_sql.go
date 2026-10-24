@@ -48,6 +48,13 @@ type RunTreeBudgetAuthority interface {
 	VerifyOutcome(context.Context, *sql.Tx, sharedkernel.Scope, RunTreeBudgetCommand) error
 }
 
+// Optional live read fence. It retains current IAM, execution lease, ancestry
+// and policy checks, but permits shared execution locks for a counter read.
+// Reserve/settle/release must continue to use Facts and their write fences.
+type RunTreeBudgetReadAuthority interface {
+	ReadFacts(context.Context, *sql.Tx, sharedkernel.Scope) (RunTreeBudgetFacts, error)
+}
+
 type RunTreeBudgetReceipt struct {
 	rootKey     string
 	Version     string                `json:"version"`
@@ -94,6 +101,8 @@ CREATE TABLE IF NOT EXISTS platform_run_tree_budget_request (
  input_tokens BIGINT NOT NULL DEFAULT 0 CHECK(input_tokens>=0), output_tokens BIGINT NOT NULL DEFAULT 0 CHECK(output_tokens>=0),
  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(), updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
  PRIMARY KEY(root_key,actor_key,request_id));
+CREATE INDEX IF NOT EXISTS idx_run_tree_budget_active ON platform_run_tree_budget_request (root_key,run_id)
+ WHERE status NOT IN ('settled','released');
 CREATE TABLE IF NOT EXISTS platform_run_tree_model_binding (
  binding_key VARCHAR(64) PRIMARY KEY, root_key VARCHAR(64) NOT NULL, actor_key VARCHAR(64) NOT NULL,
  request_id VARCHAR(128) NOT NULL, scope_json TEXT NOT NULL CHECK(octet_length(scope_json)<=16384),

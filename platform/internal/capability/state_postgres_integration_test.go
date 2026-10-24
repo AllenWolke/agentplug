@@ -70,7 +70,7 @@ func TestSQLBusinessCheckpointCASRecoveryAndAuthority(t *testing.T) {
 	if err = store.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
-	store.SetContinuityGuard(runs.CheckCapabilityLeaseTx)
+	store.SetContinuityGuard(runs.CheckCheckpointLeaseTx)
 	store.SetAuditRecorder(recorder)
 	id := fmt.Sprintf("business-state-%d", time.Now().UnixNano())
 	scope := mcpTestScope()
@@ -431,9 +431,9 @@ func TestSQLBusinessCheckpointCASRecoveryAndAuthority(t *testing.T) {
 			if err := iam.AcquirePermissionReadContinuity(ctx, tx); err != nil {
 				return err
 			}
-			return runs.CheckCapabilityLeaseTx(ctx, tx, candidate, lease)
+			return runs.CheckCheckpointLeaseTx(ctx, tx, candidate, lease)
 		})
-		defer store.SetContinuityGuard(runs.CheckCapabilityLeaseTx)
+		defer store.SetContinuityGuard(runs.CheckCheckpointLeaseTx)
 		currentPrincipal := func(ctx context.Context) error {
 			principal, err := iam.GetPrincipal(ctx, identity.PrincipalUser, scope.PrincipalID)
 			if err != nil {

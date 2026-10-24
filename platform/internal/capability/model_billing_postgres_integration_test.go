@@ -34,6 +34,9 @@ import (
 func TestGovernedModelBillingPostgresIntegration(t *testing.T) {
 	testGovernedModelBillingPostgres(t, false)
 }
+func TestGovernedContextCacheBillingPostgresIntegration(t *testing.T) {
+	testGovernedModelBillingPostgres(t, false, false, false, false, true)
+}
 func TestGovernedEmbeddingBillingPostgresIntegration(t *testing.T) {
 	testGovernedModelBillingPostgres(t, true)
 }
@@ -50,11 +53,15 @@ func testGovernedModelBillingPostgres(t *testing.T, embedding bool, throughKnowl
 	knowledgeCall := len(throughKnowledge) > 0 && throughKnowledge[0]
 	functionCall := len(throughKnowledge) > 1 && throughKnowledge[1]
 	invalidFunction := len(throughKnowledge) > 2 && throughKnowledge[2]
+	cacheCall := len(throughKnowledge) > 3 && throughKnowledge[3]
 	expectedStatus := http.StatusOK
 	operation := "/internal/model/generate"
 	expectedCost := int64(7000)
 	expectedOutput := int64(20)
 	expectedResult := "budget integration answer"
+	if cacheCall {
+		expectedCost = 3400
+	}
 	if functionCall {
 		expectedResult = "runtime.inspect"
 		if invalidFunction {
@@ -148,6 +155,9 @@ func testGovernedModelBillingPostgres(t *testing.T, embedding bool, throughKnowl
 		DisplayName: "Billing Integration Model", Capabilities: json.RawMessage(`{"chat":true}`),
 		ContextLimit: 4096, LifecycleStatus: modelgovernance.StatusDraft, Revision: 1,
 	}
+	if cacheCall {
+		definition.Capabilities = json.RawMessage(`{"chat":true,"context_cache_mode":"provider_prefix"}`)
+	}
 	if err = governance.CreateDefinition(ctx, &definition); err != nil {
 		t.Fatalf("create SQL model definition fixture: %v", err)
 	}
@@ -162,12 +172,22 @@ func testGovernedModelBillingPostgres(t *testing.T, embedding bool, throughKnowl
 	if err = governance.ApproveVersion(ctx, versionID, 1); err != nil {
 		t.Fatalf("approve SQL model version fixture: %v", err)
 	}
+	// Exercise the catalog's actual schema before entering the gateway. A
+	// scripted SQL driver cannot detect a renamed or nonexistent column.
+	approvedModel, err := governance.GetApprovedModel(ctx, versionID)
+	if err != nil || approvedModel.ID != definitionID || approvedModel.ProviderID != providerID || approvedModel.Kind != definition.Kind {
+		t.Fatalf("read approved runtime metadata from native SQL: model=%+v err=%v", approvedModel, err)
+	}
 
 	price := modelgovernance.PriceVersion{
 		ID: priceID, ModelVersionID: versionID, Currency: "USD",
 		InputMicrosPer1K: 100_000, OutputMicrosPer1K: 100_000,
 		EffectiveFrom: time.Now().UTC().Add(-time.Hour), Status: modelgovernance.StatusDraft,
 		Revision: 1, CreatedBy: "integration-admin",
+	}
+	if cacheCall {
+		rate := int64(10_000)
+		price.CachedInputMicrosPer1K = &rate
 	}
 	price.ContentHash = billingIntegrationPriceHash(t, price)
 	if err = governance.CreatePriceVersion(ctx, &price); err != nil {
@@ -266,6 +286,14 @@ func testGovernedModelBillingPostgres(t *testing.T, embedding bool, throughKnowl
 			}
 			response := map[string]any{"choices": []any{map[string]any{"finish_reason": "tool_calls", "message": map[string]any{"content": nil, "tool_calls": []any{map[string]any{"id": "call-1", "type": "function", "function": map[string]any{"name": name, "arguments": "{}"}}}}}}, "usage": map[string]int{"prompt_tokens": 50, "completion_tokens": 20}}
 			_ = json.NewEncoder(w).Encode(response)
+		} else if cacheCall {
+			var body struct {
+				Messages []modelgateway.Message `json:"messages"`
+			}
+			if json.NewDecoder(r.Body).Decode(&body) != nil || len(body.Messages) < 2 || !strings.Contains(body.Messages[0].Content, "Context partition") {
+				t.Error("cache partition missing from actual HTTP request")
+			}
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"budget integration answer"}}],"usage":{"prompt_tokens":50,"completion_tokens":20,"prompt_cache_hit_tokens":40,"prompt_cache_miss_tokens":10}}`))
 		} else {
 			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"budget integration answer"}}],"usage":{"prompt_tokens":50,"completion_tokens":20}}`))
 		}
@@ -307,8 +335,19 @@ func testGovernedModelBillingPostgres(t *testing.T, embedding bool, throughKnowl
 		policy.snapshot.Model.Provider = "separate-chat-provider"
 		policy.snapshot.Model.Model = "separate-chat-model"
 	}
-	module := NewModuleWithGovernance("internal-token", "signing-secret", nil, "platform", "agent-runtime", nil, policy, nil, invocations)
+	signingKey := "signing-secret"
+	if cacheCall {
+		policy.snapshot.Model.ContextCache = &policyasset.ContextCachePolicy{Version: "context-prefix/v1", Mode: "provider_prefix", Isolation: "session"}
+		policy.snapshot.Model.BudgetCents = 2 // Include cold namespace bytes; the next request still exceeds the window.
+		signingKey = "context-cache-integration-signing-secret"
+	}
+	module := NewModuleWithGovernance("internal-token", signingKey, nil, "platform", "agent-runtime", nil, policy, nil, invocations)
+	performance := &performanceCapture{}
+	module.SetPerformanceRecorder(performance)
 	module.SetGovernedModelInvocation(access, modelHTTP)
+	if cacheCall {
+		module.SetGovernedModelInvocation(cacheModelAccess{access, "provider_prefix"}, modelHTTP)
+	}
 	module.SetModelBilling(governance, usage)
 	module.SetModelCapacity(capacity)
 	var retained KnowledgeModelCall
@@ -356,12 +395,28 @@ func testGovernedModelBillingPostgres(t *testing.T, embedding bool, throughKnowl
 			t.Fatalf("model response must carry the same stable usage step ID: expected=%v body=%s", expectedStepID, completed.Body.String())
 		}
 	}
+	observedBeforeReplay := len(performance.items)
 	replay := capabilityRequest(t, module, operation, capContext, input)
 	var completedJSON, replayJSON any
 	_ = json.Unmarshal(completed.Body.Bytes(), &completedJSON)
 	_ = json.Unmarshal(replay.Body.Bytes(), &replayJSON)
 	if replay.Code != expectedStatus || !reflect.DeepEqual(completedJSON, replayJSON) || providerCalls.Load() != 1 {
 		t.Fatalf("completed idempotent request must replay without a second provider charge: replay_status=%d provider_calls=%d", replay.Code, providerCalls.Load())
+	}
+	if len(performance.items) != observedBeforeReplay {
+		t.Fatal("durable model replay invented another measured gateway invocation")
+	}
+	matched := 0
+	for _, o := range performance.items {
+		if o.Status == "succeeded" && o.Kind == "model_gateway" && (expectedStepID == nil || o.UsageStepID == *expectedStepID) {
+			matched++
+			if o.RunID != capContext.TaskID || o.ModelVersionID != versionID || o.DurationMS < 0 || o.FinishedAt.Before(o.StartedAt) {
+				t.Fatal("measured invocation is not bound to approved original business Run", o)
+			}
+		}
+	}
+	if matched != 1 {
+		t.Fatal("confirmed gateway invocation has no exact measured usage step", matched)
 	}
 	if !embedding && !knowledgeCall {
 		runtimeDSN := os.Getenv("PUBLIC_TEST_POSTGRES_RUNTIME_DSN")
@@ -397,6 +452,11 @@ func testGovernedModelBillingPostgres(t *testing.T, embedding bool, throughKnowl
 	secondInput := map[string]any{
 		"idempotency_key": "billing-over-limit-" + providerID[:8], "prompt_template_hash": "prompt-hash",
 		"max_tokens": 20, "messages": []map[string]string{{"role": "user", "content": "hello"}},
+	}
+	if cacheCall {
+		// Cache discounts leave more actual balance. Use a larger cold input to
+		// prove admission still reserves the full miss price before any send.
+		secondInput["messages"] = []map[string]string{{"role": "user", "content": strings.Repeat("hello ", 10)}}
 	}
 	if functionCall {
 		secondInput["function_names"] = []string{"inspect"}
@@ -473,13 +533,14 @@ func billingIntegrationID(t *testing.T) string {
 func billingIntegrationPriceHash(t *testing.T, price modelgovernance.PriceVersion) string {
 	t.Helper()
 	payload := struct {
-		ModelVersionID    string     `json:"model_version_id"`
-		Currency          string     `json:"currency"`
-		InputMicrosPer1K  int64      `json:"input_micros_per_1k_tokens"`
-		OutputMicrosPer1K int64      `json:"output_micros_per_1k_tokens"`
-		EffectiveFrom     time.Time  `json:"effective_from"`
-		EffectiveUntil    *time.Time `json:"effective_until,omitempty"`
-	}{price.ModelVersionID, price.Currency, price.InputMicrosPer1K, price.OutputMicrosPer1K, price.EffectiveFrom.UTC(), price.EffectiveUntil}
+		ModelVersionID         string     `json:"model_version_id"`
+		Currency               string     `json:"currency"`
+		InputMicrosPer1K       int64      `json:"input_micros_per_1k_tokens"`
+		OutputMicrosPer1K      int64      `json:"output_micros_per_1k_tokens"`
+		EffectiveFrom          time.Time  `json:"effective_from"`
+		EffectiveUntil         *time.Time `json:"effective_until,omitempty"`
+		CachedInputMicrosPer1K *int64     `json:"cached_input_micros_per_1k_tokens,omitempty"`
+	}{price.ModelVersionID, price.Currency, price.InputMicrosPer1K, price.OutputMicrosPer1K, price.EffectiveFrom.UTC(), price.EffectiveUntil, price.CachedInputMicrosPer1K}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		t.Fatal(err)

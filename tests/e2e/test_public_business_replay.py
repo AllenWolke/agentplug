@@ -92,6 +92,16 @@ class API:
 
 
 class BusinessReplayTests(unittest.TestCase):
+    def test_current_schema_and_frozen_v2_plans(self):
+        current = business.build_plan(PROJECT, SCOPE, VERSIONS)
+        legacy = business.build_plan(PROJECT, SCOPE, VERSIONS, output_version=2)
+        self.assertTrue(all(row['output_schema'].endswith('/v3') for row in current['cases']))
+        self.assertEqual(business.validate_plan(legacy, PROJECT, SCOPE), legacy)
+        mixed = deepcopy(legacy)
+        mixed['cases'][0]['output_schema'] = current['cases'][0]['output_schema']
+        with self.assertRaises(ValueError):
+            business.validate_plan(mixed, PROJECT, SCOPE)
+
     def test_new_bounded_scenario_preserves_old_plan_and_uses_fresh_handles(self):
         old = business.build_plan(PROJECT, SCOPE, VERSIONS)
         new = business.build_plan(PROJECT, SCOPE, VERSIONS, "bounded-20261007-02")

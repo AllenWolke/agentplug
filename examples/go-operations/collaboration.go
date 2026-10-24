@@ -174,14 +174,14 @@ func validateOperationsGroupState(request agentplatform.ExecuteRequest, input op
 	default:
 		return "", evidenceInvalid()
 	}
-	if len(state.Targets) > 0 && (state.Targets[0].InputSchema != operationsGroupChildSchema ||
-		state.Targets[0].OutputSchema != "schema://example-python-documents/output/v2") {
+	if len(state.Targets) > 0 && (state.Targets[0].InputSchema != operationsChildInputSchema(input) ||
+		state.Targets[0].OutputSchema != operationsChildOutputSchema(input)) {
 		return "", evidenceInvalid()
 	}
 	for index, binding := range state.Bindings {
 		if index >= len(state.ChildKeys) || binding.ChildKey != state.ChildKeys[index] ||
 			!validOperationsDigest(binding.ChildKey) || !validOperationsDigest(binding.InputFingerprint) ||
-			binding.OutputSchema != "schema://example-python-documents/output/v2" {
+			binding.OutputSchema != operationsChildOutputSchema(input) {
 			return "", evidenceInvalid()
 		}
 	}
@@ -205,7 +205,7 @@ func operationsGroupSupport(request agentplatform.ExecuteRequest, input operatio
 		return nil, evidenceInvalid()
 	}
 	child, ok := children[0].(map[string]any)
-	if !ok || child["status"] != "completed" || child["output_schema"] != "schema://example-python-documents/output/v2" ||
+	if !ok || child["status"] != "completed" || child["output_schema"] != operationsChildOutputSchema(input) ||
 		child["instruction_trust"] != "untrusted_data" || child["output_omitted"] != false {
 		return nil, evidenceInvalid()
 	}
@@ -216,7 +216,7 @@ func operationsGroupSupport(request agentplatform.ExecuteRequest, input operatio
 	answer, answerOK := output["answer"].(string)
 	question, questionOK := output["question"].(string)
 	if !keyOK || !validOperationsDigest(childKey) || !fingerprintOK || !validOperationsDigest(childInputHash) ||
-		!digestOK || !validOperationsDigest(outputDigest) || !outputOK || output["schema"] != "schema://example-python-documents/output/v2" ||
+		!digestOK || !validOperationsDigest(outputDigest) || !outputOK || output["schema"] != operationsChildOutputSchema(input) ||
 		!answerOK || strings.TrimSpace(answer) == "" || len(answer) > 16384 || !questionOK || question != operationsGroupInput(input)["question"] {
 		return nil, evidenceInvalid()
 	}
@@ -439,4 +439,17 @@ func sameOperationsJSON(left, right any) bool {
 	leftRaw, leftErr := json.Marshal(left)
 	rightRaw, rightErr := json.Marshal(right)
 	return leftErr == nil && rightErr == nil && string(leftRaw) == string(rightRaw)
+}
+
+func operationsChildInputSchema(input operationsInput) string {
+	if input.Legacy {
+		return "schema://example-python-documents/input/v2"
+	}
+	return "schema://example-python-documents/input/v3"
+}
+func operationsChildOutputSchema(input operationsInput) string {
+	if input.Legacy {
+		return "schema://example-python-documents/output/v2"
+	}
+	return "schema://example-python-documents/output/v3"
 }

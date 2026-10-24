@@ -27,6 +27,9 @@ func validRuntimeModelPrice(price modelgovernance.PriceVersion, modelVersionID s
 		len(price.ContentHash) != 71 || !strings.HasPrefix(price.ContentHash, "sha256:") {
 		return false
 	}
+	if price.CachedInputMicrosPer1K != nil && (*price.CachedInputMicrosPer1K < 0 || *price.CachedInputMicrosPer1K > price.InputMicrosPer1K) {
+		return false
+	}
 	if _, err := hex.DecodeString(strings.TrimPrefix(price.ContentHash, "sha256:")); err != nil {
 		return false
 	}
@@ -112,6 +115,44 @@ func approvedModelCost(price modelgovernance.PriceVersion, inputTokens, outputTo
 	outputCost, err := tokenCostMicros(price.OutputMicrosPer1K, outputTokens)
 	if err != nil || inputCost > math.MaxInt64-outputCost {
 		return 0, errors.New("approved model price overflows cost range")
+	}
+	return inputCost + outputCost, nil
+}
+
+// Reserve uses approvedModelCost (all input uncached). Settlement alone may
+// use an authentic supplier cache split. Missing split with a differential
+// tariff is unknown cost and must follow durable billing reconciliation.
+func approvedModelCacheCost(price modelgovernance.PriceVersion, inputTokens, outputTokens int64, cached *int) (int64, error) {
+	if price.CachedInputMicrosPer1K == nil {
+		return approvedModelCost(price, inputTokens, outputTokens)
+	}
+	rate := *price.CachedInputMicrosPer1K
+	// Equal rates make the monetary result independent of the unreported
+	// split. Keep cache telemetry unknown; do not fabricate a zero hit count.
+	if cached == nil && rate >= 0 && rate == price.InputMicrosPer1K {
+		return approvedModelCost(price, inputTokens, outputTokens)
+	}
+	if cached == nil || inputTokens < 0 || *cached < 0 || int64(*cached) > inputTokens || rate < 0 || rate > price.InputMicrosPer1K {
+		return 0, errors.New("cache-priced model requires valid measured cache usage")
+	}
+	hit, miss := int64(*cached), inputTokens-int64(*cached)
+	if price.InputMicrosPer1K != 0 && miss > math.MaxInt64/price.InputMicrosPer1K || rate != 0 && hit > math.MaxInt64/rate {
+		return 0, errors.New("approved cache price overflows")
+	}
+	a, b := miss*price.InputMicrosPer1K, hit*rate
+	if a > math.MaxInt64-b {
+		return 0, errors.New("approved cache price overflows")
+	}
+	// Round the combined input numerator once, avoiding a spurious extra micro
+	// when cache and ordinary input happen to have the same rate.
+	numerator := a + b
+	inputCost := numerator / 1000
+	if numerator%1000 != 0 {
+		inputCost++
+	}
+	outputCost, err := tokenCostMicros(price.OutputMicrosPer1K, outputTokens)
+	if err != nil || inputCost > math.MaxInt64-outputCost {
+		return 0, errors.New("approved cache price overflows")
 	}
 	return inputCost + outputCost, nil
 }
@@ -236,7 +277,7 @@ func definitelyNoModelCharge(err error) bool {
 	// These errors are produced before the adapter sends a generation request.
 	return errors.Is(err, modelgateway.ErrModelUnavailable) || errors.Is(err, modelgateway.ErrEndpointUnresolved) ||
 		errors.Is(err, modelgateway.ErrUnsafeEndpoint) || errors.Is(err, modelgateway.ErrSecretUnavailable) ||
-		errors.Is(err, modelgateway.ErrRequestTooLarge)
+		errors.Is(err, modelgateway.ErrRequestTooLarge) || modelgateway.ProvablyUnsent(err)
 }
 
 func (m *Module) releaseModelBudget(ctx context.Context, reservation usagecost.ModelBudgetReservation, traceID string) {
@@ -246,6 +287,8 @@ func (m *Module) releaseModelBudget(ctx context.Context, reservation usagecost.M
 		log.Printf("model budget release unavailable trace=%q error_type=%T", traceID, err)
 	}
 }
+
+type modelFailureKindContextKey struct{}
 
 func (m *Module) markModelReconciliation(ctx context.Context, scopeHash, key, fingerprint string, reservation usagecost.ModelBudgetReservation, response map[string]any, costCents int64, traceID, attemptToken string, events ...usagecost.Event) error {
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -261,7 +304,11 @@ func (m *Module) markModelReconciliation(ctx context.Context, scopeHash, key, fi
 		holdErr = errors.New("billing hold store unavailable")
 	}
 	if store, ok := m.modelStore.(ModelBillingRecoveryStore); ok {
-		intent := BillingRecovery{Reservation: reservation, PriceID: reservation.PriceVersionID, AttemptToken: attemptToken}
+		intent := BillingRecovery{Reservation: reservation, PriceID: reservation.PriceVersionID, AttemptToken: attemptToken, HoldConfirmed: holdErr == nil}
+		kind, _ := ctx.Value(modelFailureKindContextKey{}).(string)
+		if recoverableProviderFailure(kind) {
+			intent.FailureKind = kind
+		}
 		if len(events) == 1 {
 			intent.Event = &events[0]
 		}

@@ -125,5 +125,13 @@ func (m *Module) writeCancellationAwareRun(w http.ResponseWriter, r *http.Reques
 	}
 	response := runResponseFrom(run, replayed)
 	response.Cancellation = projection
+	if m.modelRoutingSummary != nil {
+		summary, err := m.modelRoutingSummary.ReadRunModelRouting(r.Context(), run.Scope)
+		if err != nil {
+			m.writeError(w, http.StatusServiceUnavailable, "MODEL_ROUTING_STATE_UNCONFIRMED")
+			return
+		}
+		response.ModelRouting = &summary
+	}
 	m.writeJSON(w, status, response)
 }

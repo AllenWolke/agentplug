@@ -1,0 +1,18 @@
+{
+  "version": "public-capability-conformance/v1",
+  "capacity": [
+    {"name": "legacy", "reply": {}, "limit": 64},
+    {"name": "negotiated", "reply": {"checkpoint_history": {"version": "checkpoint-history/v1", "max_revisions": 4096}}, "limit": 4096},
+    {"name": "over-bound", "reply": {"checkpoint_history": {"version": "checkpoint-history/v1", "max_revisions": 4097}}, "error": "STATE_CAPACITY_INVALID"},
+    {"name": "zero", "reply": {"checkpoint_history": {"version": "checkpoint-history/v1", "max_revisions": 0}}, "error": "STATE_CAPACITY_INVALID"},
+    {"name": "boolean", "reply": {"checkpoint_history": {"version": "checkpoint-history/v1", "max_revisions": true}}, "error": "STATE_CAPACITY_INVALID"},
+    {"name": "unknown-contract", "reply": {"checkpoint_history": {"version": "checkpoint-history/v9", "max_revisions": 64}}, "error": "STATE_CAPACITY_INVALID"}
+  ],
+  "preserved_model_metadata": {
+    "routing": {"version": "model-routing/v1", "selected_model_version_id": "approved-model"},
+    "route_execution": {"status": "reconciliation_required"},
+    "context_cache": {"status": "unknown"},
+    "billing": {"status": "unknown", "amount": null},
+    "model_version_id": "approved-model", "provider_id": "provider", "step_id": "step-1"
+  }
+}

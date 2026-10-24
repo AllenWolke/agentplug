@@ -11,6 +11,35 @@ from agent_platform_sdk.errors import classify_execution_error
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("timeout_type", [httpx.ConnectTimeout, httpx.ReadTimeout,
+                                          httpx.WriteTimeout, httpx.PoolTimeout])
+async def test_transport_timeout_has_stable_code_without_retry_or_private_message(monkeypatch, timeout_type):
+    monkeypatch.setenv("APP_ENV", "development")
+    requests = []
+    def transport(request):
+        requests.append(request)
+        raise timeout_type("private-upstream-sentinel", request=request)
+    client = CapabilityGatewayClient({}, "http://fixture", "fixture-test-token", httpx.MockTransport(transport))
+    with pytest.raises(GatewayError) as caught:
+        await client._post("/internal/state/checkpoint", {"operation": "save"}, 1)
+    assert caught.value.code == "UPSTREAM_TIMEOUT"
+    assert "private-upstream-sentinel" not in str(caught.value)
+    assert isinstance(caught.value.__cause__, timeout_type)
+    assert len(requests) == 1  # A lost write acknowledgement must not be resubmitted.
+
+
+@pytest.mark.asyncio
+async def test_transport_cancellation_is_not_rewritten_as_observation_timeout(monkeypatch):
+    import asyncio
+    monkeypatch.setenv("APP_ENV", "development")
+    def transport(request):
+        raise asyncio.CancelledError()
+    client = CapabilityGatewayClient({}, "http://fixture", "fixture-test-token", httpx.MockTransport(transport))
+    with pytest.raises(asyncio.CancelledError):
+        await client._post("/internal/state/checkpoint", {"operation": "load"}, 1)
+
+
+@pytest.mark.asyncio
 async def test_capability_unknown_tool_observation_cannot_become_retryable_failure(monkeypatch):
     monkeypatch.setenv("APP_ENV", "development")
     transport = httpx.MockTransport(lambda request: httpx.Response(502, json={"error_code": "TOOL_PROVIDER_FAILED", "message": "private-upstream-body", "data": {"observation": {"version": "runtime-observation/v1", "effect": "unknown"}}}))
@@ -59,7 +88,10 @@ async def test_tool_error_response_shape_is_safe(monkeypatch, body):
     monkeypatch.setattr(
         tool_client.httpx,
         "AsyncClient",
-        lambda **options: real_client(**options, transport=transport),
+        # The governed tool client passes its own connection transport; the
+        # fixture replaces that transport with the mock instead of adding a
+        # second one.
+        lambda **options: real_client(**{**options, "transport": transport}),
     )
     with pytest.raises(tool_client.ToolGatewayError) as caught:
         await tool_client.invoke_tool(

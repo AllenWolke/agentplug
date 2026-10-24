@@ -18,12 +18,18 @@ type capabilitySnapshotFixture struct {
 	binding            *identity.WorkloadBinding
 	credentialDisabled bool
 	credentialSecret   string
+	snapshotReads      *int
+	bindingReads       *int
+	credentialReads    *int
 }
 
 func (f capabilitySnapshotFixture) CurrentAuthorizationEpoch(context.Context, sharedkernel.Scope, string) (uint64, error) {
 	return 1, f.failure
 }
 func (f capabilitySnapshotFixture) PermissionSnapshot(_ context.Context, kind identity.PrincipalType, _ string) (identity.PermissionSnapshot, error) {
+	if f.snapshotReads != nil {
+		*f.snapshotReads++
+	}
 	if kind == identity.PrincipalServicePrincipal {
 		if f.executor == nil {
 			return identity.PermissionSnapshot{}, identity.ErrPermissionDenied
@@ -33,6 +39,9 @@ func (f capabilitySnapshotFixture) PermissionSnapshot(_ context.Context, kind id
 	return f.snapshot, f.failure
 }
 func (f capabilitySnapshotFixture) GetMachineCredential(_ context.Context, tenant, subject string) (identity.MachineCredential, error) {
+	if f.credentialReads != nil {
+		*f.credentialReads++
+	}
 	status := "active"
 	if f.credentialDisabled {
 		status = "disabled"
@@ -45,6 +54,9 @@ func (f capabilitySnapshotFixture) GetMachineCredential(_ context.Context, tenan
 	return identity.MachineCredential{TenantID: tenant, PrincipalID: subject, Status: status, Revision: 1, SecretHash: hex.EncodeToString(hash[:]), NetworkCIDRs: []string{"127.0.0.1/32"}}, f.failure
 }
 func (f capabilitySnapshotFixture) ResolveWorkloadIdentity(context.Context, sharedkernel.Scope) (identity.WorkloadBinding, error) {
+	if f.bindingReads != nil {
+		*f.bindingReads++
+	}
 	if f.binding == nil {
 		return identity.WorkloadBinding{}, identity.ErrPermissionDenied
 	}

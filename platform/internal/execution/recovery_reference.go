@@ -15,20 +15,21 @@ import (
 // the trusted controller. It is provenance, not a checkpoint, execution token,
 // or authority to invoke an Agent. Original approval input remains separate.
 type RecoveryStopReference struct {
-	Version         string                                 `json:"version"`
-	RunID           string                                 `json:"run_id"`
-	StoppedRevision uint64                                 `json:"stopped_revision"`
-	ReadyRevision   uint64                                 `json:"ready_revision"`
-	Operation       string                                 `json:"operation"`
-	BodyHash        string                                 `json:"body_hash"`
-	PolicyHash      string                                 `json:"policy_hash"`
-	LeaseHash       string                                 `json:"lease_token_hash"`
-	RequestHash     string                                 `json:"request_hash"`
-	ResumeInputHash string                                 `json:"resume_input_hash"`
-	Source          string                                 `json:"source"`
-	ProofDigest     string                                 `json:"proof_digest,omitempty"`
-	RuntimeID       string                                 `json:"runtime_id,omitempty"`
-	Checkpoints     []contract.RecoveryCheckpointReference `json:"checkpoints,omitempty"`
+	Version         string                                   `json:"version"`
+	RunID           string                                   `json:"run_id"`
+	StoppedRevision uint64                                   `json:"stopped_revision"`
+	ReadyRevision   uint64                                   `json:"ready_revision"`
+	Operation       string                                   `json:"operation"`
+	BodyHash        string                                   `json:"body_hash"`
+	PolicyHash      string                                   `json:"policy_hash"`
+	LeaseHash       string                                   `json:"lease_token_hash"`
+	RequestHash     string                                   `json:"request_hash"`
+	ResumeInputHash string                                   `json:"resume_input_hash"`
+	Source          string                                   `json:"source"`
+	ProofDigest     string                                   `json:"proof_digest,omitempty"`
+	RuntimeID       string                                   `json:"runtime_id,omitempty"`
+	Checkpoints     []contract.RecoveryCheckpointReference   `json:"checkpoints,omitempty"`
+	CheckpointSet   *contract.RecoveryCheckpointSetReference `json:"checkpoint_set,omitempty"`
 }
 
 func validRecoveryDigest(value string) bool {
@@ -37,7 +38,7 @@ func validRecoveryDigest(value string) bool {
 }
 
 func (r RecoveryStopReference) valid() bool {
-	if r.Version != "runtime-recovery-stop/v1" || r.RunID == "" || len(r.RunID) > 128 || r.StoppedRevision == 0 || r.StoppedRevision >= (1<<53)-2 || r.ReadyRevision != r.StoppedRevision+2 {
+	if (r.Version != "runtime-recovery-stop/v1" && r.Version != "runtime-recovery-stop/v2") || r.RunID == "" || len(r.RunID) > 128 || r.StoppedRevision == 0 || r.StoppedRevision >= (1<<53)-2 || r.ReadyRevision != r.StoppedRevision+2 {
 		return false
 	}
 	if r.Operation != "invoke" && r.Operation != "run" && r.Operation != "resume" {
@@ -48,8 +49,20 @@ func (r RecoveryStopReference) valid() bool {
 			return false
 		}
 	}
-	if len(r.Checkpoints) > contract.MaxRecoveryCheckpoints {
-		return false
+	if r.Version == "runtime-recovery-stop/v1" {
+		if r.CheckpointSet != nil || len(r.Checkpoints) > contract.MaxRecoveryCheckpoints {
+			return false
+		}
+	} else {
+		if r.CheckpointSet == nil || r.CheckpointSet.Validate() != nil {
+			return false
+		}
+		if len(r.Checkpoints) != 0 {
+			set, err := contract.RecoveryCheckpointSet(r.Checkpoints)
+			if err != nil || set != *r.CheckpointSet {
+				return false
+			}
+		}
 	}
 	previousKey := ""
 	for _, checkpoint := range r.Checkpoints {

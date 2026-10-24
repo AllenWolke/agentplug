@@ -1,0 +1,1035 @@
+{
+  "schema": "agentplug-github-workflow-verification/v1",
+  "checked_at": "2026-10-23T06:02:43.801134+00:00",
+  "result": "local_checks_passed_hosted_run_pending",
+  "project": "agentplug",
+  "go_version": "1.26.10",
+  "actionlint": {
+    "workflow_files": 3,
+    "version": "1.7.12",
+    "result": "PASS"
+  },
+  "external_action_refs": {
+    "checked": 16,
+    "result": "PASS"
+  },
+  "go_race": {
+    "modules": 17,
+    "result": "PASS",
+    "metric_nonroot_memory_bytes": 536870912,
+    "metric_pids_limit": 128,
+    "metric_bounded_conditional_skip": "TestSandboxRefusesMissingCgroupBounds",
+    "metric_missing_pids_followup": "PASS"
+  },
+  "postgres_full": {
+    "result": "passed_with_conditional_skips",
+    "counts": {
+      "passed": 3478,
+      "failed": 0,
+      "skipped": 83,
+      "package_passed": 41,
+      "package_failed": 0,
+      "packages_without_test_files": 11
+    },
+    "skipped_cases": [
+      {
+        "package": "github.com/lexagent/platform/cmd/platform",
+        "test": "TestPostgresCancellationProgressCompositionDoesNotReadFrozenToolHistory",
+        "reason": "dedicated owned compensation database required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/agentgateway",
+        "test": "TestGRPCTransportInteropWithPythonBridge",
+        "reason": "set LEXAGENT_RUN_PYTHON_GRPC_INTEROP=1 to run the Go-to-Python gRPC interoperability test"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/cleanup_missing",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/completed",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/not_found",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/tampered_metadata",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/unknown",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/wrong_binding",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestMemoryCompensationMissingBindingAndLateForwardAreDeniedPostgres",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestMemoryCompensationPreservesEvenSameValueConcurrentWriterPostgres",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestMemoryCompensationReverseOrderAndForwardIdempotencyPostgres",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestMemoryCompensationTransactionContextOwnsAuthorizationCallbacksPostgres",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestPostgresModelPerformanceKeepsHistoricalClockMismatchMissing",
+        "reason": "requires registered independent PostgreSQL fixture"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/ack_lost",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/applied",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/before_forward",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/other_writer",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/wrong_control_credential",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestSQLToolPauseWorkerProcessHelper",
+        "reason": "subprocess-only helper"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestLocalEffectBeforeImageAndInverseReceiptAreAtomicPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestLocalEffectConcurrentResourceWriteCannotBeOverwrittenPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestPostgresCompensationMigrationDriftRollsBackOuterBundle",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestPostgresCompensationMigrationProtectsHistoryACL",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLAutomaticRecoveryHoldsPreserveUnknownAndAdmitNewRootPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLCannotCompensateBeforeStopOrOverwriteConcurrentBusinessWritePostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLConcurrentClaimsSerializeTheNextInversePostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLEnrolledParentReusesChildInverseAndExcludesSiblingFromChildCancelPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLEnrollmentCannotCrossScopeOrHideMismatchedDigestPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLExpiredSubmittedLeaseRemainsReadOnlyAndFencedPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLFinalizeFastPendingGateStillChecksEveryTerminalReceiptPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLLostInverseResponseRecoversReceiptWithoutReplayPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLMissingEffectRequiresNoEffectProofAndWrongStopRevisionIsDeniedPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLRegistrationParticipatesInBusinessTransactionPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLReverseOrderIncludesChildEffectsAndFinalOutcomeIsAtomicPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLStoppedTreeCoverageRejectsScopeSubstitutionAndCorruptEffectsPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLStoppedTreeCoverageRequiresExactRecordedSetPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLStoppedTreeCoverageWithAppendOnlyRuntimeRolePostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLWorkerDrainsThousandUniqueInversesWithoutPerStepIdlePostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/evaluationproduct",
+        "test": "TestSeedPlatformProcessRestartRun",
+        "reason": "only run by the isolated modular Compose process-restart E2E"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationCannotBypassThroughTransitionOrEventPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationConcurrentBusinessWriteIsPreservedPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationFenceKeepsSuccessAndRecoveryStrictPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationFinalAuditFailureRollsBackWholeOutcomePostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationHistoricalOutcomeNeverGetsInventedProofPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationNeverClaimedCompletesAtomicallyPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationPreparesCoverageAfterDurableIntentPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationProgressUsesFrozenCoverageButLiveFencesPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationProjectionRejectsMismatchedOutcomePostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationRejectsBareStopOrUncoveredEffectsPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationRejectsNewWriteAfterIntentPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationStopRetainsFIFOUntilActualUndoPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCompletedEvaluationCompensationPreservesUnsettledEvidencePostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCompletedEvaluationCompensationRequiresRecordedParentAndOutcomePostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCompletedEvaluationCompensationRetainsOutcomeAndUndoesWritesPostgres/failed",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCompletedEvaluationCompensationRetainsOutcomeAndUndoesWritesPostgres/succeeded",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/exact",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/missing",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/remote_endpoint",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/wrong_lease",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/wrong_revision",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestPlatformSignatureAcceptedByNativeGoSDKWithNumericEvidence",
+        "reason": "compiled actual Go SDK receiver required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestRealSignedTCPTimeoutWaitsForPythonGraphStop",
+        "reason": "real Python TCP fixture not enabled"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestSQLCancellationScanRotatesPastBlockedRunsPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestSQLSynchronousCreationCannotRaceCancelledParentPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestSQLSynchronousCreationCommitIsVisibleBeforeParentStopPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/identity",
+        "test": "TestSQLPermissionScaleAcceptance",
+        "reason": "explicit scale fixture opt-in required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/knowledge",
+        "test": "TestIndexCompensationForwardAuditFailureRollsBackPostgres",
+        "reason": "isolated PostgreSQL fixture not configured"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/knowledge",
+        "test": "TestIndexCompensationPreservesConcurrentAndSourceChangesPostgres/new-source",
+        "reason": "isolated PostgreSQL fixture not configured"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/knowledge",
+        "test": "TestIndexCompensationPreservesConcurrentAndSourceChangesPostgres/same-head-aba",
+        "reason": "isolated PostgreSQL fixture not configured"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/knowledge",
+        "test": "TestIndexCompensationReversePublicationsAndReplayPostgres",
+        "reason": "isolated PostgreSQL fixture not configured"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/modelgateway",
+        "test": "TestLiveDeepSeekGateway",
+        "reason": "set LEXAGENT_LIVE_DEEPSEEK_KEY_FILE to run the opt-in live vendor test"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/modelgateway",
+        "test": "TestLiveDeepSeekNativeFunctionCalling",
+        "reason": "set LEXAGENT_LIVE_DEEPSEEK_KEY_FILE for the authorized live provider probe"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/modelgateway",
+        "test": "TestLiveEmbeddingGateway",
+        "reason": "set LEXAGENT_LIVE_EMBEDDING_KEY_FILE for an authorized live embedding call"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/modelgateway",
+        "test": "TestLiveGoogleDoHModelDNS",
+        "reason": "explicit public model DNS probe hostnames required; no model requests"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/modelgovernance",
+        "test": "TestPostgresContextCachePriceUpgradePreservesOldRowsAndExplicitZero",
+        "reason": "dedicated cache migration PostgreSQL fixture not configured"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/changed_message",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/denied",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/no_preregistration",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/unknown_delivery",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/withdrawn",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestInboxConfirmedCorrectionAndNeverDeliveredFencePostgres",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestInboxHTTPRecipientRevocationAndContinuityLockPostgres",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestInboxWithdrawalAndLateForwardTombstonePostgres",
+        "reason": "dedicated owned PostgreSQL fixture required"
+      }
+    ],
+    "checkpoint_companion": {
+      "command_scope": "only the previously fixture-skipped PostgreSQL checkpoint integration test; no SDK full-suite rerun",
+      "exit_code": 0,
+      "test_count": 1,
+      "passed_count": 1,
+      "failed_count": 0,
+      "error_count": 0,
+      "skipped_count": 0,
+      "test_cases": [
+        {
+          "name": "test_checkpoint_postgres_roles_upgrade_and_resume",
+          "status": "passed",
+          "reason": ""
+        }
+      ]
+    },
+    "private_go_jsonl_relative_to_checkout": {
+      "path": ".local-secrets\\public-development\\platform-all-go-workflow-20261023-full-go-knowledge-pg-920e736818c24eed83c299dca385101a-events.jsonl",
+      "bytes": 3889322,
+      "sha256": "be5d4b9162d161d040b863d13462db4774b380578c97ec226471021c6b6eb01f"
+    }
+  },
+  "kafka_postgres": {
+    "result": "PASS",
+    "required": [
+      "TestSQLKafkaAuthorizationEventsAtomicAndDurableReplay"
+    ],
+    "skipped": []
+  },
+  "python_postgres_sdk": {
+    "result": "PASS",
+    "existing_volumes_used": false,
+    "external_network": false,
+    "real_model_requests": 0,
+    "passed": 575,
+    "skipped": [],
+    "failed": [],
+    "runtime_role_cannot_delete_generation": true,
+    "role_upgrade_and_resume": true,
+    "temporary_postgres_removed": true,
+    "temporary_credentials_removed": true
+  },
+  "python_unit": {
+    "passed": 560,
+    "database_conditional_skips": 3,
+    "example_passed": 13,
+    "langgraph_passed": 52,
+    "generic_passed": 43
+  },
+  "java": {
+    "reactor_passed": 69,
+    "generic_passed": 6,
+    "spring_ai_passed": 10
+  },
+  "frontend": {
+    "install": "PASS",
+    "test_passed": 164,
+    "production_build": "PASS"
+  },
+  "template_http": {
+    "templates": 6,
+    "cases_passed": 78
+  },
+  "release_validation": {
+    "linux_passed": 301,
+    "linux_skipped_missing_renderer": 2,
+    "linux_renderer_followup_passed": 2
+  },
+  "e2e_contract_tests_passed": 83,
+  "vulnerability_scans": {
+    "version": "0.70.0",
+    "severity": "HIGH,CRITICAL",
+    "ignore_unfixed": true,
+    "fixed_findings": {
+      "source-final": 0,
+      "platform-image": 0,
+      "runtime-image": 0
+    },
+    "exit_code_on_findings": 1,
+    "actual_scan_exit_codes": {
+      "source-final": 0,
+      "platform-image": 0,
+      "runtime-image": 0
+    }
+  },
+  "history_secret_scan": {
+    "commits": 8,
+    "findings": 0,
+    "scanner_controls": 5
+  },
+  "native": {
+    "unchanged_containers": 9,
+    "unchanged_images_env_and_started_at": true,
+    "readiness": [
+      {
+        "url": "http://127.0.0.1:38080/healthz",
+        "status": 200
+      },
+      {
+        "url": "http://127.0.0.1:38082/health/ready",
+        "status": 200
+      },
+      {
+        "service": "example-go",
+        "ready": true
+      },
+      {
+        "service": "example-java",
+        "ready": true
+      },
+      {
+        "service": "example-python",
+        "ready": true
+      }
+    ]
+  },
+  "reference_project_modified": false,
+  "existing_database_or_volume_used": false,
+  "real_model_requests": 0,
+  "hosted_steps_not_executed": [
+    "GitHub CodeQL analysis and SARIF upload",
+    "GitHub artifact upload",
+    "GHCR push and OIDC signing",
+    "all 18 images on both architectures",
+    "native macOS and Windows hosted runners"
+  ],
+  "evidence": [
+    {
+      "path": ".tmp/github-workflow-check-20261023/action-ref-checks.json",
+      "sha256": "bfdb06263f3a4f57aff45867a3242824fb0ac7926e1bb4685a2b0cd42bd80ca2"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/actionlint-baseline.log",
+      "sha256": "44fa914d2a96c928364a9f5fa7b59068528b644678eeeb48f9b5b7ebc06b120e"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/checkout-preparation.json",
+      "sha256": "192ae4fefbf0d4a044cfc678bd502f329237dedd6d823d1b328059d5bc14e196"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/checkpoint-bootstrap.log",
+      "sha256": "4717f52372bb89934e1274f928534a57b6b4e02d3667279dcb3b845bedf5dbcf"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/checkpoint-report.json",
+      "sha256": "e066bd99ba3da689561ebdc9a951e5ef25d5e44ef9a224627db75d020869a3d2"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/checkpoint-results.xml",
+      "sha256": "e9f3abb95313083f4f8fb292dd9eaf6c80484e04210e5e3edaaad4f037ecb45f"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/checkpoint-sdk.log",
+      "sha256": "32090f97cbb767ca5000618ad75cc8d72b0f56b04733d4e9b07d2da9ab7af061"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/dependency-fix.log",
+      "sha256": "c83ad482c051d0910d0b6f114c92f696ce3bb6f71c150eab1e92b587ea2be133"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/docker-cli-current-manifest.log",
+      "sha256": "22505c0b5906b88f0da856e7e6370726de15a811bc1001c0d1074c05f84f624f"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/docker-cli-patch-probe.log",
+      "sha256": "6294d2d86120087c6fe2ab35acdb1899ca69d0dee468830b7ae85911ed3769cd"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/frontend-build.log",
+      "sha256": "0f21a6b887767b78ca960d6db88075b609ecc4865a1969ef3e8f956909a6ba76"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/frontend-install.log",
+      "sha256": "22e1e5c7313a4efca5cf2d454632fb94c4673ec104165f64f7aeda4745fb41a1"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/frontend-report.json",
+      "sha256": "b922cca6cf06283149a249a5bad83c22bd4e5b8741d832fe7832cbbd91165f58"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/frontend-test.log",
+      "sha256": "4ea4a90fe42eb331ca023158e7fa07b397dc586299f1a57ebebbe6140d32bf7e"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/gitleaks-controls.log",
+      "sha256": "d4e7985ee0cedab3b7e4f69797e199e195098bfb5372d1dc2e66fcabfe85b42a"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/gitleaks-history.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/gitleaks-history.log",
+      "sha256": "d73e08abe4b1fd4fdda32649d017dc308238a48bce8e0166452dbf1e6e633d19"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-adapters-grpc-mapping.log",
+      "sha256": "6c4581c74a24daf43cfa19412802e76de04d2553306df91372d2caaa8a21fca1"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-adapters-legacy-http.log",
+      "sha256": "a8d8216d932f539498b90d9465d54363861e34ad952b09c146babcf2d3033ab2"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-adapters-process.log",
+      "sha256": "ea371284af65e44c4851286b4955a2ff9f9680b82b4608ff422396e7fdf4a81d"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-adapters-sidecar.log",
+      "sha256": "ce9eed2a334bcb5768e5388e4feee35928995adbbbfe3d482acdd0d288d81787"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-agents-examples-go-eino.log",
+      "sha256": "f73f200d1957afa5f3a0585e920a53e296cbc06d34390892d7e991372f709917"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-cli-agent-eval.log",
+      "sha256": "0fcae335e601b2037ec1a5abc68ef7a045c341eaa5173316399a3820922b3fd0"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-cli-agentctl.log",
+      "sha256": "1b33bb081bfd588c25e9485568008a4dff524c003b61137102d25eb337fb9544"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-contracts-agent-evaluation-go.log",
+      "sha256": "da3c9fd3ba32c43b742b6e122f315b6d9df31a0524c74fd7d6c4c361658b69c2"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-contracts-code-runtime.log",
+      "sha256": "95c4a379d3ca6f5dd973a58f8941cb86b8f5afb7ca8ab6bd08b898dfe47d190a"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-examples-go-operations.log",
+      "sha256": "8be174a4023959d415c780bef5e414332634319504595441e0f82fd01fd88160"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-frontend.log",
+      "sha256": "0888c7d9cca6b4fc76069498bf6c8ea65784511d7a210d553cd71f9c194938f6"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-platform.log",
+      "sha256": "bbbae862d45217e980bc31ebc26b7bbdbc1688e920c22a2aad8a74700676fb5e"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-report.json",
+      "sha256": "7843c3440a1c17812714890807433c1258c2543a60cb6892a5a88f0151bf9ef7"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-sdk-go.log",
+      "sha256": "0e1ab316826e7e267ea9342aed091939d372fb5845fac8378a82fb228bb1fd80"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-templates-go-eino.log",
+      "sha256": "8b87bf2c65c53658499bd79bb5acd9ecac960cdc97a39815636a11a3597f1f91"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-templates-go-generic.log",
+      "sha256": "0f658640918a718e82e12c07167b5d270069e186257634005b85ff01215e3d26"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go-workers-code-runtime.log",
+      "sha256": "de4bc46da23fa9c0aeb0903115d5eb053095c6fd2ae0b0b1625aa71e5e8e61ba"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/go12610-pull.log",
+      "sha256": "4a81df6bc63f84bcee4b281ced77e168aa3027a5588a114cf8abf55c6700bce4"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/java-report.json",
+      "sha256": "5179dd30f70d1c534738d37d7ab1d785107cee611d791253db84177046058869"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/java-sdk-java.log",
+      "sha256": "216008c199161e649ed407b4293f433c43c0c3626aeab283e39b436ae16736be"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/java-templates-java-generic.log",
+      "sha256": "3f5d8f6620011701df6ec34593f4ad994c569aaee3be875d9b6a7f87144df2f8"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/java-templates-java-spring-ai.log",
+      "sha256": "bcbb568956843dabbc099d6250d91a78fa7615cf61aea90cb410b3a3d0544165"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/kafka-fixed-v2.log",
+      "sha256": "628f4a032440b85e75fd03af9e467ea29396cdbe4e25fc3b81b87aa88602a771"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/kafka-fixed-v3.log",
+      "sha256": "4c649470419a3eba4cef970b5a4e69695fc26cbc0d14b50e3fee01791d6fcb33"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/kafka-fixed.log",
+      "sha256": "fa015f5ca9706974ee94acb612d7493ff66bbcbdd3eba86bcdaff23b688c9e47"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/kustomize-overlay-linux.log",
+      "sha256": "a338061184f4e9b59ef6708a06318b086ab15d926ea4dcb1d3798edae149bada"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/kustomize-overlay.log",
+      "sha256": "5b64046a8ec3a2d30eceec1d44a10f2378b0dc3e51fc10b1fa33a45d6d1336f9"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/markdown-final.log",
+      "sha256": "86c1d7831ab823199adc2de7ed89d4729f993805fc42dd706054db978fb86426"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/metric-bounded-race-final.log",
+      "sha256": "b473ab3d3ee825b5f1045c5ebb5a1ef9109ab6e7e2f37e1bb4a56a167274db99"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/metric-bounded-race.log",
+      "sha256": "a561d729ad578b8ea1362b5bbe53397486a77035ffe7ce28653ba9c7581630e1"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/metric-missing-pids.log",
+      "sha256": "a181a4e9c9e5bd7330b2f64a91b102016f1096308cf86fd40ab501c095071ad3"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/native-preservation.json",
+      "sha256": "a770fd9729772026a393023a3de6376b658c585805aeccd9023a5f8e85c17c60"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/platform-compress-fixed.log",
+      "sha256": "54b704d1d1ff807c3401c8ffe5c2c007f9e805d685af91d7d55b404bf4397b19"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/platform-image-build.log",
+      "sha256": "0a479cb4083c564fb08fab23625ff087d835a98048334d95fc0e629816715437"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/platform-sql-full.log",
+      "sha256": "14ec20abada66414c67dbc400daf49dc5163af0682fbb18b2da6cb0244124090"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/postgres-companion-deps.log",
+      "sha256": "63e5f10f963a61ff0c901b08b979ceae7fa37b959f4468a1b25417ea68ee1ba5"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/production-apply-mock.log",
+      "sha256": "a63c3e2c4ae60cef73d448daf678c570d82b921ae5930741c1620fb922503167"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/prometheus-alerts.log",
+      "sha256": "3b31e9bc313cd09cf61e39e6edfaa32c6b27c9c5befd5435404c049781b85492"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/protobuf-generated.log",
+      "sha256": "5f5baff606655afa6854b2e863e9e382b30f6a34d757b5ef919b6240d010d000"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/python-python-example.log",
+      "sha256": "59bbd7a61a05e24e1d7de93562b73fe44895c41c0b1e94e9d209c29fab14354b"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/python-python-generic.log",
+      "sha256": "bed08d4cfb659f2ad254319f04498e3ec7e3a1777982786c4d2184b2475d1188"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/python-python-langgraph.log",
+      "sha256": "672450939caf333fac6b08247c8044a8a4b7245367f54a7f9cda0de863c31a01"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/python-python-sdk.log",
+      "sha256": "2c0bbf9c5bdca058e6aab3dafb9537846c55daaa636b1da4e8a4e5fdfae4f922"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/python-report.json",
+      "sha256": "e2981ce2235efc306ce6631c967372135c71c9acc1980abc5983c82a28d655f5"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/readiness.json",
+      "sha256": "01e3b6a0a5b87c6773829b737f478f30e9de3f9bb7959279860d5270b809c761"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/release-e2e-contract-tests.log",
+      "sha256": "71775a39459f87cba9e09ac4f23928fe92c2c04c4ea81fe656f8462780366817"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/release-release-tests.log",
+      "sha256": "4a92c9a6a049bf4bf8454a41c6a109041d70a95448f36d59069e36464cb8d4c9"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/release-report.json",
+      "sha256": "4971c760aa1bdb0099fff2efd0cc53682015efe6b15538293e094cbcf29a2ebc"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/release-tests-final.log",
+      "sha256": "7f02df21df185b3b4671640f504ec4caf3f4ed46eb2f7428249d0d8381498cac"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/runtime-image-build.log",
+      "sha256": "dd614362dc3e96f53b7406737b424bd7f037a7d81ed75edbae13fa42bbccc1b6"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/secrets-final.log",
+      "sha256": "79ade98e392ab6e2aa8aa807018de302cca6e6f3d7e76a024c529b935bd9845c"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-check_agent_code_ownership.py.log",
+      "sha256": "98f6a422178f8a5d8bce4d7c41ee12e27109e003226f96a2de45369acad41cfe"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-check_agent_productization_contracts.py.log",
+      "sha256": "87101f9e0c3518623010abfa51761b951aaba803a7ecee3e4f6c099ed6aa6d1d"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-check_contract_breaking.py.log",
+      "sha256": "28d9102df84c8adaae24cb717806850d57bc60e5fc838cd0f198017e91e88ccc"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-check_gofmt.py.log",
+      "sha256": "f0ab3d242318dc644fcb62c7a174c5eaaced8727c91da8835671b3dd82070950"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-check_markdown_links.py.log",
+      "sha256": "4f8e0b0938f93d0ef4b5cad92c11cb5c4a64cd24797aaf8a1565ba0f5a21fbaa"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-check_publication.py.log",
+      "sha256": "9247ff5d6e544753f79fd0abbb02a1fb63e9475af23aa9fa757f93a662feb2bc"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-check_removed_architecture.py.log",
+      "sha256": "ef02e80d5fc308239d86f118f7aeb637e5b876500ada7dd2e50b7b457c3a03c7"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-lint_execution_contract.py.log",
+      "sha256": "b0ecc6c6b2c7d9374eb32fac1a8626a1dd820d3e2a4adaa6ff39430a410a4928"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-pip-check.log",
+      "sha256": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-productization.log",
+      "sha256": "fa5e797f2c5338ce54655681b511c05c9530fc9b045f0cf0a61881c13c314472"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-release-tests.log",
+      "sha256": "6e155d192600355495ef95183b12f146e5a53175d213369e7efb0e2e016fdc79"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-report.json",
+      "sha256": "54d12717282d8bd013740253541b0f6d23bb969561bbc17b508cd691b6769111"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-scan_secrets.py.log",
+      "sha256": "6b0bc342e769e989b43e39671b595e1c08bd8b0cbc6019e296e26ddfe3f33c7f"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-sdk-sync.log",
+      "sha256": "e0a6570f69200ff83a853f19586da91659e015de5d3c80d76067290a7c92e337"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-test_scan_secrets.py.log",
+      "sha256": "1ed838ae4c40037b8e3467531d9a74025b2a092c67d4b6267b905d47f3d5722e"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-verify_modular_boundaries.py.log",
+      "sha256": "22464ae122313fcded248ef7840dd870faf67f94987f53bf59dea24805ddcd9a"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/static-verify_modular_process.py.log",
+      "sha256": "3c72f3ee68717214545f4a7ccf9831d7769d5cfcf3fb9cc8ebc5d6e42bf30e5d"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/T3-04A-PostgreSQL与Kafka授权事件实际验证-workflow-20261023-compress-fixed-v2.json",
+      "sha256": "054c99e76a5c8183a0cd35b40fddf1e20f5200bf0a1703a0e6c2edd061a18515"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/T3-04A-PostgreSQL与Kafka授权事件实际验证-workflow-20261023-compress-fixed-v2.log",
+      "sha256": "0a731f5fd89caee54099155cbb959530f8b46f658a5ae4151634bdae72173c58"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/T3-04A-PostgreSQL与Kafka授权事件实际验证-workflow-20261023-compress-fixed-v3.json",
+      "sha256": "1cad6113bb86b6166a18307507a730369d5382285bad90083111d9e700ad0b4b"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/T3-04A-PostgreSQL与Kafka授权事件实际验证-workflow-20261023-compress-fixed-v3.log",
+      "sha256": "9d5b74dba1e1357814cdab4e7f8c4d27d9dd429761e21c872f31a174f3be4433"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/T3-04A-PostgreSQL与Kafka授权事件实际验证-workflow-20261023-compress-fixed.json",
+      "sha256": "1aa26537b8ed0defdd3edd66fca9c3131341b51a61d56dd1fa2c5d89e9b55d21"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/T3-04A-PostgreSQL与Kafka授权事件实际验证-workflow-20261023-compress-fixed.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/T3-11-平台全量Go隔离PostgreSQL测试实际验证-workflow-20261023-full-go.json",
+      "sha256": "566f4ea0a4eea7bc3571a6cdf4307f5401b2d96af67d97b980d8f7c2b3ceaae7"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/template-conformance-report.json",
+      "sha256": "d583ade5b243ac047e2ac4784e060ad3d7c40c90c781df93c45bc2cd58f980aa"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/templates-report.json",
+      "sha256": "f8fca9873e6527673a263d7c6950d0ef6610b8c57e8701fcf7ff900e4ebdbca3"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/templates-template-conformance.log",
+      "sha256": "323acbb42f8e0dde5938fef450c2479895781a624dc1079b9a24dab40202e8a3"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/temporary-snapshot-commit.log",
+      "sha256": "1f4ca499786a97e3f5442e9c16dd128bb90d827704930b4c3b39dd1093ca432c"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/tool-download-receipts.json",
+      "sha256": "34e5a38569aa87e75edbed10eecf46190ddf4066c4f089a8b45151a96de08036"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/toolchain-build-go12610.log",
+      "sha256": "d09f8f7aa0331d011edf681260d18302755a5acae643b304e742ba95b6c04c7e"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/toolchain-build.log",
+      "sha256": "8ab56331a3414801850e33a148705b71859312d2ec2146549d8495fb445346c5"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/trivy-platform-image.json",
+      "sha256": "ff1c1f1c276b319faa3ff9675cd110a4f196ab5cdb5c85572832f81c8ab5d3db"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/trivy-platform-image.log",
+      "sha256": "246385d30f2a5e573cf88088b71268067a8a54049d46b7f2b263fd98872b3252"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/trivy-runtime-image.json",
+      "sha256": "8bfe60f2ce3bedf57597626792bffc9cf51777ad5b8cd0e2e7cdec2f17a69594"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/trivy-runtime-image.log",
+      "sha256": "81773c627dd5c63fbc6493db7bc07e1d90355079a729e462db2d84f65eafdd84"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/trivy-source-final.json",
+      "sha256": "7c03212a2f473d9c156c0395de0f3a2a700d5e887a3a3063de7aeb8f6c300dd3"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/trivy-source-final.log",
+      "sha256": "b43036caf395527c09b0de00717dab7a563cd7dc0f6c1ae1a31c48cff2e7404f"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/trivy-source.json",
+      "sha256": "469c7c09d434c17f61223d82682dfbd32c539dafc59e4597cbb2d216c153ebea"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/trivy-source.log",
+      "sha256": "2f111c7b40fe901bca5485d99185a30284ff022df9151ba3d8ba353b6f3f6e0a"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/workflow-baseline.log",
+      "sha256": "691e1189e2b7e9506e5ec3237f0eab54d4b3d8c2ab20d1ea0b3bc04b47727927"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/workflow-final.log",
+      "sha256": "f20d77ff27c598f2954b65b873b3dc2c4d61e392eade837aea0f136dfbde52c2"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/cleanup-files.json",
+      "sha256": "105f6dc412023416e183bbc72f8f41672ba29d77982930f46ecddc201a35cc3c"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/cleanup-images.json",
+      "sha256": "0c02519acac4b2581fabd79d94b4e556d9b937fed37dca74440253050340b26c"
+    },
+    {
+      "path": ".tmp/github-workflow-check-20261023/checkout/.local-secrets/public-development/platform-all-go-workflow-20261023-full-go-knowledge-pg-920e736818c24eed83c299dca385101a-events.jsonl",
+      "sha256": "be5d4b9162d161d040b863d13462db4774b380578c97ec226471021c6b6eb01f"
+    }
+  ],
+  "cleanup": {
+    "removed_temporary_images": 4,
+    "removed_file_bytes": 7401068178,
+    "removed_file_targets": 20,
+    "global_prune": false,
+    "shared_builder_cache_removed": false,
+    "source_snapshot_and_evidence_retained": true
+  }
+}

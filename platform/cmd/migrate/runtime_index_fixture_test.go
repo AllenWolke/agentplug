@@ -162,6 +162,9 @@ func prepareRuntimeIndexFixture(t *testing.T, ctx context.Context, db *sql.DB, d
 		if os.Getenv("PLATFORM_TEST_PYTHON_RUNTIME_CONFIG") != "" {
 			name = "python-example-platform-flow"
 		}
+		if os.Getenv("PLATFORM_TEST_JAVA_RUNTIME_CONFIG") != "" {
+			name = "java-example-platform-flow"
+		}
 		t.Run(name, func(child *testing.T) { verifyGo(child, client, address) })
 	}
 }

@@ -52,7 +52,7 @@ func (m *Module) OpenTaskEmbeddingSession(ctx context.Context, parent *http.Requ
 		if failure.Code == "" {
 			failure.Code = "TASK_MODEL_CONTEXT_DENIED"
 		}
-		return empty, &KnowledgeModelError{Status: capture.status, Code: failure.Code}
+		return empty, &KnowledgeModelError{Status: capture.status, Code: failure.Code, DiagnosticCode: capture.diagnostic}
 	}
 	c := op.Context
 	scope := sharedkernel.Scope{TenantID: c.TenantID, DepartmentID: c.DepartmentID, ApplicationID: c.ApplicationID, AgentInstanceID: c.AgentInstanceID, AgentID: c.AgentID, PrincipalType: c.PrincipalType, PrincipalID: c.ActorID, InstallationID: c.InstallationID, AgentVersionID: c.AgentVersionID, SessionID: c.SessionID, RunID: c.TaskID, ParentRunID: c.ParentRunID, AuthorizationEpoch: c.AuthorizationEpoch, TraceID: c.TraceID}

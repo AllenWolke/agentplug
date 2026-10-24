@@ -21,29 +21,29 @@ func evaluationReportHash(evidence EvidenceData, cases []CaseResultData) (string
 		bound[i] = caseEvidenceHashInput{ID: ids[i], Result: result}
 	}
 	payload := struct {
-		RunID              string                  `json:"run_id"`
-		SuiteID            string                  `json:"suite_id"`
-		SuiteSnapshotHash  string                  `json:"suite_snapshot_hash"`
-		DatasetContentHash string                  `json:"dataset_content_hash"`
-		AgentVersionID     string                  `json:"agent_version_id"`
-		ProviderMode       string                  `json:"provider_mode"`
-		SourceType         string                  `json:"source_type"`
-		CitationGrounding  string                  `json:"citation_grounding"`
-		DomainGrounding    string                  `json:"domain_grounding"`
-		Metrics            []MetricOutcome         `json:"metrics"`
-		CaseResults        []caseEvidenceHashInput `json:"case_results"`
+		RunID               string                  `json:"run_id"`
+		SuiteID             string                  `json:"suite_id"`
+		SuiteSnapshotHash   string                  `json:"suite_snapshot_hash"`
+		DatasetContentHash  string                  `json:"dataset_content_hash"`
+		AgentVersionID      string                  `json:"agent_version_id"`
+		ProviderMode        string                  `json:"provider_mode"`
+		SourceType          string                  `json:"source_type"`
+		CitationGrounding   string                  `json:"citation_grounding"`
+		DomainGrounding     string                  `json:"domain_grounding"`
+		Metrics             []MetricOutcome         `json:"metrics"`
+		CaseResults         []caseEvidenceHashInput `json:"case_results"`
+		MeasurementProtocol string                  `json:"measurement_protocol,omitempty"`
 	}{evidence.RunID, evidence.SuiteID, evidence.SuiteSnapshotHash, evidence.DatasetContentHash, evidence.AgentVersionID,
-		evidence.ProviderMode, evidence.SourceType, evidence.CitationGrounding, evidence.DomainGrounding, evidence.Metrics, bound}
+		evidence.ProviderMode, evidence.SourceType, evidence.CitationGrounding, evidence.DomainGrounding, evidence.Metrics, bound, evidence.MeasurementProtocol}
 	return contentHash(payload)
 }
 
 func verifyEvidenceCases(ctx context.Context, store Store, scope Scope, evidence EvidenceData, inputs []json.RawMessage) error {
-	// Validate against the frozen dataset before allocating or querying cases.
-	// Keep the same ceilings as dataset admission, including for stored evidence.
-	if store == nil || !scope.valid() || !validID(evidence.RunID) || evidence.SampleCount <= 0 || evidence.SampleCount > 10000 || len(inputs) != evidence.SampleCount || len(evidence.CaseResultIDs) != evidence.SampleCount || len(evidence.Metrics) == 0 || len(evidence.Metrics) > 100 {
+	if store == nil || !scope.valid() || !validID(evidence.RunID) || evidence.SampleCount <= 0 || evidence.SampleCount > 10000 || len(inputs) != evidence.SampleCount || len(evidence.Metrics) > 100 || len(evidence.CaseResultIDs) != evidence.SampleCount || len(evidence.Metrics) == 0 {
 		return ErrSnapshotInvalid
 	}
 	results := make([]CaseResultData, evidence.SampleCount)
+	var reuse *caseReuseResolver
 	for i, id := range evidence.CaseResultIDs {
 		if id != caseResultID(evidence.RunID, i) {
 			return snapshotInvalid("evidence case result identity mismatch")
@@ -53,8 +53,31 @@ func verifyEvidenceCases(ctx context.Context, store Store, scope Scope, evidence
 			return snapshotInvalid("evidence case result is missing")
 		}
 		result, err := decodeCaseResult(row)
-		if err != nil || result.RunID != evidence.RunID || result.Index != i || len(result.Metrics) != len(evidence.Metrics) || result.InputHash != Checksum(inputs[i]) {
+		if err != nil || result.RunID != evidence.RunID || result.Index != i || len(result.Metrics) != len(evidence.Metrics) || len(inputs) != evidence.SampleCount || result.InputHash != Checksum(inputs[i]) {
 			return snapshotInvalid("evidence case result is invalid")
+		}
+		if evidence.MeasurementProtocol != "" && (result.MeasurementProtocol != evidence.MeasurementProtocol || !validID(result.ExecutionRunID)) {
+			return snapshotInvalid("independent review execution binding is incomplete")
+		}
+		sample, er := decodeEvaluationCase(inputs[i])
+		if er != nil {
+			return ErrSnapshotInvalid
+		}
+		if sample.Reuse != nil || result.ReusedFrom != nil {
+			if reuse == nil {
+				run, er := getScopedResource(ctx, store, scope, KindRun, evidence.RunID)
+				if er != nil {
+					return er
+				}
+				request, er := ResolveHistoricalExecutionSnapshot(ctx, store, scope, run)
+				if er != nil {
+					return er
+				}
+				reuse = newCaseReuseResolver(store, request)
+			}
+			if er := reuse.verify(ctx, inputs[i], i, result); er != nil {
+				return er
+			}
 		}
 		for metricIndex, metric := range evidence.Metrics {
 			caseMetric := result.Metrics[metricIndex]
@@ -124,6 +147,7 @@ func verifyEvidenceSnapshot(ctx context.Context, store Store, scope Scope, run R
 	if len(evidence.Metrics) != len(snapshot.Metrics) {
 		return DatasetSnapshot{}, snapshotInvalid("evidence metric set differs from frozen suite")
 	}
+	independent := len(snapshot.Metrics) > 0 && runData.AgentID == "agent-eval-judge"
 	for i, reference := range snapshot.Metrics {
 		if evidence.Metrics[i].MetricID != reference.ID {
 			return DatasetSnapshot{}, snapshotInvalid("evidence metric order differs from frozen suite")
@@ -135,9 +159,14 @@ func verifyEvidenceSnapshot(ctx context.Context, store Store, scope Scope, run R
 		if metricRow.Revision != reference.Revision {
 			return DatasetSnapshot{}, ErrConflict
 		}
-		if _, err := verifyMetric(metricRow, reference); err != nil {
+		metric, err := verifyMetric(metricRow, reference)
+		if err != nil {
 			return DatasetSnapshot{}, err
 		}
+		independent = independent && metric.Kind == "independent_verdict"
+	}
+	if evidence.MeasurementProtocol != "" && (evidence.MeasurementProtocol != IndependentVerdictProtocol || !independent || dataset.SourceType != "imported_redacted") {
+		return DatasetSnapshot{}, snapshotInvalid("independent measurement protocol differs from the frozen suite")
 	}
 	return dataset, nil
 }

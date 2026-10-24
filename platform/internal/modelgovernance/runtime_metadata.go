@@ -2,6 +2,7 @@ package modelgovernance
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/lexagent/platform/internal/modelgateway"
 	"github.com/lexagent/platform/internal/sqlutil"
@@ -39,13 +40,14 @@ func (s *SQLStore) GetApprovedModel(ctx context.Context, versionID string) (mode
 	var result modelgateway.ModelMetadata
 	var versionStatus, definitionStatus, providerStatus, kind string
 	var joinedProviderID string
+	var capabilities []byte
 	err := s.db.QueryRowContext(ctx, sqlutil.Bind(`
-SELECT mv.id,mv.status,md.id,md.provider_id,md.model_key,md.kind,md.lifecycle_status,p.id,p.status
+SELECT mv.id,mv.status,md.id,md.provider_id,md.model_key,md.kind,md.lifecycle_status,p.id,p.status,md.capabilities_json
 FROM platform_model_version mv
 JOIN platform_model_definition md ON md.id=mv.definition_id
 JOIN platform_model_provider p ON p.id=md.provider_id
 WHERE mv.id=?`), versionID).Scan(
-		&result.VersionID, &versionStatus, &result.ID, &result.ProviderID, &result.Key, &kind, &definitionStatus, &joinedProviderID, &providerStatus,
+		&result.VersionID, &versionStatus, &result.ID, &result.ProviderID, &result.Key, &kind, &definitionStatus, &joinedProviderID, &providerStatus, &capabilities,
 	)
 	if err != nil {
 		return modelgateway.ModelMetadata{}, mapNotFound(err)
@@ -58,6 +60,20 @@ WHERE mv.id=?`), versionID).Scan(
 	}
 	result.Status = versionStatus
 	result.Kind = kind
+	wire, err := modelgateway.ParseWireCapabilities(capabilities)
+	if err != nil {
+		return modelgateway.ModelMetadata{}, ErrModelAccessDenied
+	}
+	result.WireModel, result.ReasoningDialect = wire.WireModel, wire.ReasoningDialect
+	result.ResponseSchemaDialect = wire.ResponseSchemaDialect
+	result.ContextCacheMode = wire.ContextCacheMode
+	var flags struct {
+		JSON bool `json:"json_output"`
+	}
+	if json.Unmarshal(capabilities, &flags) != nil {
+		return modelgateway.ModelMetadata{}, ErrModelAccessDenied
+	}
+	result.SupportsJSON = flags.JSON
 	return result, nil
 }
 

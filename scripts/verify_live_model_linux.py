@@ -42,7 +42,7 @@ try:
             '--env-file', str(env_file), '--mount', 'type=bind,source=' + str(ROOT) + ',target=/workspace,readonly',
             '--mount', 'type=bind,source=' + str(download) + ',target=/module-cache,readonly',
             '--mount', 'type=bind,source=' + str(cache) + ',target=/test-cache',
-            '--workdir', '/workspace/platform', 'golang:1.26.9-bookworm', 'go', 'test', '-p=1', '-count=1',
+            '--workdir', '/workspace/platform', 'golang:1.26.10-bookworm', 'go', 'test', '-p=1', '-count=1',
             '-timeout=120s', '-v', './internal/modelgateway', '-run', '^TestLiveDeepSeekGateway$'],
             stdout=output, stderr=subprocess.STDOUT, timeout=300)
     text = (REPORTS / (BASE + '.log')).read_text(encoding='utf-8', errors='replace')

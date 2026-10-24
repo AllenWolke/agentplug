@@ -40,7 +40,7 @@ jobs:
       - uses: actions/setup-go@v6
         if: matrix.language == 'go'
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           # Keep the extraction cache independent of other workflow jobs.
           cache: false
       - uses: actions/setup-java@v5
@@ -233,7 +233,7 @@ jobs:
             dockerfile: workers/code-runtime/Dockerfile
             # Required runtime base; this immutable Docker CLI index includes
             # Linux AMD64 and ARM64, matching the published image platforms.
-            build-args: CODE_RUNTIME_DOCKER_CLI_IMAGE=docker.io/library/docker:29-cli@sha256:1a4c7cb63513f349bdad01fcc6e0f3f2f67d37b9da86f14dc0d4a0942eecda00
+            build-args: CODE_RUNTIME_DOCKER_CLI_IMAGE=docker.io/library/docker:29-cli@sha256:5e6baf67325a79f64ed3bed6863954d5e05d0f3d4e57cbdb14809346814bbfdb
           - name: agent-eval
             context: .
             dockerfile: cli/agent-eval/Dockerfile

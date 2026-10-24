@@ -504,4 +504,31 @@ final class CapabilityClientTest {
         }
     }
 
+
+    @Test void lostToolResponseOnlyReadsOriginalReceiptAndHonorsRevocation()throws Exception{
+        for(boolean revoked:List.of(false,true)){
+            AtomicInteger sends=new AtomicInteger(),reads=new AtomicInteger();
+            var failure=new java.util.concurrent.atomic.AtomicReference<Throwable>();
+            var original=new java.util.concurrent.atomic.AtomicReference<Map<String,Object>>();
+            HttpServer platform=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
+            platform.createContext("/",exchange->{try{
+                var envelope=JSON.readTree(exchange.getRequestBody().readAllBytes());
+                String path=exchange.getRequestURI().getPath();Map<String,Object> data;
+                if(path.equals("/internal/context/renew")){var claims=tokenClaims(exchange.getRequestHeaders().getFirst("X-Platform-Context").substring(7));claims.put("exp",now+60);data=Map.of("context_token",sign(claims));}
+                else if(path.equals("/internal/tool/invoke")){sends.incrementAndGet();original.set(JSON.convertValue(envelope.get("input"),Map.class));exchange.close();return;}
+                else{
+                    assertEquals("/internal/tool/receipt",path);reads.incrementAndGet();assertEquals(original.get(),JSON.convertValue(envelope.get("input"),Map.class));
+                    if(revoked){byte[] raw=JSON.writeValueAsBytes(Map.of("error_code","MODEL_BUDGET_UNAVAILABLE"));exchange.sendResponseHeaders(403,raw.length);exchange.getResponseBody().write(raw);exchange.close();return;}
+                    data=Map.of("version","tool-receipt/v1","tool_name","runtime.inspect","call_id","original","status","completed","receipt",Map.of("data",Map.of("sequence",9007199254740993L),"observation",Map.of("version","runtime-observation/v1","tool_name","runtime.inspect","call_id","original","status","succeeded","effect","completed","instruction_trust","untrusted_data")));
+                }
+                byte[] raw=JSON.writeValueAsBytes(Map.of("data",data));exchange.sendResponseHeaders(200,raw.length);exchange.getResponseBody().write(raw);exchange.close();
+            }catch(Throwable error){failure.set(error);exchange.close();}});platform.start();
+            try{
+                var client=new CapabilityClient(config(platform),request("invoke"));var command=Map.<String,Object>of("name","runtime.inspect","call_id","original","payload",Map.of("probe","same"));
+                if(revoked){var error=assertThrows(CapabilityClient.Failure.class,()->client.post("/internal/tool/invoke",command));assertTrue(Optimization.authorityFailure(error));}
+                else{var result=client.post("/internal/tool/invoke",command);assertEquals(9007199254740993L,((Map<?,?>)result.get("data")).get("sequence"));}
+                assertNull(failure.get());assertEquals(1,sends.get());assertEquals(1,reads.get());
+            }finally{platform.stop(0);}
+        }
+    }
 }

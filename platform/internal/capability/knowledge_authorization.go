@@ -20,6 +20,12 @@ type KnowledgeDocumentAuthority interface {
 }
 
 func (m *Module) knowledgeDocumentPlan(r *http.Request, op envelope, scope string) (KnowledgeDocumentPlan, error) {
+	return m.knowledgeDocumentPlanForBindings(r, op, scope, op.Policy.Knowledge.DocumentBindings)
+}
+
+// Bindings must be selected from the authenticated immutable publication. This
+// narrows the work of a read-only check; it never narrows the live IAM checks.
+func (m *Module) knowledgeDocumentPlanForBindings(r *http.Request, op envelope, scope string, bindings []policyasset.KnowledgeDocumentBinding) (KnowledgeDocumentPlan, error) {
 	if m.publicKey == nil {
 		return KnowledgeDocumentPlan{Legacy: true}, nil
 	}
@@ -29,7 +35,7 @@ func (m *Module) knowledgeDocumentPlan(r *http.Request, op envelope, scope strin
 	}
 	c := op.Context
 	s := sharedkernel.Scope{TenantID: c.TenantID, DepartmentID: c.DepartmentID, ApplicationID: c.ApplicationID, AgentInstanceID: c.AgentInstanceID, AgentID: c.AgentID, PrincipalType: c.PrincipalType, PrincipalID: c.ActorID, InstallationID: c.InstallationID, AgentVersionID: c.AgentVersionID, SessionID: c.SessionID, RunID: c.TaskID, ParentRunID: c.ParentRunID, AuthorizationEpoch: c.AuthorizationEpoch, TraceID: c.TraceID}
-	return authority.FilterKnowledgeDocuments(r.Context(), s, scope, op.Policy.Knowledge.DocumentBindings)
+	return authority.FilterKnowledgeDocuments(r.Context(), s, scope, bindings)
 }
 
 // No raw provider reference or its ownership metadata bypasses this boundary.
@@ -53,7 +59,7 @@ func filterKnowledgeReferences(result map[string]any, plan KnowledgeDocumentPlan
 			if version := stringValue(item["document_version"]); version != "" && version != document.DocumentVersion {
 				continue
 			}
-			copy := make(map[string]any, len(item))
+			copy := make(map[string]any, len(item)+2)
 			for k, v := range item {
 				copy[k] = v
 			}
@@ -94,6 +100,10 @@ func (m *Module) knowledgeResult(w http.ResponseWriter, r *http.Request, op enve
 		return
 	}
 	result = filterKnowledgeReferences(result, plan, topK)
+	if recovering, _ := r.Context().Value(knowledgeRecoveryOnlyKey{}).(bool); recovering {
+		result["recovery_only"] = true
+		result["model_requests_sent"] = 0
+	}
 	if op.Policy.Knowledge.RequireReferences {
 		refs, _ := result["references"].([]map[string]any)
 		if len(refs) == 0 {

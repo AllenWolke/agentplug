@@ -1,0 +1,1684 @@
+{
+  "schema": "agentplug-notification-compensation-acceptance/v1",
+  "project": "agentplug",
+  "checked_at": "2026-10-22T14:58:24.119269+00:00",
+  "enablement": {
+    "project": "agentplug",
+    "result": "PASS",
+    "deployed_at": "2026-10-22T14:41:40.432923+00:00",
+    "platform_image": "sha256:1b45a3a620ed3de33401b6da4e19fb958a6f1a2c56f91c945bb4a5393f5351fa",
+    "platform_image_before": "sha256:5e92a6dfa5ff4afa4d6d92dcecad38f0e429027dae41db5b78309c43b2c256ab",
+    "kafka_group_id": "agentplug-notifications-20261022-30fbd33341",
+    "kafka_start_offsets": [
+      {
+        "topic": "agent-platform.identity.v1",
+        "partition": 0,
+        "offset": 18
+      },
+      {
+        "topic": "platform.audit",
+        "partition": 0,
+        "offset": 1614
+      },
+      {
+        "topic": "platform.notification",
+        "partition": 0,
+        "offset": 4
+      }
+    ],
+    "kafka_dlq_topic": "agentplug.notification-dlq.public-20261022.v1",
+    "hold_run_count": 39,
+    "held_tool_scope_count": 1,
+    "hold_manifest_sha256": "36939e6e2c36dff5ef4b01baaf794f388f9de81dedbfbc9d1519e1505ce9a6da",
+    "historical_preservation": {
+      "platform_execution_run": {
+        "historical_rows": 308,
+        "current_rows": 308,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_model_invocation": {
+        "historical_rows": 612,
+        "current_rows": 612,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_tool_invocation": {
+        "historical_rows": 293,
+        "current_rows": 293,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_notification_outbox": {
+        "historical_rows": 11256,
+        "current_rows": 11256,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_notification_delivery": {
+        "historical_rows": 1553,
+        "current_rows": 1553,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_notification_inbox": {
+        "historical_rows": 3,
+        "current_rows": 3,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_kafka_delivery_attempt": {
+        "historical_rows": 1634,
+        "current_rows": 1634,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_kafka_dead_letter": {
+        "historical_rows": 32,
+        "current_rows": 32,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_kafka_dead_letter_action": {
+        "historical_rows": 2,
+        "current_rows": 2,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_cancellation_operation": {
+        "historical_rows": 7,
+        "current_rows": 7,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_cancellation_effect": {
+        "historical_rows": 3,
+        "current_rows": 3,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_compensation_step": {
+        "historical_rows": 13,
+        "current_rows": 13,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_compensation_event": {
+        "historical_rows": 43,
+        "current_rows": 43,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_compensation_local_effect": {
+        "historical_rows": 9,
+        "current_rows": 9,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_identity_membership": {
+        "historical_rows": 12,
+        "current_rows": 12,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_identity_role_binding": {
+        "historical_rows": 105,
+        "current_rows": 105,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_identity_grant": {
+        "historical_rows": 452,
+        "current_rows": 452,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_identity_workload_binding": {
+        "historical_rows": 5,
+        "current_rows": 5,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_policy_snapshot": {
+        "historical_rows": 37,
+        "current_rows": 37,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_schema_version": {
+        "historical_rows": 8,
+        "current_rows": 8,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_compensation_schema_version": {
+        "historical_rows": 3,
+        "current_rows": 3,
+        "all_historical_rows_unchanged": true
+      }
+    },
+    "database_migration_required": false,
+    "accounts_reset": false,
+    "history_replayed": false,
+    "historical_unknown_settled": false,
+    "reference_resources_used": false
+  },
+  "native_verification": {
+    "project": "agentplug",
+    "checked_at": "2026-10-22T14:53:52.086487+00:00",
+    "accounts": [
+      {
+        "username": "platform.recovery",
+        "result": "PASS",
+        "history_and_current_authority_preserved": true
+      },
+      {
+        "username": "system.admin",
+        "result": "PASS",
+        "history_and_current_authority_preserved": true
+      },
+      {
+        "username": "permission.admin",
+        "result": "PASS",
+        "history_and_current_authority_preserved": true
+      },
+      {
+        "username": "demo.go.user",
+        "result": "PASS",
+        "history_and_current_authority_preserved": true
+      },
+      {
+        "username": "demo.java.user",
+        "result": "PASS",
+        "history_and_current_authority_preserved": true
+      },
+      {
+        "username": "demo.python.user",
+        "result": "PASS",
+        "history_and_current_authority_preserved": true
+      }
+    ],
+    "cancellation_closure": [
+      {
+        "run_id": "notification-native-20261022-go-cancel-before-tool-run",
+        "phase": "complete",
+        "stop_proof": true,
+        "unclosed_model_budgets": 0,
+        "unclosed_tree_holds": 0,
+        "active_session_leases": 0
+      },
+      {
+        "run_id": "notification-native-20261022-java-cancel-before-tool-run",
+        "phase": "complete",
+        "stop_proof": true,
+        "unclosed_model_budgets": 0,
+        "unclosed_tree_holds": 0,
+        "active_session_leases": 0
+      },
+      {
+        "run_id": "notification-native-20261022-python-cancel-before-tool-run",
+        "phase": "complete",
+        "stop_proof": true,
+        "unclosed_model_budgets": 0,
+        "unclosed_tree_holds": 0,
+        "active_session_leases": 0
+      }
+    ],
+    "services": [
+      {
+        "service": "code-runtime",
+        "image_id": "sha256:d92e7e834d32fd5e68a0e71a82306bb8e3b01878325bb43a3e3d3800ea46f530",
+        "health": "running",
+        "volumes": [
+          "agentplug_code-runtime-state"
+        ]
+      },
+      {
+        "service": "example-go",
+        "image_id": "sha256:3d841d42684d47a1a313987f72a9c1163713b7c9512e6a128b20cc2759e25f3a",
+        "health": "running",
+        "volumes": []
+      },
+      {
+        "service": "example-java",
+        "image_id": "sha256:1613babe3496bfc764a78664a13ef3ba65401e41decce76c5809f69e9ffe3219",
+        "health": "running",
+        "volumes": []
+      },
+      {
+        "service": "example-python",
+        "image_id": "sha256:cae7a7f9094dfaf9fc3fcafe1cc7392c527bacb518a2fc40696602ed68e755a2",
+        "health": "running",
+        "volumes": []
+      },
+      {
+        "service": "frontend",
+        "image_id": "sha256:e28d94bb2006088919230380b3cf5bb09634764878c91ae9342d48681ea799c0",
+        "health": "healthy",
+        "volumes": []
+      },
+      {
+        "service": "kafka",
+        "image_id": "sha256:44a48f9d78af26959fa4d61accb9be35f939a79bfdae05cad6df4baca8e22eeb",
+        "health": "healthy",
+        "volumes": [
+          "6a597cefa0cfbb0b530dfc7da8745a66fe518f1b0120f7fda95f103989941d23",
+          "c9f554d467fdf01ed4c5179d49d8a7722641bb7c0e4385639a77f3fe7443a1ce",
+          "agentplug_modular-kafka-data"
+        ]
+      },
+      {
+        "service": "metric-runner",
+        "image_id": "sha256:a422ad5ce6cfce56d50fd964339b5bad70d0c2da908d927dd5062c588aa5b7ab",
+        "health": "healthy",
+        "volumes": []
+      },
+      {
+        "service": "platform-app",
+        "image_id": "sha256:1b45a3a620ed3de33401b6da4e19fb958a6f1a2c56f91c945bb4a5393f5351fa",
+        "health": "healthy",
+        "volumes": []
+      },
+      {
+        "service": "postgres",
+        "image_id": "sha256:f1447071e6c8449dcf4056aa0994c81d3566ce5ee232de36b04dc25696a116dd",
+        "health": "healthy",
+        "volumes": [
+          "agentplug_modular-postgres-data"
+        ]
+      }
+    ],
+    "terminal_restart_and_same_run_replay_without_model_calls": true,
+    "new_provider_requests_used": 46,
+    "authorized_new_provider_requests_maximum": 72,
+    "model_counts": {
+      "invocations": 658,
+      "physical_attempts": 63,
+      "manual_unknown": 5
+    },
+    "old_unknown_models_preserved": 5,
+    "reference_resources_used": false,
+    "result": "PASS"
+  },
+  "historical_preservation": {
+    "project": "agentplug",
+    "checked_at": "2026-10-22T14:53:52.085635+00:00",
+    "historical_preservation": {
+      "platform_execution_run": {
+        "historical_rows": 308,
+        "current_rows": 319,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_model_invocation": {
+        "historical_rows": 612,
+        "current_rows": 658,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_tool_invocation": {
+        "historical_rows": 293,
+        "current_rows": 310,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_notification_outbox": {
+        "historical_rows": 11256,
+        "current_rows": 12295,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_notification_delivery": {
+        "historical_rows": 1553,
+        "current_rows": 2592,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_notification_inbox": {
+        "historical_rows": 3,
+        "current_rows": 6,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_kafka_delivery_attempt": {
+        "historical_rows": 1634,
+        "current_rows": 2673,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_kafka_dead_letter": {
+        "historical_rows": 32,
+        "current_rows": 32,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_kafka_dead_letter_action": {
+        "historical_rows": 2,
+        "current_rows": 2,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_cancellation_operation": {
+        "historical_rows": 7,
+        "current_rows": 10,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_cancellation_effect": {
+        "historical_rows": 3,
+        "current_rows": 5,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_compensation_step": {
+        "historical_rows": 13,
+        "current_rows": 24,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_compensation_event": {
+        "historical_rows": 43,
+        "current_rows": 73,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_compensation_local_effect": {
+        "historical_rows": 9,
+        "current_rows": 14,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_identity_membership": {
+        "historical_rows": 12,
+        "current_rows": 12,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_identity_role_binding": {
+        "historical_rows": 105,
+        "current_rows": 105,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_identity_grant": {
+        "historical_rows": 452,
+        "current_rows": 452,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_identity_workload_binding": {
+        "historical_rows": 5,
+        "current_rows": 5,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_policy_snapshot": {
+        "historical_rows": 37,
+        "current_rows": 37,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_schema_version": {
+        "historical_rows": 8,
+        "current_rows": 8,
+        "all_historical_rows_unchanged": true
+      },
+      "platform_compensation_schema_version": {
+        "historical_rows": 3,
+        "current_rows": 3,
+        "all_historical_rows_unchanged": true
+      }
+    },
+    "runtime_flags_verified": true,
+    "hold_manifest_bytes_verified": true,
+    "kafka_consumer_active": true,
+    "result": "PASS"
+  },
+  "backup": {
+    "project": "agentplug",
+    "created_at": "2026-10-22T14:18:29.057480+00:00",
+    "platform_image_before": "sha256:5e92a6dfa5ff4afa4d6d92dcecad38f0e429027dae41db5b78309c43b2c256ab",
+    "rollback_image": "agentplug:pre-notification-enable-20261022-platform",
+    "database_dump_sha256": "2cd95eb9543cd04559c6fa099432699c8f70837201c3e5b8aaa97fa6b05f3b8f",
+    "database_dump_bytes": 5910125,
+    "mounted_configuration_files": 21,
+    "restore_drill": "PASS",
+    "network": "none",
+    "historical_table_rows": {
+      "platform_execution_run": 308,
+      "platform_model_invocation": 612,
+      "platform_tool_invocation": 293,
+      "platform_notification_outbox": 11256,
+      "platform_notification_delivery": 1553,
+      "platform_notification_inbox": 3,
+      "platform_kafka_delivery_attempt": 1634,
+      "platform_kafka_dead_letter": 32,
+      "platform_kafka_dead_letter_action": 2,
+      "platform_cancellation_operation": 7,
+      "platform_cancellation_effect": 3,
+      "platform_compensation_step": 13,
+      "platform_compensation_event": 43,
+      "platform_compensation_local_effect": 9,
+      "platform_identity_membership": 12,
+      "platform_identity_role_binding": 105,
+      "platform_identity_grant": 452,
+      "platform_identity_workload_binding": 5,
+      "platform_policy_snapshot": 37,
+      "platform_schema_version": 8,
+      "platform_compensation_schema_version": 3
+    },
+    "reference_resources_used": false,
+    "result": "PASS"
+  },
+  "regression": {
+    "platform": {
+      "passed": 3478,
+      "failed": 0,
+      "skipped": 83,
+      "package_passed": 41,
+      "package_failed": 0,
+      "packages_without_test_files": 11
+    },
+    "required_new_protection_tests": "PASS; raw Go event records verified",
+    "conditional_skips": [
+      {
+        "package": "github.com/lexagent/platform/cmd/platform",
+        "test": "TestPostgresCancellationProgressCompositionDoesNotReadFrozenToolHistory",
+        "reason": "dedicated owned compensation database required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/agentgateway",
+        "test": "TestGRPCTransportInteropWithPythonBridge",
+        "reason": "set LEXAGENT_RUN_PYTHON_GRPC_INTEROP=1 to run the Go-to-Python gRPC interoperability test",
+        "covered_by": "reused prior unchanged probe: native-interop01"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/cleanup_missing",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/completed",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/not_found",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/tampered_metadata",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/unknown",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestCodeCancellationCleanupProofAndUnknownPostgres/wrong_binding",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestMemoryCompensationMissingBindingAndLateForwardAreDeniedPostgres",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestMemoryCompensationPreservesEvenSameValueConcurrentWriterPostgres",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestMemoryCompensationReverseOrderAndForwardIdempotencyPostgres",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestMemoryCompensationTransactionContextOwnsAuthorizationCallbacksPostgres",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestPostgresModelPerformanceKeepsHistoricalClockMismatchMissing",
+        "reason": "requires registered independent PostgreSQL fixture",
+        "covered_by": "reused prior unchanged probe: native-sql-supplement"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/ack_lost",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/applied",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/before_forward",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/other_writer",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestReversibleAPICancellationDurableUndoAndLateWritePostgres/wrong_control_credential",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/capability",
+        "test": "TestSQLToolPauseWorkerProcessHelper",
+        "reason": "subprocess-only helper",
+        "covered_by": "reused prior unchanged probe: subprocess helper exercised by passed stopped-process takeover parent; standalone skip is intentional"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestLocalEffectBeforeImageAndInverseReceiptAreAtomicPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestLocalEffectConcurrentResourceWriteCannotBeOverwrittenPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestPostgresCompensationMigrationDriftRollsBackOuterBundle",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestPostgresCompensationMigrationProtectsHistoryACL",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLAutomaticRecoveryHoldsPreserveUnknownAndAdmitNewRootPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLCannotCompensateBeforeStopOrOverwriteConcurrentBusinessWritePostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLConcurrentClaimsSerializeTheNextInversePostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLEnrolledParentReusesChildInverseAndExcludesSiblingFromChildCancelPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLEnrollmentCannotCrossScopeOrHideMismatchedDigestPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLExpiredSubmittedLeaseRemainsReadOnlyAndFencedPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLFinalizeFastPendingGateStillChecksEveryTerminalReceiptPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLLostInverseResponseRecoversReceiptWithoutReplayPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLMissingEffectRequiresNoEffectProofAndWrongStopRevisionIsDeniedPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLRegistrationParticipatesInBusinessTransactionPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLReverseOrderIncludesChildEffectsAndFinalOutcomeIsAtomicPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLStoppedTreeCoverageRejectsScopeSubstitutionAndCorruptEffectsPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLStoppedTreeCoverageRequiresExactRecordedSetPostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLStoppedTreeCoverageWithAppendOnlyRuntimeRolePostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/compensation",
+        "test": "TestSQLWorkerDrainsThousandUniqueInversesWithoutPerStepIdlePostgres",
+        "reason": "dedicated owned PostgreSQL compensation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/evaluationproduct",
+        "test": "TestSeedPlatformProcessRestartRun",
+        "reason": "only run by the isolated modular Compose process-restart E2E",
+        "covered_by": "reused prior unchanged probe: actual-evaluation-restart01"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationCannotBypassThroughTransitionOrEventPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationConcurrentBusinessWriteIsPreservedPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationFenceKeepsSuccessAndRecoveryStrictPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationFinalAuditFailureRollsBackWholeOutcomePostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationHistoricalOutcomeNeverGetsInventedProofPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationNeverClaimedCompletesAtomicallyPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationPreparesCoverageAfterDurableIntentPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationProgressUsesFrozenCoverageButLiveFencesPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationProjectionRejectsMismatchedOutcomePostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationRejectsBareStopOrUncoveredEffectsPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationRejectsNewWriteAfterIntentPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCancellationCompensationStopRetainsFIFOUntilActualUndoPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCompletedEvaluationCompensationPreservesUnsettledEvidencePostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCompletedEvaluationCompensationRequiresRecordedParentAndOutcomePostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCompletedEvaluationCompensationRetainsOutcomeAndUndoesWritesPostgres/failed",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestCompletedEvaluationCompensationRetainsOutcomeAndUndoesWritesPostgres/succeeded",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/exact",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/missing",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/remote_endpoint",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/wrong_lease",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestInternalTaskCancellationCompensationRequiresExactOwnerReceiptPostgres/wrong_revision",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestPlatformSignatureAcceptedByNativeGoSDKWithNumericEvidence",
+        "reason": "compiled actual Go SDK receiver required",
+        "covered_by": "reused prior unchanged probe: native-sql-supplement"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestRealSignedTCPTimeoutWaitsForPythonGraphStop",
+        "reason": "real Python TCP fixture not enabled",
+        "covered_by": "reused prior unchanged probe: native-interop01"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestSQLCancellationScanRotatesPastBlockedRunsPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestSQLSynchronousCreationCannotRaceCancelledParentPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/execution",
+        "test": "TestSQLSynchronousCreationCommitIsVisibleBeforeParentStopPostgres",
+        "reason": "dedicated owned PostgreSQL cancellation fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/identity",
+        "test": "TestSQLPermissionScaleAcceptance",
+        "reason": "explicit scale fixture opt-in required",
+        "covered_by": "reused prior unchanged probe: owned-scale01"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/knowledge",
+        "test": "TestIndexCompensationForwardAuditFailureRollsBackPostgres",
+        "reason": "isolated PostgreSQL fixture not configured",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/knowledge",
+        "test": "TestIndexCompensationPreservesConcurrentAndSourceChangesPostgres/new-source",
+        "reason": "isolated PostgreSQL fixture not configured",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/knowledge",
+        "test": "TestIndexCompensationPreservesConcurrentAndSourceChangesPostgres/same-head-aba",
+        "reason": "isolated PostgreSQL fixture not configured",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/knowledge",
+        "test": "TestIndexCompensationReversePublicationsAndReplayPostgres",
+        "reason": "isolated PostgreSQL fixture not configured",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/modelgateway",
+        "test": "TestLiveDeepSeekGateway",
+        "reason": "set LEXAGENT_LIVE_DEEPSEEK_KEY_FILE to run the opt-in live vendor test",
+        "covered_by": "reused prior unchanged probe: authorized-four-live-requests"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/modelgateway",
+        "test": "TestLiveDeepSeekNativeFunctionCalling",
+        "reason": "set LEXAGENT_LIVE_DEEPSEEK_KEY_FILE for the authorized live provider probe",
+        "covered_by": "reused prior unchanged probe: authorized-four-live-requests"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/modelgateway",
+        "test": "TestLiveEmbeddingGateway",
+        "reason": "set LEXAGENT_LIVE_EMBEDDING_KEY_FILE for an authorized live embedding call",
+        "covered_by": "reused prior unchanged probe: authorized-four-live-requests"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/modelgateway",
+        "test": "TestLiveGoogleDoHModelDNS",
+        "reason": "explicit public model DNS probe hostnames required; no model requests",
+        "covered_by": "reused prior unchanged probe: actual owned Linux HTTPS DNS probe; zero model requests"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/modelgovernance",
+        "test": "TestPostgresContextCachePriceUpgradePreservesOldRowsAndExplicitZero",
+        "reason": "dedicated cache migration PostgreSQL fixture not configured",
+        "covered_by": "reused prior unchanged probe: native-sql-supplement"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/changed_message",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/denied",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/no_preregistration",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/unknown_delivery",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestAgentNotificationRedriveOwnerTombstoneAndNoForwardReplayPostgres/withdrawn",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestInboxConfirmedCorrectionAndNeverDeliveredFencePostgres",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestInboxHTTPRecipientRevocationAndContinuityLockPostgres",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      },
+      {
+        "package": "github.com/lexagent/platform/internal/notification",
+        "test": "TestInboxWithdrawalAndLateForwardTombstonePostgres",
+        "reason": "dedicated owned PostgreSQL fixture required",
+        "covered_by": "notification-enable-20261022-extra02; final-source owned database"
+      }
+    ],
+    "dedicated_postgres_required_cases": 71,
+    "go_modules": {
+      "result": "PASS",
+      "modules": [
+        {
+          "module": "cli/agentctl",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "cli/agent-eval",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "contracts/agent-evaluation/go",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "contracts/code-runtime",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "adapters/grpc-mapping",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "adapters/legacy-http",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "adapters/process",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "adapters/sidecar",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "workers/metric-runner",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "workers/code-runtime",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "frontend",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "sdk/go",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "examples/go-operations",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "agents/examples/go-eino",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "templates/go-generic",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        },
+        {
+          "module": "templates/go-eino",
+          "exit_codes": [
+            0,
+            0
+          ],
+          "result": "PASS"
+        }
+      ]
+    },
+    "python": {
+      "version": "agentplug-sdk-linux-regression/v1",
+      "owner": "sdk-8441c31a23da4c50b899d50d3f0b30a3",
+      "suites": [
+        {
+          "name": "sdk",
+          "total": 563,
+          "failed": [],
+          "skipped": []
+        },
+        {
+          "name": "example",
+          "total": 13,
+          "failed": [],
+          "skipped": []
+        },
+        {
+          "name": "python-generic",
+          "total": 43,
+          "failed": [],
+          "skipped": []
+        },
+        {
+          "name": "python-langgraph",
+          "total": 52,
+          "failed": [],
+          "skipped": []
+        }
+      ],
+      "exit_code": 0,
+      "result": "PASS",
+      "temporary_resources_removed": true
+    },
+    "java_tests": 69,
+    "frontend_tests": 164,
+    "frontend_build": "PASS",
+    "release_static_e2e_tests": 469,
+    "generated_projects": 6,
+    "generated_http_cases": 78,
+    "static_checks": [
+      {
+        "name": "scan_secrets",
+        "exit_code": 0
+      },
+      {
+        "name": "test_scan_secrets",
+        "exit_code": 0
+      },
+      {
+        "name": "sync_public_sdks",
+        "exit_code": 0
+      },
+      {
+        "name": "check_gofmt",
+        "exit_code": 0
+      },
+      {
+        "name": "check_contract_breaking",
+        "exit_code": 0
+      },
+      {
+        "name": "lint_execution_contract",
+        "exit_code": 0
+      },
+      {
+        "name": "verify_modular_boundaries",
+        "exit_code": 0
+      },
+      {
+        "name": "verify_modular_process",
+        "exit_code": 0
+      },
+      {
+        "name": "verify_productization_behavior",
+        "exit_code": 0
+      },
+      {
+        "name": "check_agent_code_ownership",
+        "exit_code": 0
+      },
+      {
+        "name": "check_agent_productization_contracts",
+        "exit_code": 0
+      },
+      {
+        "name": "check_removed_architecture",
+        "exit_code": 0
+      },
+      {
+        "name": "check_publication",
+        "exit_code": 0
+      },
+      {
+        "name": "check_markdown_links",
+        "exit_code": 0
+      }
+    ],
+    "critical_coverage": "coverage01 passed all nine original thresholds; subsequent changes do not modify those packages"
+  },
+  "business": {
+    "native": {
+      "project": "agentplug",
+      "environment": "native",
+      "baseline": {
+        "invocations": 612,
+        "physical_attempts": 17,
+        "manual_unknown": 5
+      },
+      "latest_counts": {
+        "invocations": 658,
+        "physical_attempts": 63,
+        "manual_unknown": 5
+      },
+      "authorized_new_request_maximum": 72,
+      "cases": {
+        "go-complete": {
+          "run_id": "notification-native-20261022-go-complete-run",
+          "status": "succeeded",
+          "result": "PASS",
+          "approved_tools": [
+            "code.python",
+            "notify.self"
+          ],
+          "notification_verified": true,
+          "sandbox_verified": true,
+          "sandbox_result_kind": null,
+          "sandbox_analysis": null,
+          "fixed_child_verified": true,
+          "restart_completed": true,
+          "compensation": null,
+          "notification_withdrawn": false,
+          "terminal_replay_no_resend": false,
+          "failure": null
+        },
+        "java-complete": {
+          "run_id": "notification-native-20261022-java-complete-run",
+          "status": "succeeded",
+          "result": "PASS",
+          "approved_tools": [
+            "code.javascript",
+            "notify.self"
+          ],
+          "notification_verified": true,
+          "sandbox_verified": true,
+          "sandbox_result_kind": "verified_ticket_field_analysis",
+          "sandbox_analysis": {
+            "summaryLength": 9,
+            "detailsLength": 142,
+            "hasReadOnlyKeyword": true,
+            "hasNoModifyKeyword": true
+          },
+          "fixed_child_verified": true,
+          "restart_completed": false,
+          "compensation": null,
+          "notification_withdrawn": false,
+          "terminal_replay_no_resend": false,
+          "failure": null
+        },
+        "python-complete": {
+          "run_id": "notification-native-20261022-python-complete-run",
+          "status": "succeeded",
+          "result": "PASS",
+          "approved_tools": [
+            "code.python",
+            "notify.self"
+          ],
+          "notification_verified": true,
+          "sandbox_verified": true,
+          "sandbox_result_kind": "printed_2_plus_2",
+          "sandbox_analysis": null,
+          "fixed_child_verified": true,
+          "restart_completed": false,
+          "compensation": null,
+          "notification_withdrawn": false,
+          "terminal_replay_no_resend": false,
+          "failure": null
+        },
+        "go-cancel-before-tool": {
+          "run_id": "notification-native-20261022-go-cancel-before-tool-run",
+          "status": "cancelled",
+          "result": "PASS",
+          "approved_tools": [],
+          "notification_verified": false,
+          "sandbox_verified": false,
+          "sandbox_result_kind": null,
+          "sandbox_analysis": null,
+          "fixed_child_verified": false,
+          "restart_completed": false,
+          "compensation": {
+            "phase": "complete",
+            "unresolved": 0
+          },
+          "notification_withdrawn": false,
+          "terminal_replay_no_resend": true,
+          "failure": null
+        },
+        "java-cancel-before-tool": {
+          "run_id": "notification-native-20261022-java-cancel-before-tool-run",
+          "status": "cancelled",
+          "result": "PASS",
+          "approved_tools": [],
+          "notification_verified": false,
+          "sandbox_verified": false,
+          "sandbox_result_kind": null,
+          "sandbox_analysis": null,
+          "fixed_child_verified": false,
+          "restart_completed": false,
+          "compensation": {
+            "phase": "complete",
+            "unresolved": 0
+          },
+          "notification_withdrawn": false,
+          "terminal_replay_no_resend": true,
+          "failure": null
+        },
+        "python-cancel-before-tool": {
+          "run_id": "notification-native-20261022-python-cancel-before-tool-run",
+          "status": "cancelled",
+          "result": "PASS",
+          "approved_tools": [],
+          "notification_verified": false,
+          "sandbox_verified": false,
+          "sandbox_result_kind": null,
+          "sandbox_analysis": null,
+          "fixed_child_verified": false,
+          "restart_completed": false,
+          "compensation": {
+            "phase": "complete",
+            "unresolved": 0
+          },
+          "notification_withdrawn": false,
+          "terminal_replay_no_resend": true,
+          "failure": null
+        }
+      }
+    },
+    "isolated": {
+      "schema": "agentplug-optional-business-acceptance/v1",
+      "project": "agentplug-test-notification-20261022-e1",
+      "checked_at": "2026-10-22T14:31:19.107031+00:00",
+      "cases": [
+        {
+          "language": "go",
+          "run_id": "notification-20261022-go-receipt-v3-run",
+          "result": "PASS",
+          "approval_resume_count": 2,
+          "sandbox_stdout": "4",
+          "sandbox_container_removed": true,
+          "event_stream_approval": true,
+          "notification": {
+            "outbox": "published",
+            "delivery": "published",
+            "inbox": "delivered"
+          },
+          "notification_event_id": "agent-tool-e6052714cf34512ebe1fc01f4d5d79b089cb1e5f55db4b0274fa703fa2dc0bb4",
+          "fixed_child": {
+            "target_installation_id": "example-python-documents-installation",
+            "version": "example-python-documents-v0-3-0-20261022",
+            "status": "completed",
+            "run_id": "child-60d54245fda2c003ebc52435c9db183395cd856fc70e3eef",
+            "schema": "schema://example-python-documents/input/v3",
+            "run_status": "succeeded"
+          },
+          "recipient_inbox_read": "PASS",
+          "other_recipients_absent": true
+        },
+        {
+          "language": "java",
+          "run_id": "notification-20261022-java-receipt-v3-run",
+          "result": "PASS",
+          "approval_resume_count": 2,
+          "sandbox_stdout": "4",
+          "sandbox_container_removed": true,
+          "event_stream_approval": true,
+          "notification": {
+            "outbox": "published",
+            "delivery": "published",
+            "inbox": "delivered"
+          },
+          "notification_event_id": "agent-tool-761be70de216fe129c4fa946c3d11c1a09a60a0e3358df7a815fc52fbb3d0c6a",
+          "fixed_child": {
+            "target_installation_id": "example-python-documents-installation",
+            "version": "example-python-documents-v0-3-0-20261022",
+            "status": "completed",
+            "run_id": "child-99f18f2e4dbbc1b70ea2e535a52c3c5abe975c68455ad50c",
+            "schema": "schema://example-python-documents/input/v3",
+            "run_status": "succeeded"
+          },
+          "recipient_inbox_read": "PASS",
+          "other_recipients_absent": true
+        },
+        {
+          "language": "python",
+          "run_id": "notification-20261022-python-receipt-v3-run",
+          "result": "PASS",
+          "approval_resume_count": 2,
+          "sandbox_stdout": "4",
+          "sandbox_container_removed": true,
+          "event_stream_approval": true,
+          "notification": {
+            "outbox": "published",
+            "delivery": "published",
+            "inbox": "delivered"
+          },
+          "notification_event_id": "agent-tool-48cada4242585fc28bd1e5465cc1ba26c43640ab75dcfd41249fa13db296bec8",
+          "fixed_child": {
+            "target_installation_id": "example-go-operations-installation",
+            "version": "example-go-operations-v0-3-0-20261022",
+            "status": "completed",
+            "run_id": "child-4a1a5795448c7a2dee3cd566e9cdfba485a560ca15199484",
+            "schema": "schema://example-go-operations/input/v3",
+            "run_status": "succeeded"
+          },
+          "recipient_inbox_read": "PASS",
+          "other_recipients_absent": true
+        }
+      ],
+      "foreign_owner_event_status": 404,
+      "real_provider_requests": 0,
+      "result": "PASS",
+      "fixture_scope": "owned metadata clone, internal model/platform networks, frontend-only loopback operator ingress",
+      "historical_failed_fixture_case_preserved": true
+    },
+    "isolated_notification_withdrawal": {
+      "project": "agentplug-test-notification-20261022-e1",
+      "environment": "isolated",
+      "baseline": {
+        "invocations": 38,
+        "physical_attempts": 38,
+        "manual_unknown": 0
+      },
+      "latest_counts": {
+        "invocations": 61,
+        "physical_attempts": 61,
+        "manual_unknown": 0
+      },
+      "authorized_new_request_maximum": 0,
+      "cases": {
+        "go-cancel-after-notification": {
+          "run_id": "notification-isolated-20261022-go-cancel-after-notification-run",
+          "status": "cancelled",
+          "result": "PASS",
+          "approved_tools": [
+            "code.python",
+            "notify.self"
+          ],
+          "notification_verified": true,
+          "sandbox_verified": true,
+          "fixed_child_verified": false,
+          "restart_completed": true,
+          "compensation": {
+            "phase": "complete",
+            "unresolved": 0
+          },
+          "notification_withdrawn": true,
+          "terminal_replay_no_resend": true,
+          "failure": null
+        },
+        "java-cancel-after-notification": {
+          "run_id": "notification-isolated-20261022-java-cancel-after-notification-run",
+          "status": "cancelled",
+          "result": "PASS",
+          "approved_tools": [
+            "code.javascript",
+            "notify.self"
+          ],
+          "notification_verified": true,
+          "sandbox_verified": true,
+          "fixed_child_verified": false,
+          "restart_completed": false,
+          "compensation": {
+            "phase": "complete",
+            "unresolved": 0
+          },
+          "notification_withdrawn": true,
+          "terminal_replay_no_resend": true,
+          "failure": null
+        },
+        "python-cancel-after-notification": {
+          "run_id": "notification-isolated-20261022-python-cancel-after-notification-run",
+          "status": "cancelled",
+          "result": "PASS",
+          "approved_tools": [
+            "code.python",
+            "notify.self"
+          ],
+          "notification_verified": true,
+          "sandbox_verified": true,
+          "fixed_child_verified": false,
+          "restart_completed": false,
+          "compensation": {
+            "phase": "complete",
+            "unresolved": 0
+          },
+          "notification_withdrawn": true,
+          "terminal_replay_no_resend": true,
+          "failure": null
+        }
+      }
+    }
+  },
+  "temporary_stack_cleanup": {
+    "project": "agentplug-test-notification-20261022-e1",
+    "removed_containers": 10,
+    "removed_volumes": [
+      "agentplug-test-notification-20261022-e1_code-runtime-state",
+      "agentplug-test-notification-20261022-e1_modular-kafka-data",
+      "agentplug-test-notification-20261022-e1_modular-postgres-data"
+    ],
+    "removed_networks": [
+      "agentplug-test-notification-20261022-e1_code-runtime-control",
+      "agentplug-test-notification-20261022-e1_default",
+      "agentplug-test-notification-20261022-e1_metric-control",
+      "agentplug-test-notification-20261022-e1_operator-ingress"
+    ],
+    "native_project_untouched": true,
+    "reference_resources_used": false,
+    "private_evidence_retained": true,
+    "checked_at": "2026-10-22T14:52:02.516001+00:00",
+    "result": "PASS"
+  },
+  "paid_requests": {
+    "authorized_maximum": 72,
+    "used_upper_bound": 46,
+    "unknown_requests_resent": false,
+    "prior_authorizations_not_reused": true
+  },
+  "reference_project_actions": "none: no source, service, build, test, credential, network or volume access in this follow-up",
+  "evidence": [
+    {
+      "path": "docs/新增需求/github作品改造/T3-11-平台全量Go隔离PostgreSQL测试实际验证-notification-enable-20261022-full03.json",
+      "sha256": "18939430009cf48a2abf481a95d924cdb2fac419d88854342e1e3f9849033d12"
+    },
+    {
+      "path": "docs/新增需求/生产级评审/界面验证/专用PostgreSQL用例-notification-enable-20261022-extra02.json",
+      "sha256": "59f86bd8c1aaefdfe592088a289a1156d2d25444bc7fb75f2b0b58b76026ccca"
+    },
+    {
+      "path": "docs/新增需求/github作品改造/T3-04A-PostgreSQL身份全量SQL实际验证-notification-enable-20261022-coverage01.json",
+      "sha256": "278d34ceb4f5ecbe6641e77c85bca4387dfa4395f4461076c94d5fde84032503"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/native-enablement.json",
+      "sha256": "a490f1ea4a3b80b3ee41c49e046a04c76410b734748f811801220f1ae45a325e"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/native-final.json",
+      "sha256": "2edd101c5d9f91c61986f4313449d02e49ced567736b2b7d49de72bf6073ea03"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/native-historical-preservation.json",
+      "sha256": "1fa3eaeac0afba246c81a37371fc79d95006fdef71dd0f687a3718873bf36bea"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/native-backup.json",
+      "sha256": "06b501999a8a80e6ac7176b7178ff50fe8344821978c987edeef50d710c66924"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/native-tool-drift-review.json",
+      "sha256": "614a257c7ad2e5b8c5205d259ccebfdc7fbe88705eb70b86a5baa72bc22402e1"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/native-feature-flows.json",
+      "sha256": "6f08f2c973ad9433e5fe8690b919a62f181ce94b74f9e6781048824570b57ce9"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/optional-business-final.json",
+      "sha256": "0f9d9196ee67472ae9da5e3a341e73bec3eab5e8b8a789b2727272d0fa5a6b0e"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/isolated-feature-flows.json",
+      "sha256": "2b7c09e096ed80f53d0dfcc821cd93beb47b14842d33da6c32c1869f5d5f4b15"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/optional-stack-cleanup.json",
+      "sha256": "21bad231f00b20ed617620993a526621bd418cc3f4bd116b6414750f9ee94c74"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/optional-runtime-archive.json",
+      "sha256": "867100c705badc3f342e81c0b2b1807002ce7acf2adff943d54ae20cad5e63d6"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/generated-template-conformance.json",
+      "sha256": "80998a80ab29d4bf73883c848694c28c7f2520188204a776ae2e31acfd517ba9"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/python-linux-report.json",
+      "sha256": "c8ad9ec5624be359d2d3e5d8eb08c8dbf21cb42b3eb663786ed43e920eed6d76"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/go-module-report.json",
+      "sha256": "d1ec5990286a6b1b5b9b6eaeae23e0b9c33fee35929df038de22b706a63f9239"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/final-static-report.json",
+      "sha256": "3db4eb41e3a0c728b9fbf4cf65b35ff902c0bf82884e71c4a19843df5f664def"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/release-e2e03.log",
+      "sha256": "a44538e1b1dc50c242cf689934dcaaed0b456794409a5a27420698728cbc1bbb"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/java-loopback.log",
+      "sha256": "93b2e5398e38233d452962caf6117d64d6a819c1ffaae88f435110b3ea924cc6"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/frontend-test.log",
+      "sha256": "0d4a12a364cfb482bf9b4f502254c6e248e39c31abea31c2d3927a84570d75c1"
+    },
+    {
+      "path": ".tmp/notification-rollout-20261022/frontend-build.log",
+      "sha256": "d0132a784dccdfbbccf82048b6ec043366d98fe2ffde3b6d8b9f5d1b4dbec814"
+    }
+  ],
+  "result": "PASS",
+  "reused_prior_probe_evidence": {
+    "gate_path": ".tmp/public-capability-upgrade/isolated-regression-gate.json",
+    "gate_sha256": "dbc24e1bc8a4459a01e24733eb1985645f549247349e44caf63b2cbbb17f4bb6",
+    "source_sha256_verified": true,
+    "sources": [
+      {
+        "path": "docs\\新增需求\\github作品改造\\T3-11-平台全量Go隔离PostgreSQL测试实际验证-public-upgrade-20261022-full12.json",
+        "sha256": "7bbadec3da6272b1886e42cf06255bbb6a9b851b2adad598b321ac47fbcd9d1f"
+      },
+      {
+        "path": ".tmp\\public-capability-upgrade\\native-test-preservation-audit.json",
+        "sha256": "35e3dfdfba96ce12d32237e554486c3ff65797b29468f164d8ef197835be8712"
+      },
+      {
+        "path": "docs\\新增需求\\生产级评审\\界面验证\\专用PostgreSQL用例-public-upgrade-20261022-extra02.json",
+        "sha256": "d10565934e07b2b61f9dfaa8182289951a7bb587fe2fc9a78e3cbec227507377"
+      },
+      {
+        "path": "docs\\新增需求\\生产级评审\\界面验证\\专用环境-interop-public-upgrade-20261022-interop01.json",
+        "sha256": "5947f0c0c85e09005d36086ac4f133ec6e91a790f10af1310ce6374ab4b4a678"
+      },
+      {
+        "path": ".tmp\\public-capability-upgrade\\models-linux-report.json",
+        "sha256": "78cc041e85ccae7185fca5e969f5ab05ff927de146da6cd5c17906916b16261a"
+      },
+      {
+        "path": ".tmp\\public-capability-upgrade\\model-dns-linux-report.json",
+        "sha256": "b2e9057adb0a22d5298eedeb77223e182ac56acbbaf82c37652695f63d1f44bd"
+      },
+      {
+        "path": ".tmp\\public-capability-upgrade\\sql-supplement-report.json",
+        "sha256": "42bf04af1466e1b3d5112171c5dec4df08963a4794d19446c7c0e113b9bd4f56"
+      },
+      {
+        "path": "docs\\新增需求\\github作品改造\\T3-04A-PostgreSQL权限规模实际验证-public-upgrade-20261022-scale01.json",
+        "sha256": "218fb8cb97f29c0bb8e862608a3af7ebe0df40cb52f3ca73d09f6720163180d9"
+      },
+      {
+        "path": "docs\\新增需求\\github作品改造\\T3-21-原始评测种子与真实平台进程重启验证-public-upgrade-20261022-eval-restart01.json",
+        "sha256": "05879f78fcb6115c7e53ab0704c7d6bac7d1d77891d2d9dd564183add11fc0aa"
+      },
+      {
+        "path": "docs\\新增需求\\github作品改造\\T3-14-SDK实际进程停止与平台恢复验证-public-upgrade-20261022-checkpoint-process03.json",
+        "sha256": "35f5cd4b5472ce0794fddff3faea9d2e69c09d877b04313d3601a02a10c34812"
+      },
+      {
+        "path": "docs\\新增需求\\github作品改造\\T3-06-Python正式镜像真实平台与PG完整链路验证-public-upgrade-20261022-python-final02.json",
+        "sha256": "60f5044788151dfe695ec80555f89ea0736850cece4f4e837a36d007cc82009f"
+      },
+      {
+        "path": "docs\\新增需求\\github作品改造\\T3-06-Java正式镜像真实平台与PG完整链路验证-public-upgrade-20261022-java-final02.json",
+        "sha256": "2bbe3e25d8250dd6c9803bc4e3db4751b91c36ac1844fa7fb6c1be0254264adb"
+      },
+      {
+        "path": "docs\\新增需求\\github作品改造\\T3-04A-PostgreSQL真实平台进程实际验证-public-upgrade-20261022-go-tools02.json",
+        "sha256": "ba9d200d71c76f8cf45fb637bcc6489433c6fa19434c2a45057920a1984ca98a"
+      },
+      {
+        "path": "docs\\新增需求\\github作品改造\\T3-06-Python正式镜像真实平台与PG完整链路验证-public-upgrade-20261022-python-tools02.json",
+        "sha256": "3ce68bb5dee2fb978295ba7aedc1088ad2d29ea49a0285d9dbb16bd7d0b43e2e"
+      },
+      {
+        "path": "docs\\新增需求\\github作品改造\\T3-06-Java正式镜像真实平台与PG完整链路验证-public-upgrade-20261022-java-tools02.json",
+        "sha256": "42cc58f27b1801c9380abde5c3b883f14963cd349d98b30a0a219c0764ed0dfe"
+      },
+      {
+        "path": ".tmp\\public-capability-upgrade\\python-linux-report.json",
+        "sha256": "819e53dae770fd4b48a93ad20d888c5f43980042bc9d5a6b8d657b1fe847d887"
+      },
+      {
+        "path": ".tmp\\public-capability-upgrade\\generated-template-conformance.json",
+        "sha256": "ebc55146a72b519ac88c105470ee6f7057960e1a5578f297ca0986c7937f4463"
+      },
+      {
+        "path": ".tmp\\public-capability-upgrade\\migration-drill.json",
+        "sha256": "b052dbcd48e780deab8f65b08b4721cdf6c85c9d12ea595f72d721537fb45096"
+      },
+      {
+        "path": ".tmp\\public-capability-upgrade\\backups\\20261022T041433Z\\manifest.json",
+        "sha256": "a6dd79f2245c2f62c200647abed424e859b92cafb1034eedb21180967b072cf0"
+      },
+      {
+        "path": ".tmp\\public-capability-upgrade\\backups\\20261022T041433Z\\supplement.json",
+        "sha256": "7d5d18973465f05fba1d737eee48e3397170a061bfabb68721c51709893d0264"
+      },
+      {
+        "path": ".tmp\\public-capability-upgrade\\reference-baseline-check.json",
+        "sha256": "a0a95afd738b377369f54d0c8af6d2ea72cc2ee7417c877e6e8f94d828af10e0"
+      }
+    ]
+  }
+}

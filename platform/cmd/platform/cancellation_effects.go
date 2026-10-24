@@ -25,7 +25,7 @@ type cancellationEffects struct {
 	routes       *agentcoordination.SQLRouteStore
 	tools        *capability.SQLToolInvocationStore
 	capabilities *capability.Module
-	ledger       compensation.Coordinator
+	ledger       *compensation.SQLStore
 	bindings     map[string]cancellationToolBinding
 }
 
@@ -148,7 +148,7 @@ func (c *cancellationEffects) checkScope(ctx context.Context, tx *sql.Tx, scope 
 	if c == nil || c.tools == nil || c.ledger == nil || c.capabilities == nil || tx == nil {
 		return compensation.ErrUnavailable
 	}
-	if err := c.capabilities.CheckTaskModelQuiescence(ctx, scope); err != nil {
+	if err := c.capabilities.CheckTaskCancellationModelQuiescenceTx(ctx, tx, scope); err != nil {
 		return err
 	}
 	facts, err := c.tools.ReadCancellationToolsTx(ctx, tx, scope)
@@ -182,6 +182,20 @@ type cancellationTreeProof struct {
 func (c *cancellationEffects) ports(guard func(context.Context, *sql.Tx, compensation.Step) error) execution.CancellationCompensationPorts {
 	return execution.CancellationCompensationPorts{
 		GuardForwardTx: guard, ValidateStepTx: c.validateStep,
+		ProgressFenceTx: func(ctx context.Context, tx *sql.Tx, control sharedkernel.Scope) error {
+			if c == nil || c.routes == nil || c.capabilities == nil || ctx == nil || tx == nil {
+				return compensation.ErrUnavailable
+			}
+			check := c.capabilities.CheckTaskCancellationModelQuiescenceTx
+			if err := check(ctx, tx, control); err != nil {
+				return err
+			}
+			// The route owner still checks all admitted descendants and their
+			// actual stop barriers. Tool/effect coverage is frozen at stop and
+			// checked again at the final atomic transition, not per inverse.
+			_, err := c.routes.ReadCancellationTreeScopesTx(ctx, tx, control, check)
+			return err
+		},
 		PrepareCoverageTx: func(ctx context.Context, tx *sql.Tx, control sharedkernel.Scope, ledger compensation.Coordinator) error {
 			if c.ledger == nil || ledger != c.ledger {
 				return compensation.ErrUnavailable

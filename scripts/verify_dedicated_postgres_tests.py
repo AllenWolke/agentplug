@@ -19,28 +19,51 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGES = ("capability", "compensation", "execution", "knowledge", "notification")
+PACKAGES = {"capability": "internal/capability", "compensation": "internal/compensation",
+            "execution": "internal/execution", "knowledge": "internal/knowledge",
+            "notification": "internal/notification", "platform": "cmd/platform"}
+
+
+def selected_cases(inventory: dict) -> list[dict]:
+    if "go_json_summary" in inventory:
+        skipped = inventory["go_json_summary"]["skipped_tests"]
+    else:
+        skipped = inventory["postgres_full"]["skipped_cases"]
+    reasons = {"dedicated owned PostgreSQL fixture required",
+               "dedicated owned PostgreSQL compensation fixture required",
+               "dedicated owned PostgreSQL cancellation fixture required",
+               "isolated PostgreSQL fixture not configured",
+               "dedicated owned compensation database required"}
+    cases = [case for case in skipped
+             if case["package"].rsplit("/", 1)[-1] in PACKAGES and case.get("reason") in reasons]
+    if ({case["package"].rsplit("/", 1)[-1] for case in cases} != set(PACKAGES)
+            or len({(c["package"], c["test"]) for c in cases}) != len(cases)
+            or any(not re.fullmatch(r"Test[A-Za-z0-9_]+(?:/[^\r\n]+)?", c["test"]) for c in cases)):
+        raise ValueError("a complete unique compensation inventory including startup composition is required")
+    return cases
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inventory", type=Path, required=True,
-                        help="sanitized full-suite receipt containing go_json_summary.skipped_tests")
+                        help="sanitized full-suite receipt or published GitHub verification inventory")
     parser.add_argument("--batch-id", required=True)
+    parser.add_argument("--containerized-go", action="store_true",
+                        help="run the race detector in the pinned Linux Go image using an offline module cache")
     args = parser.parse_args()
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,79}", args.batch_id):
         parser.error("safe batch id required")
     inventory = json.loads(args.inventory.read_text(encoding="utf-8"))
-    cases = [case for case in inventory["go_json_summary"]["skipped_tests"]
-             if case["package"].rsplit("/", 1)[-1] in PACKAGES
-             and case["test"] != "TestRealSignedTCPTimeoutWaitsForPythonGraphStop"]
-    if len(cases) != 66 or any(not re.fullmatch(r"Test[A-Za-z0-9_]+(?:/[^\r\n]+)?", c["test"]) for c in cases):
-        parser.error("the expected 66 compensation test/subtest inventory is required")
+    try:
+        cases = selected_cases(inventory)
+    except (KeyError, TypeError, ValueError) as error:
+        parser.error(str(error))
     output = ROOT / "docs/新增需求/生产级评审/界面验证" / ("专用PostgreSQL用例-" + args.batch_id + ".json")
     if output.exists():
         parser.error("batch receipt already exists; choose another id")
     owner = "dedicated-pg-" + uuid.uuid4().hex
     name = "agentplug-test-" + owner
+    go_name = name + "-go"
     private = ROOT / ".local-secrets/test-evidence" / owner
     private.mkdir(parents=True, exist_ok=False)
     password = secrets.token_hex(32)
@@ -48,9 +71,11 @@ def main() -> int:
     env_file.write_text("POSTGRES_PASSWORD=" + password + "\nPOSTGRES_DB=postgres\n"
                         "POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=trust\n", encoding="utf-8")
     receipt = {"schema": "agentplug-dedicated-postgres-tests/v1", "owner": owner,
+               "inventory_sha256": hashlib.sha256(args.inventory.read_bytes()).hexdigest(),
                "complete": False, "expected_tests": len(cases), "packages": [], "cleanup_errors": [],
                "project_database_used": False, "credentials_logged": False,
                "scope": "actual PostgreSQL compensation, cancellation, index undo and recipient inbox transactions; controlled authority/stop/provider fixtures are not deployed Agent shutdown proof"}
+    receipt["containerized_go"] = args.containerized_go
 
     def command(arguments: list[str], *, data: bytes | None = None, timeout: int = 60) -> bytes:
         completed = subprocess.run(arguments, input=data, capture_output=True, timeout=timeout)
@@ -77,6 +102,22 @@ def main() -> int:
         if metadata["Config"]["Labels"].get("agentplug.test.owner") != owner:
             raise RuntimeError("fixture container ownership mismatch")
         port = metadata["NetworkSettings"]["Ports"]["5432/tcp"][0]["HostPort"]
+        if args.containerized_go:
+            download = Path(os.environ.get("GOMODCACHE", str(Path.home() / "go/pkg/mod"))) / "cache/download"
+            if not download.is_dir():
+                raise RuntimeError("existing offline module download cache required")
+            command(["docker", "image", "inspect", "golang:1.26.10-bookworm"])
+            command(["docker", "run", "--detach", "--name", go_name,
+                     "--label", "agentplug.test.owner=" + owner,
+                     "--network", "container:" + name,
+                     "--mount", "type=bind,source=" + str(ROOT) + ",target=/workspace,readonly",
+                     "--mount", "type=bind,source=" + str(download.resolve()) + ",target=/module-cache,readonly",
+                     "--tmpfs", "/test-cache:rw,nosuid,size=2g",
+                     "--workdir", "/workspace/platform", "--env", "GOTOOLCHAIN=local",
+                     "--env", "GOPROXY=file:///module-cache", "--env", "GOSUMDB=off",
+                     "--env", "GOMODCACHE=/test-cache/mod", "--env", "GOCACHE=/test-cache/build",
+                     "--env", "GOMAXPROCS=2", "--env", "GOFLAGS=-buildvcs=false",
+                     "golang:1.26.10-bookworm", "sleep", "infinity"])
         for package in PACKAGES:
             selected = [case for case in cases if case["package"].rsplit("/", 1)[-1] == package]
             parents = sorted({case["test"].split("/", 1)[0] for case in selected})
@@ -93,8 +134,15 @@ def main() -> int:
             start = time.monotonic()
             print(json.dumps({"package": package, "expected": len(selected), "status": "running"}), flush=True)
             with log.open("xb") as stream:
-                completed = subprocess.run(["go", "test", "-json", "-p=1", "-parallel=1", "-count=1", "-timeout=10m",
-                                            "-run", "^(" + "|".join(parents) + ")$", "./internal/" + package],
+                test_command = ["go", "test", "-json", "-p=1", "-parallel=1", "-count=1", "-timeout=10m",
+                                "-run", "^(" + "|".join(parents) + ")$", "./" + PACKAGES[package]]
+                if args.containerized_go:
+                    go_env = private / "go.env"
+                    go_env.write_text("COMPENSATION_TEST_POSTGRES_DSN=" +
+                                      f"postgres://postgres:{password}@127.0.0.1:5432/{database}?sslmode=disable\n", encoding="utf-8")
+                    test_command.insert(2, "-race")
+                    test_command = ["docker", "exec", "--env-file", str(go_env), go_name, *test_command]
+                completed = subprocess.run(test_command,
                                            cwd=ROOT / "platform", env=env, stdout=stream, stderr=subprocess.STDOUT, timeout=660)
             states: dict[str, str] = {}
             for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -117,6 +165,15 @@ def main() -> int:
     except Exception as error:
         receipt["failure"] = type(error).__name__ + ": " + str(error).replace(password, "<redacted>")
     finally:
+        go_found = subprocess.run(["docker", "inspect", go_name], capture_output=True)
+        if go_found.returncode == 0:
+            actual_go = json.loads(go_found.stdout)[0]
+            if actual_go["Config"]["Labels"].get("agentplug.test.owner") != owner:
+                receipt["cleanup_errors"].append("Go container ownership mismatch")
+            elif subprocess.run(["docker", "rm", "--force", go_name], capture_output=True).returncode:
+                receipt["cleanup_errors"].append("owned Go container removal failed")
+        receipt["temporary_go_container_removed"] = subprocess.run(["docker", "inspect", go_name], capture_output=True).returncode != 0
+        (private / "go.env").unlink(missing_ok=True)
         found = subprocess.run(["docker", "inspect", name], capture_output=True)
         if found.returncode == 0:
             actual = json.loads(found.stdout)[0]
@@ -127,7 +184,7 @@ def main() -> int:
         receipt["temporary_container_removed"] = subprocess.run(["docker", "inspect", name], capture_output=True).returncode != 0
         env_file.unlink(missing_ok=True)
         receipt["temporary_credentials_removed"] = not env_file.exists()
-        receipt["complete"] = bool(receipt.get("tests_passed")) and receipt["temporary_container_removed"] and receipt["temporary_credentials_removed"] and not receipt["cleanup_errors"]
+        receipt["complete"] = bool(receipt.get("tests_passed")) and receipt["temporary_container_removed"] and receipt["temporary_go_container_removed"] and receipt["temporary_credentials_removed"] and not receipt["cleanup_errors"]
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({"complete": receipt["complete"], "receipt": str(output.relative_to(ROOT)), "failure": receipt.get("failure")}, ensure_ascii=True), flush=True)

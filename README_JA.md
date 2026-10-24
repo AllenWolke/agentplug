@@ -10,6 +10,8 @@
 
 </div>
 
+**共通機能の更新：** モデルルーティング、構造化出力、永続ワークフロー、参照権限の再確認、Kafka 通知とキャンセル補償を拡充しました。SDK は 2.1.0、テンプレートは 1.1.0、サンプル Agent は 0.3.0 / v3 Schema です。[機能と互換性の説明（英語）](docs/releases/public-capabilities-2.1.en.md)。
+
 AgentPlug は企業向けの Agent 開発・実行・ガバナンス基盤です。**Go、Python、Java** で業務 Agent を作成し、独立してデプロイしたうえで、会社・部門・ユーザーごとに利用範囲を設定できます。モデル、ナレッジ検索、ツール、メモリ、チェックポイント、協調処理を SDK から再利用できます。
 
 コンソールの対応言語は **中国語 / 英語** です。ログイン画面と上部に切り替えボタンがあります。日本語版 README と、日本語 UI の提供は別です。[英語ユーザーガイド](docs/用户手册/README.en.md)も参照できます。
@@ -97,7 +99,7 @@ python scripts/compose.py smoke --env-file .env
 
 ### ローカルソース
 
-Go 1.26.9+、Node.js 20+、Python 3.12+、PostgreSQL 16 + pgvector が必要です。Java Agent には JDK 21 と Maven も必要です。[英語のホスト設定手順](docs/developer/en/deployment.md#local-source-and-host-processes)に従って、4 種類の非公開設定を準備します。
+Go 1.26.10+、Node.js 20+、Python 3.12+、PostgreSQL 16 + pgvector が必要です。Java Agent には JDK 21 と Maven も必要です。[英語のホスト設定手順](docs/developer/en/deployment.md#local-source-and-host-processes)に従って、4 種類の非公開設定を準備します。
 
 ```text
 python scripts/local.py build

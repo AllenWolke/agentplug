@@ -49,7 +49,7 @@ func (s *SQLStore) ListWorkloadBindings(ctx context.Context, actor sharedkernel.
 			return nil, err
 		}
 		var b WorkloadBinding
-		if json.Unmarshal(raw, &b) != nil || b.TenantID != scope.TenantID || b.DepartmentID != scope.DepartmentID || b.ApplicationID != scope.ApplicationID || b.Revision == 0 || (b.Status != "active" && b.Status != "revoked") {
+		if json.Unmarshal(raw, &b) != nil || validateWorkloadBindingVersions(b) != nil || b.TenantID != scope.TenantID || b.DepartmentID != scope.DepartmentID || b.ApplicationID != scope.ApplicationID || b.Revision == 0 || (b.Status != "active" && b.Status != "revoked") {
 			return nil, ErrInvalidResource
 		}
 		items = append(items, b)

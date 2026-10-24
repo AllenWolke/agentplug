@@ -16,11 +16,11 @@ import (
 	"github.com/lexagent/platform/internal/notification"
 	platformruntime "github.com/lexagent/platform/internal/runtime"
 	"github.com/lexagent/platform/internal/sharedkernel"
+	"github.com/lexagent/platform/internal/sqlutil"
 	"github.com/lexagent/platform/internal/usagecost"
 )
 
-// Each repository supplies only its own domain owners. Public agentplug has no
-// regulatory import; the interview composition adds that owner through a port.
+// Each repository supplies only its own domain owners through this port.
 type cancellationDomainInstaller func(*compensation.LocalEffectLedger, *cancellationEffects) ([]compensation.Registration, error)
 
 type cancellationSetup struct {
@@ -38,20 +38,19 @@ type cancellationSetup struct {
 	channel       *agentNotificationChannel
 	audit         audit.TxRecorder
 	domain        cancellationDomainInstaller
+	recoveryHolds sharedkernel.RecoveryHolds
 }
 
 func (s cancellationSetup) bindTransaction(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope) context.Context {
 	ctx = withEpochMemo(ctx, tx)
 	ctx = withBudgetAncestryTransaction(ctx, tx)
+	ctx = sqlutil.WithContinuityTransaction(ctx, s.runs.DB(), tx)
 	return capability.WithSQLSkillTransaction(ctx, s.runs.DB(), tx, scope)
 }
 
 func (s cancellationSetup) guardForward(ctx context.Context, tx *sql.Tx, step compensation.Step) error {
 	ctx = s.bindTransaction(ctx, tx, step.Scope)
-	if err := s.iam.AcquirePermissionReadContinuity(ctx, tx); err != nil {
-		return err
-	}
-	if err := lockCheckpointAncestors(ctx, tx, s.runs, s.evaluation, step.Scope); err != nil {
+	if err := lockCheckpointContinuity(ctx, tx, s.iam, s.runs, s.evaluation, step.Scope); err != nil {
 		return err
 	}
 	if step.Kind == "index" {
@@ -100,7 +99,23 @@ func (s cancellationSetup) configure(ctx context.Context) (*knowledge.IndexCompe
 	}); err != nil {
 		return nil, err
 	}
-	ledger, err := s.runs.EnableCancellationCompensation(ctx, effects.ports(s.guardForward))
+	var ledger *compensation.SQLStore
+	ports := effects.ports(s.guardForward)
+	ports.BuildCoordinator = func(ctx context.Context, authority compensation.Authority) (compensation.Coordinator, error) {
+		if err := compensation.CheckSchema(ctx, s.runs.DB()); err != nil {
+			return nil, err
+		}
+		if err := compensation.CheckEnrollmentSchema(ctx, s.runs.DB()); err != nil {
+			return nil, err
+		}
+		var err error
+		ledger, err = compensation.NewSQLStore(s.runs.DB(), authority)
+		if err == nil {
+			err = ledger.SetAutomaticRecoveryHolds(s.recoveryHolds)
+		}
+		return ledger, err
+	}
+	_, err := s.runs.EnableCancellationCompensation(ctx, ports)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +197,8 @@ func (s cancellationSetup) configure(ctx context.Context) (*knowledge.IndexCompe
 			return compensation.ErrPending
 		}
 		epoch, err := s.iam.CurrentAuthorizationEpoch(ctx, step.Scope, "run")
-		if err != nil || epoch != step.Scope.AuthorizationEpoch {
+		expected, proofErr := s.runs.ExpectedAuthorizationEpochTx(ctx, tx, step.Scope)
+		if proofErr != nil || err != nil || epoch != expected {
 			return identity.ErrPermissionDenied
 		}
 		return nil
@@ -208,7 +224,7 @@ func (s cancellationSetup) configure(ctx context.Context) (*knowledge.IndexCompe
 	}
 	// Only model/fee settlement precedes the stop proof. The SQL cancellation
 	// fence then checks all exact tool registrations and stopped descendants.
-	if err := s.execution.SetCancellationStopQuiescence(s.capabilities.CheckTaskModelQuiescence); err != nil {
+	if err := s.execution.SetCancellationStopQuiescence(s.capabilities.CheckTaskCancellationModelQuiescence); err != nil {
 		return nil, err
 	}
 	s.runs.SetAgentGroupStopBarrier(func(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope, _ contract.AgentGroupHandoff) error {

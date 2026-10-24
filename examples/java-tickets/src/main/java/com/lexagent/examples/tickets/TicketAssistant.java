@@ -2,6 +2,8 @@ package com.lexagent.examples.tickets;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lexagent.sdk.CapabilityClient;
+import com.lexagent.sdk.PublicCapabilities;
+import com.lexagent.sdk.CapabilitySendLimiter;
 import com.lexagent.sdk.ExecutionContract.ExecuteRequest;
 import com.lexagent.sdk.Lifecycle;
 import com.lexagent.sdk.HarnessRunner;
@@ -25,6 +27,8 @@ public final class TicketAssistant {
     public static final String INPUT_SCHEMA_V2 = "schema://example-java-tickets/input/v2";
     public static final String OUTPUT_SCHEMA = "schema://example-java-tickets/output/v1";
     public static final String OUTPUT_SCHEMA_V2 = "schema://example-java-tickets/output/v2";
+    public static final String INPUT_SCHEMA_V3="schema://example-java-tickets/input/v3";
+    public static final String OUTPUT_SCHEMA_V3="schema://example-java-tickets/output/v3";
     private static final String EVIDENCE_SCHEMA = "schema://example-java-tickets/evidence/v1";
     private static final String PLAN_SCHEMA = "schema://example-java-tickets/collaboration-plan/v1";
     private static final String PLAN_KEY = "document-support-plan";
@@ -33,10 +37,11 @@ public final class TicketAssistant {
     private static final String GROUP_TASK_TYPE = "documents.answer";
     private static final String CHILD_INPUT_SCHEMA = "schema://example-python-documents/input/v2";
     private static final String CHILD_OUTPUT_SCHEMA = "schema://example-python-documents/output/v2";
+    private static final CapabilitySendLimiter SEND_LIMITER=new CapabilitySendLimiter(16);
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Set<String> INPUT_FIELDS = Set.of("ticket_id", "summary", "details", "notify_me", "sandbox_check", "collaborate", "policy_snapshot");
     private record ParsedInput(String ticket, String summary, String details,
-            boolean notifyMe, boolean sandboxCheck, boolean collaborate, boolean v2, String inputHash) {}
+            boolean notifyMe, boolean sandboxCheck, boolean collaborate, boolean v2, boolean v3, String inputHash) {}
 
     interface Calls {
         Map<String, Object> post(String path, Map<String, Object> payload) throws CapabilityClient.Failure;
@@ -59,6 +64,8 @@ public final class TicketAssistant {
 
     private Calls required(CapabilityClient client) throws CapabilityClient.Failure {
         if (client == null) throw failure("CAPABILITY_CONFIG_INVALID", 503);
+        client.setSendLimiter(SEND_LIMITER);
+        if("1".equals(System.getenv("AGENT_PLATFORM_CAPABILITY_TIMING")))client.setCallObserver(sample->System.getLogger("agent_platform_sdk.capability_observation").log(System.Logger.Level.INFO,"capability_observation path={0} status={1} elapsed_ms={2}",CapabilitySendLimiter.safePath(sample.path()),sample.status(),sample.wallMs()));
         return new Calls() {
             public Map<String, Object> post(String path, Map<String, Object> payload) throws CapabilityClient.Failure { return client.post(path, payload); }
             public Map<String, Object> harness(Map<String, Object> input, HarnessRunner.Options options) throws CapabilityClient.Failure { return client.runHarness(input, options); }
@@ -73,6 +80,7 @@ public final class TicketAssistant {
     Map<String, Object> assist(ExecuteRequest request, Calls calls, Lifecycle.EventSink events,
             BooleanSupplier cancelled) throws Exception {
         ParsedInput parsed = parseInput(request);
+        PublicCapabilities common=new PublicCapabilities((path,payload)->call(calls,events,cancelled,"public.capability",path,payload),request.scope().runId());
         String ticket = parsed.ticket();
         String summary = parsed.summary();
         String details = parsed.details();
@@ -96,15 +104,13 @@ public final class TicketAssistant {
             if (!schema.equals(checkpoint.get("schema_id")) || !"1".equals(String.valueOf(checkpoint.get("revision")))) throw failure("EVIDENCE_CHECKPOINT_INVALID", 409);
             frozen = object(checkpoint.get("value"));
         } else {
-        var memory = call(calls, events, cancelled, "memory.load", "/internal/memory/access",
-                Map.of("operation", "load", "namespace", "tickets", "key", "last-draft"));
-        var prompt = call(calls, events, cancelled, "prompt.resolve", "/internal/prompt/resolve", Map.of());
+        var memory = common.memoryLoad("tickets","last-draft");
+        var prompt = common.resolvePrompt();
         if (!(prompt.get("template") instanceof String template) || template.isBlank()
                 || !(prompt.get("template_hash") instanceof String hash) || hash.isBlank()) throw failure("PROMPT_NOT_FOUND", 404);
         var inspection = call(calls, events, cancelled, "runtime.inspect", "/internal/tool/invoke",
                 Map.of("name", "runtime.inspect", "call_id", request.idempotencyKey() + ":inspect", "payload", Map.of()));
-        var knowledge = call(calls, events, cancelled, "knowledge.search", "/internal/knowledge/search",
-                Map.of("knowledge_scope", "java-tickets", "query", summary, "top_k", 3, "cache_mode", "use"));
+        var knowledge = common.searchKnowledge(summary,"java-tickets",PublicCapabilities.KnowledgeOptions.defaults());
         Map<String, Object> evidence = new LinkedHashMap<>();
         evidence.put("ticket_id", ticket); evidence.put("summary", summary); evidence.put("details", details);
         evidence.put("previous_draft", memory.get("value")); evidence.put("knowledge", knowledge);
@@ -139,6 +145,7 @@ public final class TicketAssistant {
         }
         if (events != null) events.append(Lifecycle.EVENT_PROGRESS, Map.of("stage", "harness.run"));
         String confirmationToken = confirmationToken(request);
+        common.authorizeCachedResult(knowledge,"java-tickets");
         Map<String, Object> harnessInput = harnessInput(request, parsed, template, hash, encoded);
         var loop = calls.harness(harnessInput, new HarnessRunner.Options("ticket-model", 4, 8, confirmationToken));
         checkCancel(cancelled);
@@ -155,11 +162,11 @@ public final class TicketAssistant {
         var model = object(loop.get("output"));
         if (!(model.get("text") instanceof String draft) || draft.isBlank()
                 || draft.getBytes(StandardCharsets.UTF_8).length > 32768) throw failure("MODEL_RESPONSE_INVALID", 502);
-        call(calls, events, cancelled, "memory.save", "/internal/memory/access",
-                Map.of("operation", "save", "namespace", "tickets", "key", "last-draft",
-                        "value", Map.of("ticket_id", ticket, "summary", summary, "draft", draft)));
+        common.authorizeCachedResult(knowledge,"java-tickets");
+        if(!"resume".equals(request.operation()))common.memorySave("tickets","last-draft",Map.of("ticket_id",ticket,"summary",summary,"draft",draft));
+
         Map<String, Object> output = new LinkedHashMap<>();
-        output.put("schema", parsed.v2() ? OUTPUT_SCHEMA_V2 : OUTPUT_SCHEMA); output.put("ticket_id", ticket); output.put("draft", draft);
+        output.put("schema", parsed.v3()?OUTPUT_SCHEMA_V3:parsed.v2() ? OUTPUT_SCHEMA_V2 : OUTPUT_SCHEMA); output.put("ticket_id", ticket); output.put("draft", draft);
         output.put("knowledge", knowledge); output.put("context_checks", inspection); output.put("usage", model.get("usage"));
         if (parsed.v2()) {
             output.put("notify_me", notifyMe);
@@ -167,6 +174,7 @@ public final class TicketAssistant {
             output.put("collaborate", parsed.collaborate());
             output.put("document_support", documentSupport);
         }
+        if(parsed.v3())output.put("model_metadata",PublicCapabilities.modelResultMetadata(model));
         return output;
     }
 
@@ -176,9 +184,11 @@ public final class TicketAssistant {
         if (events != null) events.append(Lifecycle.EVENT_PROGRESS, Map.of("stage", "documents.collaborate"));
         Map<String, Object> gathered = calls.group(List.of(documentChildInput(parsed)),
                 new AgentGroupRunner.Options(GROUP_KEY, GROUP_OPERATION, GROUP_TASK_TYPE,
-                        CHILD_INPUT_SCHEMA, CHILD_OUTPUT_SCHEMA));
-        return validateDocumentSupport(gathered);
+                        childSchema(parsed,"input"), childSchema(parsed,"output")));
+        return validateDocumentSupport(gathered,childSchema(parsed,"output"));
     }
+
+    private static String childSchema(ParsedInput input,String kind){return "schema://example-python-documents/"+kind+"/"+(input.v3()?"v3":"v2");}
 
     private Map<String, Object> documentChildInput(ParsedInput input) throws CapabilityClient.Failure {
         String question = "请为工单提供可引用的相关文档依据。工单编号：" + input.ticket()
@@ -238,7 +248,7 @@ public final class TicketAssistant {
             throw failure("RECOVERY_CHECKPOINT_REJECTED", 409);
     }
 
-    private Map<String, Object> validateDocumentSupport(Map<String, Object> gathered) throws Exception {
+    private Map<String, Object> validateDocumentSupport(Map<String, Object> gathered,String expectedSchema) throws Exception {
         Map<String, Object> group = object(gathered.get("group"));
         if (!Boolean.TRUE.equals(group.get("terminal")) || !Boolean.TRUE.equals(group.get("outputs_complete"))
                 || !"completed".equals(group.get("status")) || !(group.get("children") instanceof List<?> children)
@@ -247,7 +257,7 @@ public final class TicketAssistant {
         if (!"completed".equals(child.get("status")) || Boolean.TRUE.equals(child.get("output_omitted")))
             throw failure("AGENT_GROUP_INCOMPLETE", 409);
         Map<String, Object> result = object(child.get("output"));
-        if (!CHILD_OUTPUT_SCHEMA.equals(result.get("schema"))
+        if (!expectedSchema.equals(result.get("schema"))
                 || !(result.get("answer") instanceof String answer) || answer.isBlank()
                 || answer.getBytes(StandardCharsets.UTF_8).length > 8192
                 || !(result.get("citation_ids") instanceof List<?> rawCitationIds)
@@ -270,7 +280,8 @@ public final class TicketAssistant {
     }
 
     private ParsedInput parseInput(ExecuteRequest request) throws Exception {
-        boolean v2 = INPUT_SCHEMA_V2.equals(request.inputSchema());
+        boolean v3=INPUT_SCHEMA_V3.equals(request.inputSchema());
+        boolean v2 = v3 || INPUT_SCHEMA_V2.equals(request.inputSchema());
         if (!(v2 || INPUT_SCHEMA.equals(request.inputSchema())) || request.input() == null
                 || !INPUT_FIELDS.containsAll(request.input().keySet())) throw failure("REQUEST_INVALID", 400);
         if (!v2 && request.input().keySet().stream()
@@ -307,7 +318,7 @@ public final class TicketAssistant {
         }
         String inputHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(JSON.writeValueAsBytes(businessEvidence)));
-        return new ParsedInput(ticket, summary, details, notifyMe, sandboxCheck, collaborate, v2, inputHash);
+        return new ParsedInput(ticket, summary, details, notifyMe, sandboxCheck, collaborate, v2, v3, inputHash);
     }
 
     public RecoveryPlan recoveryPlan(ExecuteRequest request, List<RecoveryPlan.Snapshot> snapshots,

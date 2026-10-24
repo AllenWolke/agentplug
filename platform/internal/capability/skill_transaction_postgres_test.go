@@ -147,6 +147,26 @@ func TestSQLSkillModelValidationCallerTransactionPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	bindings := map[string]SkillModelBinding{skillID: {VersionID: versionID, Digest: digest}}
+	t.Run("common-continuity-binding-keeps-owner-and-rejects-foreign-pool", func(t *testing.T) {
+		outer, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer outer.Rollback()
+		callerTx, authTransactionID = outer, 0
+		defer func() { callerTx = nil }()
+		joined := sqlutil.WithContinuityTransaction(ctx, db, outer)
+		if err := registry.ValidateModelBindings(joined, scope, bindings); err != nil {
+			t.Fatal("common owner not reused", err)
+		}
+		if err := outer.QueryRowContext(ctx, `SELECT 1`).Scan(new(int)); err != nil {
+			t.Fatal("consumer completed caller transaction", err)
+		}
+		foreign := sqlutil.WithContinuityTransaction(ctx, new(sql.DB), outer)
+		if err := registry.ValidateModelBindings(foreign, scope, bindings); err == nil {
+			t.Fatal("foreign common owner silently ignored")
+		}
+	})
 
 	t.Run("success_reuses_locked_run_transaction_and_outer_rollback", func(t *testing.T) {
 		outer, err := db.BeginTx(ctx, nil)

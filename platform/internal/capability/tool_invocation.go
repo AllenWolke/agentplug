@@ -142,6 +142,10 @@ func cloneToolInvocation(value ToolInvocation) ToolInvocation {
 	value.Result = cloneToolResult(value.Result)
 	if value.ReceiptQuery != nil {
 		q := *value.ReceiptQuery
+		if q.RemoteContract != nil {
+			contract := *q.RemoteContract
+			q.RemoteContract = &contract
+		}
 		value.ReceiptQuery = &q
 	}
 	return value
@@ -153,10 +157,12 @@ func cloneToolInvocation(value ToolInvocation) ToolInvocation {
 // SQLToolInvocationStore 提供可跨重启的副作用幂等；主键包含作用域和调用
 // ID，租户、用户及 Agent 实例之间不能互相回放结果。
 type SQLToolInvocationStore struct {
-	db                    *sql.DB
-	audit                 audit.TxRecorder
-	admitExecution        func(context.Context, *sql.Tx, sharedkernel.Scope) error
-	cancellationRegistrar CancellationToolRegistrar
+	recoveryHolds           sharedkernel.RecoveryHolds
+	recoveryHoldsConfigured bool
+	db                      *sql.DB
+	audit                   audit.TxRecorder
+	admitExecution          func(context.Context, *sql.Tx, sharedkernel.Scope) error
+	cancellationRegistrar   CancellationToolRegistrar
 }
 
 // Configured before workers start; receipt and audit share the owning transaction.

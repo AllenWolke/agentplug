@@ -79,6 +79,9 @@ type OrganizationPage[T any] struct {
 }
 
 type Grant struct {
+	AgentUsePackageID          string `json:"agent_use_package_id,omitempty"`
+	AgentUsePackageRevision    uint64 `json:"agent_use_package_revision,omitempty"`
+	AgentUseRequirementsDigest string `json:"agent_use_requirements_digest,omitempty"`
 	Validity
 	ResourceType  string    `json:"resource_type,omitempty"`
 	ResourceID    string    `json:"resource_id,omitempty"`

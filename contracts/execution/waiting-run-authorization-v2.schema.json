@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema://agentplug/waiting-run-authorization/v2",
+  "title": "Waiting execution current authority proof",
+  "oneOf": [{"$ref": "#/$defs/request"}, {"$ref": "#/$defs/receipt"}],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"},
+    "epoch": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "revision": {"type": "integer", "minimum": 2, "maximum": 9007199254740991},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "request_id", "expected_revision", "expected_authorization_epoch"],
+      "properties": {
+        "version": {"const": "waiting-run-authorization/v2"},
+        "request_id": {"$ref": "#/$defs/id"},
+        "expected_revision": {"$ref": "#/$defs/revision"},
+        "expected_authorization_epoch": {"$ref": "#/$defs/epoch"}
+      }
+    },
+    "receipt": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "run_id", "request_id", "request_digest", "execution_revision", "previous_authorization_epoch", "authorization_epoch", "original_authorization_epoch", "scope_hash", "request_hash", "occurred_at", "replayed"],
+      "properties": {
+        "version": {"const": "waiting-run-authorization/v2"},
+        "run_id": {"$ref": "#/$defs/id"},
+        "request_id": {"$ref": "#/$defs/id"},
+        "request_digest": {"$ref": "#/$defs/digest"},
+        "execution_revision": {"$ref": "#/$defs/revision"},
+        "previous_authorization_epoch": {"$ref": "#/$defs/epoch"},
+        "authorization_epoch": {"$ref": "#/$defs/epoch"},
+        "original_authorization_epoch": {"$ref": "#/$defs/epoch"},
+        "scope_hash": {"$ref": "#/$defs/digest"},
+        "request_hash": {"$ref": "#/$defs/digest"},
+        "occurred_at": {"type": "string", "format": "date-time"},
+        "replayed": {"type": "boolean"}
+      }
+    }
+  }
+}

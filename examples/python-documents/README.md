@@ -1,10 +1,18 @@
 # Python 文档助手
 
-本示例直接安装仓库 `sdk/python`，业务入口位于 `document_assistant/business.py`。Manifest 使用输入协议 `schema://example-python-documents/input/v2`，v1 schema 保留为兼容契约：
+当前 Agent 为 **0.3.0**，直接安装仓库 **2.1.0** SDK，业务入口位于 `document_assistant/business.py`。Manifest 使用 `schema://example-python-documents/input/v3` 和 `schema://example-python-documents/output/v3`。v3 输出增加平台实际返回的 `model_metadata`；v2 Schema、历史 Manifest 及恢复指纹保留，v1 文件与对应历史 Catalog 也保留。当前业务输入示例：
 
 ```json
 {"question":"文档增量更新如何保持一致性？","top_k":3,"cache_mode":"use","collaborate":false}
 ```
+
+v3 可选 `as_of`（规范 `YYYY-MM-DD` 日期）和 `source_ids`（获准来源 ID 列表），用于约束公共知识检索：
+
+```json
+{"question":"指定日期前的文档有哪些更新要求？","top_k":3,"cache_mode":"use","as_of":"2026-10-01","source_ids":["python-documents"]}
+```
+
+来源和日期必须符合当前知识策略，并参与幂等身份与恢复指纹；续接时沿用原值。业务使用和返回缓存或冻结引用前执行当前权限复核，治理及模型元数据原样保留。接口和兼容规则见[公共能力更新说明](../../docs/releases/public-capabilities-2.1.zh.md)。
 
 `workflow_mode` 可选值为 `direct` 或 `tool_loop`，省略时默认为 `direct`。`direct` 保持现有RAG路径，不增加Function模型循环；`tool_loop` 是显式选择的前置Function流程，会增加模型调用和可能的工具调用用量。`sandbox_check` 与 `notify_me` 默认均为 `false`，显式开启任一选项都要求 `workflow_mode=tool_loop`。最终Token与成本以平台账本为准，输出中的 `tool_loop_usage` 不代表整轮汇总。
 
@@ -28,9 +36,9 @@ docker build -f examples/python-documents/Dockerfile -t agentplug:example-python
 
 `deploy/compose/compose.examples.yaml` 使用独立 `EXAMPLE_PYTHON_CLIENT_ID` / `EXAMPLE_PYTHON_CLIENT_SECRET`，平台公钥及能力网关，无宿主端口；同项目内访问 `http://example-python:8080`。缺少平台校验或机器凭据时拒绝启动，容器以非root运行。部署前须注册并发布不可变 Manifest 版本、创建并部署安装、通过规范知识源接口提交文档并构建索引，再分别配置用户与机器的能力权限。机器凭据由 Identity 工作负载绑定签发，不能复用其他 Agent 的凭据。
 
-## 0.2.1 Prompt绑定与Skill及公共RAG接入
+## Prompt 绑定、Skill 与公共 RAG
 
-Agent Manifest 版本为 `0.2.1`。Tool Loop 将已发布Prompt原样保留为唯一 system 消息；业务和安全指引与问题放在第一条 user 消息中，供平台按已发布上下文策略处理。
+当前 0.3.0 继续保留已发布 Prompt 和 Skill 的接入方式。Tool Loop 将已发布 Prompt 原样保留为唯一 system 消息；业务和安全指引与问题放在第一条 user 消息中，供平台按已发布上下文策略处理。
 
 源码调用SDK run_knowledge_harness，在公共State固定example.documents.guidance版本与citations章节、输入指纹和发送边界。首次进入正常answer_knowledge公共RAG，恢复和完成回放使用原请求的只读恢复入口；ModelCall只查已有改写/Embedding/重排/答案回执，未知或输入/索引变化导致回执无法确认时停止协调，不重新调用供应商。公共五层缓存、引用和独立评测字段继续复用，没有追加第二个模型循环。
 
@@ -88,7 +96,7 @@ Function `notify_self`映射公共写工具`notify.self`，参数仅title/text�
 
 此选项复用平台固定路由 `operations.diagnosis`，并将 `service=python-documents`、固定的诊断支持请求、有界上游问题观察（最多 600 字符）及三个禁用子选项写入有序计划检查点。该 route 是此 Agent 的出站子任务；Manifest 对外接收类型仍只有 `documents.answer`。子请求固定要求“最多三点可引用的只读诊断支持要点”：`operations.diagnosis` 任务类型的模型输出预算由已发布模型配置固定，把整段上游问题原样转发会让诊断答案超出该有限预算，而 Go 业务会正确拒绝被截断的诊断，因此子输入必须保持有界。平台仍需为当前用户和绑定机器分别配置路由、Agent invoke、State 与知识读取权限；业务不签发跨 Agent 授权、不接受调用者指定目标或 endpoint。若子 Agent 未完成，SDK 只保存固定 gather 引用并在实际 handler 退出后暂停；继续时必须消费原 gather，重建答案仅通过已有 RAG 回执与当前 ACL 进行，不重跑已不确定的模型/工具副作用。每次最终返回前都会重新读取组结果，子结果作为不可信支持披露。
 
-当前 `input.schema.json` / `output.schema.json` 与 Manifest 指向 v2，显式保留的 `input.v1.schema.json` / `output.v1.schema.json` 不覆盖。启用协作前须在平台发布 v2 Catalog 契约和固定路由，并为调用人、父机器、目标机器配置所需的 AgentGroup、State 和知识权限；Schema 文件本身不发布 Catalog、路由或授权。
+当前 `input.schema.json` / `output.schema.json` 与 Manifest 指向 v3，旧 v2 和 v1 文件及对应历史 Catalog 保留。启用协作前须发布匹配的 Catalog 版本与固定路由：新 v3 请求使用 v3 子契约，历史 v2 续接保留 v2 子契约。调用人、父机器和目标机器分别配置 AgentGroup、State 和知识权限；Schema 文件本身不发布 Catalog、路由或授权。
 
 ## Python 执行生命周期与事件读取
 

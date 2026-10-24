@@ -72,9 +72,18 @@ func (e *Engine) Sweep(ctx context.Context, store WorkerStore, limit int) (Sweep
 // and permission/coverage port is composed. It spawns no per-Run goroutines.
 // Independent hosts remain fenced by PostgreSQL leases and immutable keys.
 func (e *Engine) Run(ctx context.Context, store WorkerStore, interval time.Duration, observe func(SweepStats, bool)) error {
-	if ctx == nil || store == nil || interval < time.Second || interval > time.Minute {
+	return e.run(ctx, store, interval, observe, waitWorker)
+}
+
+// Each sweep still visits one inverse per root and uses ListPending's durable
+// round-robin order. Successful work need not wait for the idle/error interval.
+// A short yield after a bounded burst prevents a busy backlog owning the host.
+func (e *Engine) run(ctx context.Context, store WorkerStore, interval time.Duration, observe func(SweepStats, bool), wait func(context.Context, time.Duration) error) error {
+	if ctx == nil || store == nil || wait == nil || interval < time.Second || interval > time.Minute {
 		return ErrInvalid
 	}
+	const maximumProgressSweeps = 16
+	progressSweeps := 0
 	for {
 		stats, err := e.Sweep(ctx, store, 16)
 		if ctx.Err() != nil {
@@ -83,12 +92,28 @@ func (e *Engine) Run(ctx context.Context, store WorkerStore, interval time.Durat
 		if observe != nil {
 			observe(stats, err != nil)
 		}
-		timer := time.NewTimer(interval)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		case <-timer.C:
+		delay := interval
+		if err == nil && stats.Failed == 0 && (stats.Handled > 0 || stats.Completed > 0) {
+			progressSweeps++
+			if progressSweeps < maximumProgressSweeps {
+				continue
+			}
+			delay = 10 * time.Millisecond
 		}
+		progressSweeps = 0
+		if err := wait(ctx, delay); err != nil {
+			return err
+		}
+	}
+}
+
+func waitWorker(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }

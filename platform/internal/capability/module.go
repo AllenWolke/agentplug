@@ -26,11 +26,13 @@ import (
 	"time"
 
 	"github.com/lexagent/platform/internal/agentcoordination"
+	"github.com/lexagent/platform/internal/audit"
 	"github.com/lexagent/platform/internal/modelcapacity"
 	"github.com/lexagent/platform/internal/modelgateway"
 	modelgovernance "github.com/lexagent/platform/internal/modelgovernance"
 	"github.com/lexagent/platform/internal/policyasset"
 	"github.com/lexagent/platform/internal/sharedkernel"
+	"github.com/lexagent/platform/internal/sqlutil"
 	"github.com/lexagent/platform/internal/usagecost"
 )
 
@@ -45,6 +47,7 @@ type Module struct {
 	mu              sync.Mutex
 	memoryStore     MemoryStore
 	stateStore      CheckpointStore
+	recoveryPager   RecoveryCheckpointPager
 	skills          *SkillRegistry
 	agentRouter     *agentcoordination.Router
 	skillControl    *SkillControlPlane
@@ -61,6 +64,8 @@ type Module struct {
 	modelCapacity             modelcapacity.CapacityProvider
 	toolStore                 ToolInvocationStore
 	usageRecorder             usagecost.Recorder
+	performanceRecorder       audit.PerformanceRecorder
+	modelAttemptRecorder      ModelAttemptRecorder
 	tools                     ToolProvider
 	toolConfirmation          *ToolConfirmationVerifier
 	toolConfirmationAuthority ToolConfirmationAuthority
@@ -75,6 +80,8 @@ type Module struct {
 	stateCancel               context.CancelFunc
 	stateDone                 chan struct{}
 	toolStats                 BillingWorkerStats
+	toolRecoveryLogMu         sync.Mutex
+	toolRecoveryLogAt         time.Time
 	billingControl            modelgovernance.Authorizer
 }
 
@@ -224,18 +231,24 @@ type KnowledgeProvider interface {
 }
 
 type knowledgeQuery struct {
-	Query             string
-	Answer            bool
-	SkillContext      string
-	Scope             string
-	TopK              int
-	AsOf              string
-	CacheMode         string
-	Documents         []policyasset.KnowledgeDocumentBinding
-	GovernedDocuments bool
-	Policy            policyasset.Snapshot
-	ModelCall         KnowledgeModelCall
-	ModelCheck        KnowledgeModelCheck
+	Query                string
+	Answer               bool
+	SkillContext         string
+	Scope                string
+	TopK                 int
+	AsOf                 string
+	CacheMode            string
+	Documents            []policyasset.KnowledgeDocumentBinding
+	GovernedDocuments    bool
+	Policy               policyasset.Snapshot
+	ModelCall            KnowledgeModelCall
+	ModelCheck           KnowledgeModelCheck
+	ModelReceiptCheck    KnowledgeModelReceiptCheck
+	ModelCacheBinding    func(context.Context) (string, error)
+	ModelInputFits       func([]modelgateway.Message, bool) bool
+	ModelSchemaInputFits func([]modelgateway.Message, bool, json.RawMessage, string) bool
+	ModelParallelism     func(context.Context) (int, error)               `json:"-"`
+	ObservePerformance   func(context.Context, KnowledgeQueryObservation) `json:"-"`
 }
 
 func firstString(values map[string]any, key, fallback string) string {
@@ -446,6 +459,7 @@ type envelope struct {
 	Context        harnessContext           `json:"context"`
 	Input          json.RawMessage          `json:"input"`
 	Policy         policyasset.Snapshot     `json:"-"`
+	admissionFacts *capabilityAdmissionFacts
 }
 type response struct {
 	Code      int    `json:"code"`
@@ -464,6 +478,15 @@ func (m *Module) Handler() http.Handler {
 	mux.HandleFunc("/internal/model/embed", m.embed)
 	mux.HandleFunc("/internal/prompt/resolve", m.resolvePrompt)
 	mux.HandleFunc("/internal/knowledge/search", m.search)
+	mux.HandleFunc("/internal/knowledge/references/authorize", m.authorizeKnowledgeReferences)
+	mux.HandleFunc("/internal/knowledge/search/recovery", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method != http.MethodPost {
+			m.error(w, 405, "METHOD_NOT_ALLOWED", "POST required", "")
+			return
+		}
+		m.search(w, r.WithContext(context.WithValue(r.Context(), knowledgeRecoveryOnlyKey{}, true)))
+	})
 	mux.HandleFunc("/internal/knowledge/answer", m.search)
 	mux.HandleFunc("/internal/knowledge/answer/recovery", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -494,7 +517,7 @@ func (m *Module) Handler() http.Handler {
 	mux.HandleFunc("/internal/agent/gather", m.routeAgents)
 	mux.HandleFunc("/internal/agent/admission-state", m.routeAgents)
 	mux.HandleFunc("/skills/", m.skillControlHTTP)
-	return mux
+	return capabilityPhaseHandler(mux)
 }
 
 // InternalHandler is kept separate from the public module tree so the
@@ -515,6 +538,7 @@ func (m *Module) authorize(w http.ResponseWriter, r *http.Request) (envelope, bo
 }
 
 func (m *Module) authorizeWithExpiry(w http.ResponseWriter, r *http.Request, allowExpired bool) (envelope, bool) {
+	defer capabilityPhase(r.Context(), "authorize.total")()
 	if r.Method != http.MethodPost || m.internalToken == "" || !hmac.Equal([]byte(m.internalToken), []byte(strings.TrimSpace(r.Header.Get("X-Internal-Token")))) {
 		m.error(w, http.StatusUnauthorized, "UNAUTHENTICATED", "invalid internal credential", "")
 		return envelope{}, false
@@ -538,36 +562,55 @@ func (m *Module) authorizeWithExpiry(w http.ResponseWriter, r *http.Request, all
 		m.error(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid capability envelope", "")
 		return envelope{}, false
 	}
+	capabilityPhaseRoot(r.Context(), op.Context.TaskID)
 	if err := m.validateContextWithExpiry(r, op.Context, allowExpired); err != nil {
+		if m.capabilityCheckUnavailable(w, op, err) {
+			return envelope{}, false
+		}
+		retainCapabilityDiagnostic(w, err)
 		m.error(w, http.StatusForbidden, "CAPABILITY_DENIED", err.Error(), op.Context.TraceID)
 		return envelope{}, false
 	}
 	policy, err := m.validatePolicy(r.Context(), op.Context)
 	if err != nil {
+		if m.capabilityCheckUnavailable(w, op, err) {
+			return envelope{}, false
+		}
 		m.error(w, http.StatusForbidden, "POLICY_DENIED", err.Error(), op.Context.TraceID)
 		return envelope{}, false
 	}
 	op.Policy = policy
 	if m.publicKey != nil {
+		capture := &capabilityFactsCapture{}
+		*r = *r.WithContext(context.WithValue(r.Context(), capabilityFactsCaptureKey{}, capture))
 		op.ResourceAccess, err = resourceAccessForRoute(r.URL.Path, op)
 		if err != nil {
 			m.error(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid capability resource input", op.Context.TraceID)
 			return envelope{}, false
 		}
 		if err := m.validateLiveAuthority(r.Context(), op); err != nil {
+			if m.capabilityCheckUnavailable(w, op, err) {
+				return envelope{}, false
+			}
+			retainCapabilityDiagnostic(w, err)
 			m.error(w, http.StatusForbidden, "CAPABILITY_DENIED", "current execution authorization denied", op.Context.TraceID)
 			return envelope{}, false
 		}
 		if err := m.authenticateWorkload(r, op); err != nil {
+			if m.capabilityCheckUnavailable(w, op, err) {
+				return envelope{}, false
+			}
 			m.error(w, http.StatusForbidden, "WORKLOAD_AUTHENTICATION_DENIED", "current workload credential denied", op.Context.TraceID)
 			return envelope{}, false
 		}
 		retainWorkloadProof(r, op)
+		op.admissionFacts = capture.forScope(workloadScope(op.Context))
 	}
 	return op, true
 }
 
 func (m *Module) validatePolicy(ctx context.Context, c harnessContext) (policyasset.Snapshot, error) {
+	defer capabilityPhase(ctx, "authority.policy")()
 	if m.policy == nil {
 		return policyasset.Snapshot{}, nil
 	}
@@ -592,7 +635,7 @@ func (m *Module) validatePolicy(ctx context.Context, c harnessContext) (policyas
 		TraceID: c.TraceID, AuthorizationEpoch: c.AuthorizationEpoch,
 	}, c.AgentVersionID)
 	if err != nil {
-		return policyasset.Snapshot{}, errors.New("policy snapshot unavailable")
+		return policyasset.Snapshot{}, &policySnapshotUnavailableError{cause: err}
 	}
 	if !snapshot.SameIDs(requested) || !snapshot.SameRuleBinding(requested) {
 		return policyasset.Snapshot{}, errors.New("requested policy snapshot is not authorized")
@@ -605,6 +648,7 @@ func (m *Module) validateContext(r *http.Request, c harnessContext) error {
 }
 
 func (m *Module) validateContextWithExpiry(r *http.Request, c harnessContext, allowExpired bool) error {
+	defer capabilityPhase(r.Context(), "authority.context")()
 	if m.liveAuthority != nil && len(m.publicKey) != ed25519.PublicKeySize {
 		return errors.New("platform verification key unavailable")
 	}
@@ -724,18 +768,8 @@ func (m *Module) generate(w http.ResponseWriter, r *http.Request) {
 	m.generateAuthorized(w, r, op)
 }
 
-func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op envelope) {
-	var in struct {
-		Texts              []string                     `json:"texts"`
-		EmbeddingPurpose   string                       `json:"input_purpose,omitempty"`
-		Messages           []modelgateway.Message       `json:"messages"`
-		FunctionNames      []string                     `json:"function_names"`
-		SkillBindings      map[string]SkillModelBinding `json:"skill_bindings"`
-		PromptTemplateHash string                       `json:"prompt_template_hash"`
-		IdempotencyKey     string                       `json:"idempotency_key"`
-		Temperature        float64                      `json:"temperature"`
-		MaxTokens          int                          `json:"max_tokens"`
-	}
+func (m *Module) generateAuthorizedOnce(w http.ResponseWriter, r *http.Request, op envelope) {
+	var in modelGenerateInput
 	embeddingCall := r.URL.Path == "/internal/model/embed"
 
 	if embeddingCall {
@@ -746,7 +780,7 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		}
 		op.Policy.Model = selectedPolicy
 	}
-	if json.Unmarshal(op.Input, &in) != nil {
+	if json.Unmarshal(op.Input, &in) != nil || in.DeadlineMS < 0 || in.DeadlineMS > (1<<53)-1 || embeddingCall && in.DeadlineMS != 0 {
 		m.error(w, 400, "INVALID_REQUEST", "invalid model input", op.Context.TraceID)
 		return
 	}
@@ -763,7 +797,7 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		return
 	}
 	if embeddingCall {
-		if len(in.FunctionNames) > 0 {
+		if len(in.FunctionNames) > 0 || in.RequireJSON {
 			m.error(w, 400, "INVALID_REQUEST", "embedding cannot request functions", op.Context.TraceID)
 			return
 		}
@@ -800,6 +834,12 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		m.error(w, http.StatusBadRequest, "MODEL_LIMIT_EXCEEDED", "requested token limit exceeds the published model policy", op.Context.TraceID)
 		return
 	}
+	var schemaErr error
+	in.ResponseSchema, in.ResponseSchemaMode, schemaErr = modelgateway.NormalizeResponseSchema(in.ResponseSchema, in.ResponseSchemaMode, in.RequireJSON, in.FunctionNames)
+	if schemaErr != nil || embeddingCall && len(in.ResponseSchema) > 0 {
+		m.error(w, 400, "INVALID_RESPONSE_SCHEMA", "bounded generation schema required", op.Context.TraceID)
+		return
+	}
 	if in.MaxTokens == 0 {
 		in.MaxTokens = op.Policy.Model.MaxTokens
 	}
@@ -811,10 +851,36 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		m.error(w, 403, "FUNCTION_POLICY_DENIED", "function definitions or tool transcript violate published policy", op.Context.TraceID)
 		return
 	}
-	budgetMessages := modelBudgetMessages(in.Messages, op.Policy.Tool, in.FunctionNames)
-	if !embeddingCall && validateModelContextLimit(op.Policy.Model, in.Messages, op.Policy.Tool, in.FunctionNames) != nil {
+	wireMessages, contextPartition, contextErr := m.invocationContext(op, in.Messages, embeddingCall)
+	if contextErr != nil {
+		m.error(w, 403, "CONTEXT_CACHE_POLICY_DENIED", "context cache requires an approved policy and complete trusted scope", op.Context.TraceID)
+		return
+	}
+	budgetMessages := modelSchemaBudgetMessages(wireMessages, op.Policy.Tool, in.FunctionNames, in.RequireJSON, in.ResponseSchema, in.ResponseSchemaMode)
+	if !embeddingCall && ValidateModelContextWithResponseSchema(op.Policy.Model, wireMessages, op.Policy.Tool, in.FunctionNames, in.RequireJSON, in.ResponseSchema, in.ResponseSchemaMode) != nil {
 		m.error(w, http.StatusBadRequest, "CONTEXT_LIMIT_EXCEEDED", "model input exceeds the published input token limit", op.Context.TraceID)
 		return
+	}
+	if in.IdempotencyKey == "" {
+		in.IdempotencyKey = op.Context.IdempotencyKey
+	}
+	if in.IdempotencyKey == "" {
+		in.IdempotencyKey = op.Context.RequestID + ":model.generate"
+		if embeddingCall {
+			in.IdempotencyKey = op.Context.RequestID + ":model.embed"
+		}
+	}
+	var route *StoredModelRoute
+	if !embeddingCall {
+		var routeErr error
+		route, _, routeErr = m.resolveInvocationRoute(r.Context(), &op, in.IdempotencyKey,
+			routeInput(in),
+			in.Temperature, in.PromptTemplateHash, in.SkillBindings, false)
+		if routeErr != nil {
+			status, code := modelRouteError(routeErr)
+			m.error(w, status, code, "model route could not be authorized or persisted", op.Context.TraceID)
+			return
+		}
 	}
 	provider := strings.ToLower(strings.TrimSpace(op.Policy.Model.Provider))
 	if provider == "" {
@@ -869,25 +935,35 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 			m.error(w, http.StatusForbidden, "EXTERNAL_MODEL_DENIED", "external model provider is disabled by policy", op.Context.TraceID)
 			return
 		}
+		provider = selectedModel.ProviderKey
 	}
-	if in.IdempotencyKey == "" {
-		in.IdempotencyKey = op.Context.IdempotencyKey
-	}
-	if in.IdempotencyKey == "" {
-		in.IdempotencyKey = op.Context.RequestID + ":model.generate"
-		if embeddingCall {
-			in.IdempotencyKey = op.Context.RequestID + ":model.embed"
-		}
+	if !embeddingCall && m.checkContextCacheModel(r.Context(), op) != nil {
+		m.error(w, 403, "CONTEXT_CACHE_MODEL_DENIED", "approved model does not support the published context cache mode", op.Context.TraceID)
+		return
 	}
 	fingerprint, _ := modelCommandFingerprint(in.Messages, in.Temperature, in.MaxTokens, in.PromptTemplateHash, op.Policy.Model, in.FunctionNames, embeddingCall, in.SkillBindings)
+	if in.RequireJSON {
+		fingerprint = modelPurposeFingerprint(fingerprint, "json_object")
+	}
+	fingerprint = modelResponseSchemaFingerprint(fingerprint, in.ResponseSchema, in.ResponseSchemaMode)
+	fingerprint = modelDeadlineFingerprint(fingerprint, in.DeadlineMS)
 	if embeddingCall {
 		fingerprint = modelPurposeFingerprint(fingerprint, in.EmbeddingPurpose)
 	}
 	scopeHash := capabilityScopeHash(op.Context)
+	if route != nil {
+		scopeHash = modelSelectionScopeHash(scopeFromHarness(op.Context))
+	}
 	estimatedCost := estimateModelCost(budgetMessages)
 	var budgetReservation *usagecost.ModelBudgetReservation
 	var approvedPrice modelgovernance.PriceVersion
 	var modelAttemptToken string
+	dispatchAttempted := false
+	defer func() {
+		if governanceConfigured && modelAttemptToken != "" && !dispatchAttempted {
+			m.closePreDispatchReturn(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, modelAttemptToken, op.Context.TraceID)
+		}
+	}()
 	if m.modelStore != nil {
 		invocationBudget, invocationEstimate := op.Policy.Model.BudgetCents, estimatedCost
 		if governanceConfigured {
@@ -949,7 +1025,8 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		pricedAt := time.Now().UTC()
 		var err error
 		approvedPrice, err = m.modelPrices.ResolvePrice(r.Context(), selectedModel.ModelVersionID, pricedAt)
-		if err != nil || !validRuntimeModelPrice(approvedPrice, selectedModel.ModelVersionID, pricedAt) {
+		if err != nil || !validRuntimeModelPrice(approvedPrice, selectedModel.ModelVersionID, pricedAt) ||
+			(route != nil && modelRouteHash(approvedPrice) != modelRouteHash(route.Decision.Price)) {
 			m.failModelInvocation(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, op.Context.TraceID, modelAttemptToken)
 			m.error(w, http.StatusServiceUnavailable, "MODEL_PRICE_UNAVAILABLE", "no valid approved effective USD model price is available", op.Context.TraceID)
 			return
@@ -970,6 +1047,7 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		}
 		if reserveErr == nil {
 			var reservation usagecost.ModelBudgetReservation
+			r = r.WithContext(withModelBudgetPreparation(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, modelAttemptToken))
 			reservation, reserveErr = reserveModelBudgetAdmission(r.Context(), m.modelBudgets, budgetRequest)
 			if reserveErr == nil {
 				budgetReservation = &reservation
@@ -991,6 +1069,20 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		}
 	}
 	var capacityLease *modelcapacity.Lease
+	capacityReleaseKnownSafe := true // No provider has been called yet.
+	defer func() {
+		if capacityLease == nil || !capacityReleaseKnownSafe {
+			return
+		}
+		// Caller cancellation must not poison cleanup of a known ended/unsent
+		// operation. Preserve the original scoped, fenced lease and a short
+		// cleanup bound; this context is never used to send another model call.
+		cleanupCtx, stop := context.WithTimeout(context.WithoutCancel(r.Context()), 2*time.Second)
+		defer stop()
+		if releaseErr := m.modelCapacity.ReleaseCapacity(cleanupCtx, *capacityLease); releaseErr != nil {
+			log.Printf("model capacity lease release deferred to expiry trace=%q error_type=%T", op.Context.TraceID, releaseErr)
+		}
+	}()
 	if governanceConfigured && selectedModel.TrustZone == modelgovernance.TrustLocal {
 		if m.modelCapacity == nil || selectedModel.DeploymentID == "" || selectedModel.CapacityUnits <= 0 {
 			recoveryOwned := false
@@ -1032,10 +1124,35 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 	var embeddingVectors [][]float32
 	var incomplete bool
 	if governanceConfigured {
-		messages := in.Messages
+		messages := wireMessages
+		if route != nil && op.Policy.Model.Routing.Availability != nil {
+			healthStore, ok := m.modelStore.(ModelRouteAvailabilityStore)
+			var healthErr error
+			if !ok {
+				healthErr = ErrModelRouteUnavailable
+			} else {
+				owner := modelRouteHash(struct{ Scope, Key, Token string }{scopeHash, in.IdempotencyKey, modelAttemptToken})
+				healthErr = claimModelAvailability(r.Context(), healthStore, modelAvailabilityPartition(modelScope), selectedModel.ModelVersionID,
+					owner, *op.Policy.Model.Routing.Availability, time.Now().UTC())
+			}
+			if healthErr != nil {
+				if !m.releaseUnsentAdmission(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, *budgetReservation, op.Context.TraceID, modelAttemptToken) {
+					m.error(w, 502, "MODEL_RECONCILIATION_REQUIRED", "unsent model admission requires recovery", op.Context.TraceID)
+					return
+				}
+				m.error(w, 503, "MODEL_ROUTE_CANDIDATE_UNAVAILABLE", "model cooldown or another recovery probe prevents submission", op.Context.TraceID)
+				return
+			}
+		}
 		// Persist and retain before sending. RPC cancellation is not proof of no charge.
 		// 请求发送前持久化且保留预算，RPC 取消不等于厂商未计费。
 		modelSendDeadline := time.Now().UTC().Add(2 * time.Minute)
+		if in.DeadlineMS > 0 && time.UnixMilli(in.DeadlineMS).Add(time.Minute).Before(modelSendDeadline) {
+			modelSendDeadline = time.UnixMilli(in.DeadlineMS).Add(time.Minute)
+		}
+		if cutoff, ok := r.Context().Value(modelAttemptDeadlineKey{}).(time.Time); ok && cutoff.Add(time.Minute).Before(modelSendDeadline) {
+			modelSendDeadline = cutoff.Add(time.Minute)
+		}
 		if err := m.prepareModelSend(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, *budgetReservation, modelSendDeadline, modelAttemptToken); err != nil {
 			m.error(w, http.StatusServiceUnavailable, "MODEL_SEND_PERSISTENCE_FAILED", "model request was not sent because recovery persistence failed", op.Context.TraceID)
 			return
@@ -1058,8 +1175,8 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 				m.error(w, 502, "MODEL_RECONCILIATION_REQUIRED", "unsent request accounting requires recovery", op.Context.TraceID)
 				return
 			}
-			if capacityLease != nil {
-				_ = m.modelCapacity.ReleaseCapacity(r.Context(), *capacityLease)
+			if m.capabilityCheckUnavailable(w, op, err) {
+				return
 			}
 			m.error(w, 403, "CAPABILITY_DENIED", "current execution authorization denied before model send", op.Context.TraceID)
 			return
@@ -1067,11 +1184,39 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		providerCtx, stopProvider := context.WithDeadline(context.WithoutCancel(r.Context()), modelSendDeadline.Add(-time.Minute))
 		if providerCtx.Err() != nil {
 			stopProvider()
-			m.error(w, http.StatusBadGateway, "MODEL_RECONCILIATION_REQUIRED", "model send window expired; provider was not invoked", op.Context.TraceID)
+			// The durable send intent exists, but control has not entered the
+			// provider. Preserve that exact no-send proof and close both holds;
+			// leaving inflight here would later become a false manual unknown.
+			abortErr := m.abortUnsentModel(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, *budgetReservation, modelAttemptToken)
+			m.recordModelSendWindowExpired(r.Context(), modelScope, in.IdempotencyKey, modelAttemptToken, selectedModel, embeddingCall, abortErr)
+			if abortErr != nil {
+				m.error(w, http.StatusBadGateway, "MODEL_RECONCILIATION_REQUIRED", "unsent request accounting requires recovery", op.Context.TraceID)
+				return
+			}
+			m.error(w, http.StatusRequestTimeout, "MODEL_NOT_SUBMITTED", "model send window expired before provider invocation", op.Context.TraceID)
+			return
+		}
+		// Win the persisted dispatch fence before entering the provider adapter.
+		// On a lost CAS acknowledgment do not send: recovery retains the exact
+		// attempt and prevents both a delayed owner and blind fallback replay.
+		dispatch, dispatchSupported := m.modelStore.(ModelDispatchStore)
+		if !dispatchSupported {
+			stopProvider()
+			m.error(w, http.StatusServiceUnavailable, "MODEL_DISPATCH_UNCONFIRMED", "model dispatch fence unavailable; request was not sent", op.Context.TraceID)
+			return
+		}
+		dispatchAttempted = true // A lost CAS acknowledgement retains the original attempt.
+		if err := dispatch.BeginModelDispatch(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, modelAttemptToken); err != nil {
+			stopProvider()
+			logLedgerFailure("model_dispatch_fence", err)
+			m.error(w, http.StatusServiceUnavailable, "MODEL_DISPATCH_UNCONFIRMED", "model dispatch could not be confirmed; original attempt requires recovery", op.Context.TraceID)
 			return
 		}
 		var invocation modelgateway.GenerateResult
 		var invokeErr error
+		providerCtx, providerAttempts := modelgateway.WithProviderAttemptTrace(providerCtx)
+		gatewayStarted := time.Now()
+		capacityReleaseKnownSafe = false // Unknown provider outcomes retain the lease.
 		if embeddingCall {
 			var embedded modelgateway.EmbeddingResult
 			embeddingContext, purposeErr := modelgateway.WithEmbeddingPurpose(providerCtx, in.EmbeddingPurpose)
@@ -1083,22 +1228,23 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 			embeddingVectors = embedded.Vectors
 			invocation.InputTokens = embedded.InputTokens
 		} else {
-			invocation, invokeErr = m.modelGateway.Generate(providerCtx, modelScope, op.Policy, modelgateway.GenerateRequest{Prompt: user, Model: selectedModel.ModelKey, ModelVersionID: selectedModel.ModelVersionID, ProviderID: selectedModel.ProviderID, ModelID: selectedModel.ModelID, Messages: messages, Temperature: in.Temperature, MaxTokens: in.MaxTokens, FunctionNames: in.FunctionNames})
+			invocation, invokeErr = m.modelGateway.Generate(providerCtx, modelScope, op.Policy, modelgateway.GenerateRequest{Prompt: user, Model: selectedModel.ModelKey, ModelVersionID: selectedModel.ModelVersionID, ProviderID: selectedModel.ProviderID, ModelID: selectedModel.ModelID, Messages: messages, Temperature: in.Temperature, MaxTokens: in.MaxTokens, FunctionNames: in.FunctionNames, RequireJSON: in.RequireJSON, ResponseSchema: in.ResponseSchema, ResponseSchemaMode: in.ResponseSchemaMode})
 		}
+		gatewayFinished := time.Now()
 		stopProvider()
-		if capacityLease != nil && (invokeErr == nil || definitelyNoModelCharge(invokeErr)) {
-			if releaseErr := m.modelCapacity.ReleaseCapacity(r.Context(), *capacityLease); releaseErr != nil {
-				// A failed release remains bounded by the SQL lease TTL; do not discard
-				// a known billable result or hide it behind a capacity cleanup error.
-				log.Printf("model capacity lease release deferred to expiry trace=%q error_type=%T", op.Context.TraceID, releaseErr)
-			}
-		} else if capacityLease != nil {
+		m.recordModelAttempt(r.Context(), modelScope, in.IdempotencyKey, modelAttemptToken, selectedModel,
+			embeddingCall, route, providerAttempts, gatewayFinished, invokeErr, invocation)
+		modelObservation := m.recordModelPerformance(r.Context(), modelScope, in.IdempotencyKey, modelAttemptToken, selectedModel.ModelVersionID, embeddingCall, gatewayStarted, gatewayFinished, invokeErr)
+		capacityReleaseKnownSafe = invokeErr == nil || definitelyNoModelCharge(invokeErr)
+		if capacityLease != nil && !capacityReleaseKnownSafe {
 			// The provider outcome is uncertain. Keep capacity reserved until lease
 			// expiry so a timed-out remote call cannot be immediately oversold.
 			log.Printf("model capacity lease retained for uncertain outcome trace=%q", op.Context.TraceID)
 		}
 		if invokeErr != nil {
-			log.Printf("model provider failure run_id=%q embedding=%t error_kind=%s", modelScope.RunID, embeddingCall, modelProviderErrorKind(invokeErr))
+			m.recordRouteAvailability(r.Context(), route, op, in.IdempotencyKey, modelAttemptToken, gatewayStarted, gatewayFinished, invokeErr)
+			transportStage, networkCause, connectionState := modelgateway.SafeProviderTransportDetail(invokeErr)
+			log.Printf("model provider failure run_id=%q embedding=%t error_kind=%s transport_stage=%s network_cause=%s connection_state=%s", modelScope.RunID, embeddingCall, modelProviderErrorKind(invokeErr), transportStage, networkCause, connectionState)
 			if definitelyNoModelCharge(invokeErr) {
 				if err := m.abortUnsentModel(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, *budgetReservation, modelAttemptToken); err != nil {
 					m.error(w, http.StatusBadGateway, "MODEL_RECONCILIATION_REQUIRED", "unsent request accounting could not be finalized", op.Context.TraceID)
@@ -1106,20 +1252,35 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 				}
 				m.error(w, http.StatusBadGateway, "MODEL_PROVIDER_FAILED", "governed model invocation failed", op.Context.TraceID)
 			} else {
-				m.markModelReconciliation(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, *budgetReservation, nil, 0, op.Context.TraceID, modelAttemptToken)
+				failureCtx := context.WithValue(r.Context(), modelFailureKindContextKey{}, modelProviderErrorKind(invokeErr))
+				m.markModelReconciliation(failureCtx, scopeHash, in.IdempotencyKey, fingerprint, *budgetReservation, nil, 0, op.Context.TraceID, modelAttemptToken)
 				m.error(w, http.StatusBadGateway, "MODEL_RECONCILIATION_REQUIRED", "provider outcome is uncertain and requires billing reconciliation", op.Context.TraceID)
 			}
 			return
 		}
-		if !embeddingCall && strings.TrimSpace(invocation.Text) == "" && len(invocation.ToolCalls) == 0 && !invocation.Incomplete || embeddingCall && !validEmbeddingVectors(embeddingVectors, len(in.Texts)) || invocation.InputTokens < 0 || invocation.OutputTokens < 0 {
-			m.markModelReconciliation(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, *budgetReservation, nil, 0, op.Context.TraceID, modelAttemptToken)
+		if !embeddingCall && strings.TrimSpace(invocation.Text) == "" && len(invocation.ToolCalls) == 0 && !invocation.Incomplete || embeddingCall && !validEmbeddingVectors(embeddingVectors, len(in.Texts)) || invocation.InputTokens < 0 || invocation.OutputTokens < 0 || invocation.CacheUsage.Validate(invocation.InputTokens) != nil {
+			m.recordRouteAvailability(r.Context(), route, op, in.IdempotencyKey, modelAttemptToken, gatewayStarted, gatewayFinished, modelgateway.ErrProviderResponse)
+			failureCtx := context.WithValue(r.Context(), modelFailureKindContextKey{}, "invalid_response")
+			m.markModelReconciliation(failureCtx, scopeHash, in.IdempotencyKey, fingerprint, *budgetReservation, nil, 0, op.Context.TraceID, modelAttemptToken)
 			m.error(w, http.StatusBadGateway, "MODEL_RECONCILIATION_REQUIRED", "provider returned an invalid billable result", op.Context.TraceID)
 			return
 		}
+		m.recordRouteAvailability(r.Context(), route, op, in.IdempotencyKey, modelAttemptToken, gatewayStarted, gatewayFinished, nil)
 		text, resultModel = invocation.Text, selectedModel.ModelKey
 		incomplete = !embeddingCall && invocation.Incomplete
 		usage = map[string]int{"input_tokens": invocation.InputTokens, "output_tokens": invocation.OutputTokens}
+		if invocation.CachedInputTokens != nil {
+			usage["cached_input_tokens"], usage["uncached_input_tokens"] = *invocation.CachedInputTokens, *invocation.UncachedInputTokens
+		}
 		result = map[string]any{"provider_id": selectedModel.ProviderID, "model_id": selectedModel.ModelID, "model_version_id": selectedModel.ModelVersionID}
+		if invocation.ResponseSchema != nil {
+			result["response_schema"] = *invocation.ResponseSchema
+		}
+		if modelObservation != nil {
+			// The actual gateway measurement travels with the durable result. A
+			// lost audit write never requires a new model invocation or invented timing.
+			result["performance_observation"] = *modelObservation
+		}
 		if len(invocation.ToolCalls) > 0 {
 			result["tool_calls"], result["completion_status"] = invocation.ToolCalls, "tool_calls"
 			bindings := map[string]string{}
@@ -1153,6 +1314,12 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		usage = map[string]int{"input_tokens": len(user)/4 + 1, "output_tokens": len(text)/4 + 1}
 	}
 	result["text"], result["model"], result["usage"] = text, resultModel, usage
+	if contextPartition != "" {
+		result["context_cache"] = map[string]any{"version": "context-prefix/v1", "mode": "provider_prefix", "isolation": "session", "partition_sha256": contextPartition}
+	}
+	if route != nil {
+		result["routing"] = modelRouteReceipt(*route)
+	}
 	if incomplete {
 		result["completion_status"] = "incomplete"
 		if _, exists := result["finish_reason"]; !exists {
@@ -1173,13 +1340,29 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		return
 	}
 	if governanceConfigured {
-		actualCostMicros, costErr := approvedModelCost(approvedPrice, int64(usage["input_tokens"]), int64(usage["output_tokens"]))
+		var cachedInput *int
+		if count, known := usage["cached_input_tokens"]; known {
+			cachedInput = &count
+		}
+		actualCostMicros, costErr := approvedModelCacheCost(approvedPrice, int64(usage["input_tokens"]), int64(usage["output_tokens"]), cachedInput)
 		if costErr != nil {
 			m.markModelReconciliation(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, *budgetReservation, result, 0, op.Context.TraceID, modelAttemptToken)
 			m.error(w, http.StatusBadGateway, "MODEL_RECONCILIATION_REQUIRED", "provider result is known but its approved cost could not be calculated", op.Context.TraceID)
 			return
 		}
 		result["billing"] = map[string]any{"price_version_id": approvedPrice.ID, "currency": approvedPrice.Currency, "cost_micros": actualCostMicros}
+		if !embeddingCall {
+			billing := result["billing"].(map[string]any)
+			billing["cache_usage_known"] = cachedInput != nil
+			billing["pricing_mode"] = "uniform_input"
+			if approvedPrice.CachedInputMicrosPer1K != nil {
+				billing["pricing_mode"] = "cached_input"
+				billing["cached_input_micros_per_1k_tokens"] = *approvedPrice.CachedInputMicrosPer1K
+				if coldCost, err := approvedModelCost(approvedPrice, int64(usage["input_tokens"]), int64(usage["output_tokens"])); err == nil {
+					billing["cache_savings_micros"] = coldCost - actualCostMicros
+				}
+			}
+		}
 		costCents = ceilModelCostCents(actualCostMicros)
 		event, eventErr := buildModelUsageEvent(op.Context, selectedModel, usage["input_tokens"], usage["output_tokens"], actualCostMicros, in.IdempotencyKey)
 		if eventErr != nil {
@@ -1205,6 +1388,9 @@ func (m *Module) generateAuthorized(w http.ResponseWriter, r *http.Request, op e
 		attachModelUsageStepID(result, legacyModelUsageScope(op.Context), in.IdempotencyKey)
 	}
 	if m.modelStore != nil {
+		// Match the durable JSON representation before the first disclosure.
+		// Typed measurement DTO field order must not change on a cached replay.
+		result = cloneMap(result)
 		if err := m.modelStore.Complete(r.Context(), scopeHash, in.IdempotencyKey, fingerprint, result, costCents); err != nil {
 			if governanceConfigured {
 				log.Printf("settled model result requires invocation reconciliation trace=%q error_type=%T", op.Context.TraceID, err)
@@ -1337,8 +1523,7 @@ func pricedModelCost(policy policyasset.ModelPolicy, inputTokens, outputTokens i
 }
 
 func capabilityScopeHash(c harnessContext) string {
-	raw, _ := json.Marshal([]string{c.TenantID, c.DepartmentID, c.ApplicationID, c.AgentID, c.AgentInstanceID, c.PrincipalType, c.ActorID, c.InstallationID, c.AgentVersionID, c.SessionID})
-	return fmt.Sprintf("%x", sha256.Sum256(raw))
+	return modelEvidenceScopeHash(scopeFromHarness(c))
 }
 
 func estimateModelCost(messages []struct {
@@ -1404,6 +1589,7 @@ func runeSum(s string) int {
 }
 
 func (m *Module) search(w http.ResponseWriter, r *http.Request) {
+	defer capabilityPhase(r.Context(), "knowledge.total")()
 	op, ok := m.authorize(w, r)
 	if !ok {
 		return
@@ -1471,7 +1657,7 @@ func (m *Module) search(w http.ResponseWriter, r *http.Request) {
 	if m.knowledge != nil {
 		searchCtx, stopSearch := context.WithCancel(r.Context())
 		defer stopSearch()
-		result, err := m.knowledge.Search(searchCtx, op.Context, knowledgeQuery{Query: strings.TrimSpace(in.Query), Answer: answer, SkillContext: skillContext, Scope: in.Scope, TopK: in.TopK, AsOf: in.AsOf, CacheMode: in.CacheMode, Documents: plan.Documents, GovernedDocuments: !plan.Legacy, Policy: op.Policy, ModelCall: m.knowledgeModelCall(r, op, searchCtx), ModelCheck: m.knowledgeModelCheck(r, op, searchCtx)})
+		result, err := m.knowledge.Search(searchCtx, op.Context, knowledgeQuery{Query: strings.TrimSpace(in.Query), Answer: answer, SkillContext: skillContext, Scope: in.Scope, TopK: in.TopK, AsOf: in.AsOf, CacheMode: in.CacheMode, Documents: plan.Documents, GovernedDocuments: !plan.Legacy, Policy: op.Policy, ModelCall: m.knowledgeModelCall(r, op, searchCtx), ModelCheck: m.knowledgeModelCheck(r, op, searchCtx), ModelReceiptCheck: m.knowledgeModelReceiptCheck(r, op, searchCtx), ModelCacheBinding: m.knowledgeModelCacheBinding(op, searchCtx), ModelInputFits: m.knowledgeModelInputFits(op), ModelSchemaInputFits: m.knowledgeModelSchemaInputFits(op), ModelParallelism: m.knowledgeModelParallelism(r, op), ObservePerformance: m.knowledgePerformanceObserver(scopeFromHarness(op.Context))})
 		if err != nil {
 			if errors.Is(err, errKnowledgeDocumentAuthority) {
 				m.error(w, http.StatusForbidden, "KNOWLEDGE_DOCUMENTS_DENIED", "knowledge source authorization failed", op.Context.TraceID)
@@ -1618,6 +1804,9 @@ func (m *Module) memory(w http.ResponseWriter, r *http.Request) {
 		saveErr = m.memoryStore.Save(mutationContext, scopeKey, entry, op.Policy.Memory.MaxEntries)
 	}
 	if err := saveErr; err != nil {
+		if m.capabilityCheckUnavailable(w, op, err) {
+			return
+		}
 		if errors.Is(err, errMemoryWriteDenied) {
 			m.error(w, http.StatusForbidden, "CAPABILITY_DENIED", "current execution authorization denied", op.Context.TraceID)
 			return
@@ -1742,7 +1931,10 @@ func (m *Module) tool(w http.ResponseWriter, r *http.Request) {
 	}
 	scopeHash := toolScopeHash(op.Context)
 	if m.runtimeConfirmationRequired(op.Policy.Tool.RequireConfirmation, in.Name) {
-		if m.checkToolConfirmation(r.Context(), in.ConfirmationToken, scopeFromHarness(op.Context), op.Policy.Hash, in.Name, in.CallID, fingerprint) != nil {
+		if err := m.checkToolConfirmation(r.Context(), in.ConfirmationToken, scopeFromHarness(op.Context), op.Policy.Hash, in.Name, in.CallID, fingerprint); err != nil {
+			if m.capabilityCheckUnavailable(w, op, err) {
+				return
+			}
 			m.error(w, http.StatusForbidden, "TOOL_CONFIRMATION_REQUIRED", "valid operation-bound confirmation is required", op.Context.TraceID)
 			return
 		}
@@ -1769,7 +1961,17 @@ func (m *Module) tool(w http.ResponseWriter, r *http.Request) {
 	}
 	var toolLease ToolExecutionLease
 	receiptQuery := ToolReceiptQuery{Scope: scopeFromHarness(op.Context), CallID: in.CallID, Name: in.Name, Fingerprint: fingerprint}
+	if described, ok := m.tools.(RemoteToolDescriber); ok {
+		if contract, remote := described.DescribeRemoteTool(in.Name); remote {
+			if contract.Validate() != nil {
+				m.error(w, 503, "TOOL_CONTRACT_UNAVAILABLE", "registered remote contract is invalid", op.Context.TraceID)
+				return
+			}
+			receiptQuery.RemoteContract = &contract
+		}
+	}
 	receiptQuery.RuntimeAudit = &ToolRuntimeAuditBinding{Descriptor: descriptor, PolicyHash: op.Policy.Hash}
+	receiptQuery.InputEvidence = toolInputEvidence(in.Payload)
 	if op.ToolApproval != nil {
 		digest := sha256.Sum256([]byte(op.ToolApproval.ApprovalID))
 		receiptQuery.RuntimeAudit.ApprovalDigest = fmt.Sprintf("%x", digest)
@@ -1796,7 +1998,13 @@ func (m *Module) tool(w http.ResponseWriter, r *http.Request) {
 	if seconds := op.Policy.Runtime.LeaseSeconds; seconds > 0 && seconds <= 600 {
 		toolLeaseTTL = time.Duration(seconds) * time.Second
 	}
-	if op.Policy.Runtime.TaskTimeoutSeconds >= 570 || op.Policy.Runtime.LeaseSeconds > 600 {
+	// A published batch window bounds the whole Run, not one tool call. Each
+	// call is still capped by the registered descriptor (at most 60s), with a
+	// separately bounded and supervised renewable lease. Keep the legacy window
+	// check unless an explicitly published, valid batch profile opts in.
+	batch := op.Policy.Runtime.Batch
+	longBatch := batch != nil && batch.Validate(op.Policy.Runtime.TaskTimeoutSeconds) == nil
+	if op.Policy.Runtime.TaskTimeoutSeconds >= 570 && !longBatch || op.Policy.Runtime.LeaseSeconds > 600 {
 		m.error(w, 403, "RUNTIME_POLICY_INVALID", "tool runtime policy exceeds supported bounds", op.Context.TraceID)
 		return
 	}
@@ -1855,7 +2063,8 @@ func (m *Module) tool(w http.ResponseWriter, r *http.Request) {
 	observeFailure := func(status int, code string, cause error) {
 		// Lost leases cannot be bypassed by switching back to the caller context.
 		if !watch.finish() {
-			m.error(w, http.StatusForbidden, "CAPABILITY_DENIED", "tool execution authority ended; result unavailable", op.Context.TraceID)
+			status, code := watch.failureStatus()
+			m.error(w, status, code, "tool supervision ended; reconcile the original operation receipt", op.Context.TraceID)
 			return
 		}
 		checkCtx, cancel := context.WithTimeout(callerRequest.Context(), 2*time.Second)
@@ -1897,10 +2106,10 @@ func (m *Module) tool(w http.ResponseWriter, r *http.Request) {
 			RecipientID: recipientID, Title: title, Text: text,
 		})
 		if enqueueErr != nil || strings.TrimSpace(receipt.EventID) == "" || strings.TrimSpace(receipt.Status) == "" {
-			m.recordToolError(r.Context(), scopeHash, in.CallID, fingerprint, enqueueErr)
 			if enqueueErr == nil {
 				enqueueErr = errors.New("notification receipt missing")
 			}
+			m.recordToolError(r.Context(), scopeHash, in.CallID, fingerprint, enqueueErr)
 			observeFailure(http.StatusServiceUnavailable, "NOTIFICATION_ENQUEUE_FAILED", enqueueErr)
 			return
 		}
@@ -1938,27 +2147,31 @@ func (m *Module) tool(w http.ResponseWriter, r *http.Request) {
 
 	{
 		watchOK := watch.finish()
-		var authorityErr error
-		if m.liveAuthority != nil {
-			checkCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-			authorityErr = m.validateLiveAuthority(checkCtx, op)
-			cancel()
-		}
-		if !watchOK || r.Context().Err() != nil || authorityErr != nil {
-			cause := errors.New("tool execution stopped")
-			if err := r.Context().Err(); err != nil {
-				cause = err
-			}
-			m.recordToolError(r.Context(), scopeHash, in.CallID, fingerprint, cause)
-			observeFailure(409, "TOOL_EXECUTION_STOPPED", cause)
-			return
-		}
-		if err := leaseStore.FinishTool(r.Context(), toolLease, storedOutput); err != nil {
+		// The provider returned a known result. Persist that fact under the
+		// original lease/fence before any disclosure check. Cancellation cannot
+		// turn an acknowledged effect into an unknown result. This bounded
+		// bookkeeping context cannot execute/renew the tool or revive its lease.
+		receiptCtx, closeReceipt := context.WithTimeout(context.WithoutCancel(r.Context()), 2*time.Second)
+		err := leaseStore.FinishTool(receiptCtx, toolLease, storedOutput)
+		closeReceipt()
+		if err != nil {
+			m.recordToolError(r.Context(), scopeHash, in.CallID, fingerprint, err)
 			observeFailure(http.StatusBadGateway, "TOOL_LEDGER_UNAVAILABLE", err)
 			return
 		}
+		logRuntimeObservation(observation)
+		if !watchOK {
+			status, code := watch.failureStatus()
+			m.error(w, status, code, "tool receipt retained; current result disclosure unavailable", op.Context.TraceID)
+			return
+		}
+		if errors.Is(r.Context().Err(), context.DeadlineExceeded) {
+			m.error(w, http.StatusGatewayTimeout, "TOOL_EXECUTION_TIMEOUT", "tool deadline elapsed; original operation receipt retained", op.Context.TraceID)
+			return
+		}
 	}
-	logRuntimeObservation(observation)
+	// This still checks the current context, policy, approval, IAM and workload
+	// before output is disclosed. No additional pre-ledger check is necessary.
 	m.toolObservedResult(w, r, op, in.Name, in.CallID, storedOutput)
 }
 
@@ -1995,11 +2208,28 @@ func (m *Module) failTool(ctx context.Context, scopeHash, callID, fingerprint, r
 func (m *Module) recordToolError(ctx context.Context, scope, id, fp string, cause error) {
 	// Generic downstream errors cannot prove rollback, including commit timeouts.
 	// 普通下游错误不能证明事务回滚，尤其是提交超时；不得盲目重试。
+	diagnostic := classifyToolFailure(cause)
+	log.Printf("tool failure cause scope_hash=%q call_id=%q cause_type=%s cause_stage=%s no_effect=%t", scope, id, diagnostic.causeType, diagnostic.causeStage, errors.Is(cause, ErrToolNotSubmitted))
+	ctx = context.WithValue(ctx, toolFailureDiagnosticKey{}, diagnostic)
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	if errors.Is(cause, ErrToolNotSubmitted) {
 		m.failTool(writeCtx, scope, id, fp, "TOOL_NOT_SUBMITTED")
 		return
+	}
+	// A PostgreSQL statement-level failure from the platform's own business
+	// transaction (data exception 22, integrity violation 23, syntax/access 42)
+	// happens before commit: the transaction rolled back atomically together with
+	// its ledger binding, receipt and audit rows, so the external effect is
+	// provably absent. Record it as a traceable failure instead of an unknown
+	// result that no receipt query can ever settle. Commit/connection timeouts
+	// stay unknown because they cannot prove rollback.
+	if state := sqlutil.SQLState(cause); len(state) >= 2 {
+		switch state[:2] {
+		case "22", "23", "42":
+			m.failTool(writeCtx, scope, id, fp, "TOOL_BUSINESS_WRITE_REJECTED")
+			return
+		}
 	}
 	if lease, ok := ctx.Value(toolLeaseContextKey{}).(ToolExecutionLease); ok {
 		store, supported := m.toolStore.(ToolExecutionLeaseStore)

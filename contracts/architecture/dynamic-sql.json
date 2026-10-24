@@ -28,7 +28,7 @@
     "reason": "Reviewed same-file usageWhere and fixed ordered step projection/page clauses; scope and pagination values are bound. Count and page read only usagecost-owned usage events."
   },
   "conversation/sql_store.go#*SQLStore.RecordRunWithMessage": {
-    "source_sha256": "55847b66363c12729f2e498fb5117d0efc46af6cc65c351bbd6c0f3625a1277d",
+    "source_sha256": "80606ce27f72685a108305aff9a24129da7d2d179ff4b441300d5165ef5be540",
     "tables": [
       "platform_conversation_message",
       "platform_conversation_session"
@@ -36,7 +36,7 @@
     "reason": "ownedMessageWhere is in the same source file; only fixed scope/owner/session/message predicates may be appended; IDs and content never form SQL. 已审阅同文件ownedMessageWhere，固定归属条件拼接，ID及正文不进入SQL字符串。 2026-09-30 人工复核：逐项检查现有函数及同文件 ownedMessageWhere，JOIN/列/作用域均固定，业务输入只绑定；新增完整导出使用静态 SQL，不登记跨文件 helper。 PostgreSQL migration review: unchanged owned-table whitelist and fixed predicates/statements; values remain bound after SQL assembly. Aggregate revision reads are serialized by the preceding message/session lock; failed regeneration inserts roll back before winner lookup. 2026-10-10 review: gofmt only; fixed ownedMessageWhere predicates and bound scope values retained."
   },
   "conversation/sql_store.go#*SQLStore.RecordRunResult": {
-    "source_sha256": "55847b66363c12729f2e498fb5117d0efc46af6cc65c351bbd6c0f3625a1277d",
+    "source_sha256": "80606ce27f72685a108305aff9a24129da7d2d179ff4b441300d5165ef5be540",
     "tables": [
       "platform_conversation_message",
       "platform_conversation_session"
@@ -44,7 +44,7 @@
     "reason": "ownedMessageWhere is in the same source file; only fixed scope/owner/session/message predicates may be appended; IDs and content never form SQL. 已审阅同文件ownedMessageWhere，固定归属条件拼接，ID及正文不进入SQL字符串。 2026-09-30 人工复核：逐项检查现有函数及同文件 ownedMessageWhere，JOIN/列/作用域均固定，业务输入只绑定；新增完整导出使用静态 SQL，不登记跨文件 helper。 PostgreSQL migration review: unchanged owned-table whitelist and fixed predicates/statements; values remain bound after SQL assembly. Aggregate revision reads are serialized by the preceding message/session lock; failed regeneration inserts roll back before winner lookup. 2026-10-10 review: gofmt only; fixed ownedMessageWhere predicates and bound scope values retained."
   },
   "conversation/sql_store.go#*SQLStore.ListMessages": {
-    "source_sha256": "55847b66363c12729f2e498fb5117d0efc46af6cc65c351bbd6c0f3625a1277d",
+    "source_sha256": "80606ce27f72685a108305aff9a24129da7d2d179ff4b441300d5165ef5be540",
     "tables": [
       "platform_conversation_message",
       "platform_conversation_session"
@@ -52,7 +52,7 @@
     "reason": "ownedMessageWhere is in the same source file; only fixed scope/owner/session/message predicates may be appended; IDs and content never form SQL. 已审阅同文件ownedMessageWhere，固定归属条件拼接，ID及正文不进入SQL字符串。 2026-09-30 人工复核：逐项检查现有函数及同文件 ownedMessageWhere，JOIN/列/作用域均固定，业务输入只绑定；新增完整导出使用静态 SQL，不登记跨文件 helper。 PostgreSQL migration review: unchanged owned-table whitelist and fixed predicates/statements; values remain bound after SQL assembly. Aggregate revision reads are serialized by the preceding message/session lock; failed regeneration inserts roll back before winner lookup. 2026-10-10 review: gofmt only; fixed ownedMessageWhere predicates and bound scope values retained."
   },
   "conversation/sql_store.go#*SQLStore.ReviseMessage": {
-    "source_sha256": "55847b66363c12729f2e498fb5117d0efc46af6cc65c351bbd6c0f3625a1277d",
+    "source_sha256": "80606ce27f72685a108305aff9a24129da7d2d179ff4b441300d5165ef5be540",
     "tables": [
       "platform_conversation_message",
       "platform_conversation_session"
@@ -60,7 +60,7 @@
     "reason": "ownedMessageWhere is in the same source file; only fixed scope/owner/session/message predicates may be appended; IDs and content never form SQL. 已审阅同文件ownedMessageWhere，固定归属条件拼接，ID及正文不进入SQL字符串。 2026-09-30 人工复核：逐项检查现有函数及同文件 ownedMessageWhere，JOIN/列/作用域均固定，业务输入只绑定；新增完整导出使用静态 SQL，不登记跨文件 helper。 PostgreSQL migration review: unchanged owned-table whitelist and fixed predicates/statements; values remain bound after SQL assembly. Aggregate revision reads are serialized by the preceding message/session lock; failed regeneration inserts roll back before winner lookup. 2026-10-10 review: gofmt only; fixed ownedMessageWhere predicates and bound scope values retained."
   },
   "conversation/sql_store.go#*SQLStore.Regenerate": {
-    "source_sha256": "55847b66363c12729f2e498fb5117d0efc46af6cc65c351bbd6c0f3625a1277d",
+    "source_sha256": "80606ce27f72685a108305aff9a24129da7d2d179ff4b441300d5165ef5be540",
     "tables": [
       "platform_conversation_message",
       "platform_conversation_session"
@@ -68,7 +68,7 @@
     "reason": "ownedMessageWhere is in the same source file; only fixed scope/owner/session/message predicates may be appended; IDs and content never form SQL. 已审阅同文件ownedMessageWhere，固定归属条件拼接，ID及正文不进入SQL字符串。 2026-09-30 人工复核：逐项检查现有函数及同文件 ownedMessageWhere，JOIN/列/作用域均固定，业务输入只绑定；新增完整导出使用静态 SQL，不登记跨文件 helper。 PostgreSQL migration review: unchanged owned-table whitelist and fixed predicates/statements; values remain bound after SQL assembly. Aggregate revision reads are serialized by the preceding message/session lock; failed regeneration inserts roll back before winner lookup. 2026-10-10 review: gofmt only; fixed ownedMessageWhere predicates and bound scope values retained."
   },
   "catalog/sql_store.go#*SQLStore.ListInstallations": {
-    "source_sha256": "fb1f93b429dd33e19bc0f3547318047016a2c3f22015aab2bcdfb1457e53d81e",
+    "source_sha256": "81d219fd2cb264c09937433073f2512b4cb994aa553cbf54af75249ab0383205",
     "tables": [
       "platform_catalog_installation",
       "platform_catalog_installation_options"
@@ -76,7 +76,7 @@
     "reason": "strings.Join combines three enumerated i.tenant_id/department_id/application_id predicates; arguments are bound separately, no input SQL fragments. 已审阅仅连接三个枚举作用域条件，输入值单独绑定，无用户SQL片段。 PostgreSQL迁移已复核：仍只拼接既有固定列/作用域/分页/状态条件，值经sqlutil.Bind参数绑定；未新增外部表或请求输入表名。"
   },
   "identity/first_administrator.go#*SQLStore.InitializeFirstAdministrator": {
-    "source_sha256": "f5411fb11d8962d85952c286ab477926547b5c892852ce4caa87e93bd6b13a5b",
+    "source_sha256": "94227ecc12670a41683c36922827598542baa07114f1c15c0b257bb322d60aea",
     "tables": [
       "platform_identity_agent_access_request",
       "platform_identity_application",
@@ -116,7 +116,7 @@
     "reason": "Reviewed 2026-10-04 current PostgreSQL local-password/OIDC first-administrator initialization. Dynamic empty-store reads accept only the source-defined Identity table whitelist, validated ASCII identifiers and quoted relation names; unknown Identity relations fail closed. All INSERT branches are fixed source literals with separate bound values. PostgreSQL metadata reads enumerate public relations; advisory lock and serializable transaction protect initialization. Audit/Outbox remain owning-module transaction ports. No request-provided SQL/table names or cross-module table access is admitted. Reviewed 2026-10-11: register exactly the four schema-owned department Agent policy/entry/change and permission batch relations added by the current migration. Each relation is validated as an ASCII identifier and a base table, quoted, and checked for existing rows under the same bootstrap transaction. Nonempty registered tables and unknown IAM-prefixed tables still reject initialization; no caller table names or cross-module relation is admitted."
   },
   "identity/permission_store.go#loadPermissionSnapshot": {
-    "source_sha256": "2ab444b8f9bee078c6c91b2eacebf7d36a6d57b22ef713cad01b3fafdddd1e0c",
+    "source_sha256": "8e02c8d6a847c52f941d3d8a655a1c8ff9748216b0e107e0e51cfa3885be7d23",
     "tables": [
       "platform_identity_role_definition",
       "platform_identity_membership",
@@ -136,7 +136,7 @@
     "tables": [
       "platform_conversation_session"
     ],
-    "source_sha256": "15ccbd56265efe2bfcd9695ba6926260dd9567e5655829d9e3c3076e4b9ff46a",
+    "source_sha256": "a4bd6090713cf0755519c4d593a9f5c1d1996e64a93c0be18f2655a47688efc1",
     "reason": "Reviewed same-file historyAccessWhere: fixed columns and allow/deny operators only, all resource/owner/object/filter values bound. Authorization filters precede COUNT and LIMIT within one repeatable-read transaction. PostgreSQL migration review: fixed authorization filters and/or source-owned deletion statement list unchanged; all values bound after assembly, no caller-selected table name."
   },
   "identity/permission_migration_source.go#migrationAuthenticationDigest": {
@@ -172,19 +172,19 @@
     "reason": "Erasure statements are fixed literals in this source file; no job or caller selects SQL/table names. All tenant/application/session values are bound parameters; audit/execution facts are accessed through transaction ports. PostgreSQL migration review: fixed authorization filters and/or source-owned deletion statement list unchanged; all values bound after assembly, no caller-selected table name."
   },
   "sqlutil/transaction_db.go#transactionConnection.ExecContext": {
-    "source_sha256": "a332aabc02e283f5f7e72d3668ec3d5c0e84217b2a44c2d0c9811961f58ae0ff",
+    "source_sha256": "35a87fd3cc0b819783f3cd031110e76a3c22b6191953d84581e856b916fef927",
     "tables": [],
     "forwarding": true,
     "reason": "Reviewed transaction-only database/sql adapter passes the query identifier unchanged to its owned transaction. No SQL is constructed, no table ownership granted; caller repository SQL remains checked by the existing module boundary gate. Exact method/source hash and query identifier required."
   },
   "sqlutil/transaction_db.go#transactionConnection.QueryContext": {
-    "source_sha256": "a332aabc02e283f5f7e72d3668ec3d5c0e84217b2a44c2d0c9811961f58ae0ff",
+    "source_sha256": "35a87fd3cc0b819783f3cd031110e76a3c22b6191953d84581e856b916fef927",
     "tables": [],
     "forwarding": true,
     "reason": "Reviewed transaction-only database/sql adapter passes the query identifier unchanged to its owned transaction. No SQL is constructed, no table ownership granted; caller repository SQL remains checked by the existing module boundary gate. Exact method/source hash and query identifier required."
   },
   "identity/principal_directory.go#*SQLStore.PagePermissionPrincipals": {
-    "source_sha256": "f7ab0cc0ffc738fe3175ef482c58b74b76e76966edd1952f02df5ce5658bdc67",
+    "source_sha256": "95de3ab26e2970a2764fca75b0599adcdca57a0abf14022f25d8166ca2e6d0d4",
     "tables": [
       "platform_identity_principal",
       "platform_identity_membership"
@@ -200,14 +200,14 @@
     "reason": "Reviewed CheckDescendantStopTx bounded level traversal and same-file descendantStopInClause: validated route keys determine only placeholder count; all keys are bound values. The fixed batch queries read only the agentcoordination-owned route and child-reservation tables. 2026-10-07 external-root provenance port only; fixed SQL and bound placeholders unchanged, owner tables unchanged. 2026-10-10 review: batch queries use only the same-file descendantStopInClause which emits comma-separated question-mark placeholders; validated parent keys are bound, both relations remain agentcoordination-owned."
   },
   "execution/sql_store.go#readExecutionRun": {
-    "source_sha256": "bc56533ab6b248dd27c6ab72f016242bdc735de6843ebb3ab6cc2d58d4dfc0db",
+    "source_sha256": "73610203fa15cf371c0bf24250f7a402dc416758b8f1fda6fbaf6730910e460e",
     "tables": [
       "platform_execution_run"
     ],
     "reason": "Reviewed fixed Run projection query; the only SQL suffix is an enum-constrained empty string or FOR UPDATE, run ID is bound, and only the execution-owned Run table is read. 2026-10-10 review: fixed Run projection, validated empty/FOR UPDATE suffix and bound run ID retained; storage field now uses the cancellation protocol interface."
   },
   "execution/budget_run.go#*SQLStore.readBudgetRun": {
-    "source_sha256": "f1af51f80ffb93d87c72d7f721f123b639050a98b212f74a8f40f27ad3b228ee",
+    "source_sha256": "f27755c91fbfcdbb7744bc162e73ca46b52cc790d0a896e9a8abd4b6a64644dd",
     "tables": [
       "platform_execution_run"
     ],
@@ -228,7 +228,7 @@
     "reason": "2026-10-06 reviewed existing/existingShared: SELECT projection and parent_key/operation_key predicates fixed; lock suffix is checked against exactly FOR UPDATE or FOR SHARE before SQL construction. Caller values remain bound and only agentcoordination-owned platform_agent_route is read. 2026-10-07 external-root provenance port only; fixed SQL and bound placeholders unchanged, owner tables unchanged."
   },
   "compensation/sql_store.go#protectHistoryGrants": {
-    "source_sha256": "394579ca66b9566e98449cb938a96638d887253552a1f75fdee530aa3946f8b1",
+    "source_sha256": "dbf652616284c006ce2ca367c809450f146c2b30b376595fa80fde33639158b2",
     "tables": [
       "platform_compensation_schema_version",
       "platform_cancellation_operation",
@@ -255,5 +255,44 @@
       "platform_notification_inbox"
     ],
     "reason": "Migration-only REVOKE: two fixed owned-table and privilege pairs; PostgreSQL ACL role names and the fixed public/table pair use pgx.Identifier; exact PUBLIC is a keyword. No request fragments, foreign table access or added grants."
+  },
+  "identity/principal_directory.go#*SQLStore.pageHumanDirectory": {
+    "source_sha256": "95de3ab26e2970a2764fca75b0599adcdca57a0abf14022f25d8166ca2e6d0d4",
+    "tables": [
+      "platform_identity_principal",
+      "platform_identity_membership"
+    ],
+    "reason": "Reviewed 2026-10-10: pageHumanDirectory constructs only fixed Identity principal/company/exact-account and active department membership EXISTS predicates. Company candidates and department members share count/page in one repeatable-read snapshot, after live scope-specific membership.manage evaluation. All values and pagination remain parameter-bound. No external table or caller-supplied SQL."
+  },
+  "capability/billing_admin.go#*SQLModelInvocationStore.listBilling": {
+    "source_sha256": "40efe6f48d58f55854a5fb398a58a18241a516b9b4959e3eef569011fca7fe6f",
+    "tables": [
+      "platform_model_invocation"
+    ],
+    "reason": "Reviewed 2026-10-17 (W05): the dynamic fragment is only one of two fixed internal filter literals (billing_state IN (manual,decision_pending) / billing_state=resolved) chosen by ListBillingManual; the table, columns, ordering and bound limit stay constant, and the caller caps unresolved rows."
+  },
+  "execution/sql_task_guard.go#*SQLStore.checkExecutionLeaseTx": {
+    "source_sha256": "24296f62d3162fc7d2df6de4645076838f6b24b27e03b0298596fdc7c73b86f7",
+    "tables": [
+      "platform_execution_run",
+      "platform_execution_session_lease"
+    ],
+    "reason": "Reviewed 2026-10-18 R34: both fixed projections and bound ID predicates append only FOR UPDATE or FOR SHARE selected by an internal bool. These row fences cover recovery writers and session ownership not covered by the per-Run advisory. Shared checkpoint/capability readers remain concurrent. No external SQL or foreign tables."
+  },
+  "identity/permission_snapshot_header.go#loadPermissionSnapshotFacts": {
+    "source_sha256": "090da4ca05430f6be8a8dafc03b50452ad9480b23dbed305f1186be774485ce1",
+    "tables": [
+      "platform_identity_principal",
+      "platform_identity_policy_migration",
+      "platform_identity_role_definition",
+      "platform_identity_membership",
+      "platform_identity_role_binding",
+      "platform_identity_delegation",
+      "platform_identity_grant",
+      "platform_identity_task_assignment",
+      "platform_identity_department_agent_policy",
+      "platform_identity_department_agent_entry"
+    ],
+    "reason": "Reviewed combined principal facts and native department ceiling projection. Fixed correlated same-owner SELECT/JSON aggregation binds tenant, subject and installation to the selected principal. All caller values are bound. Current ceiling source generations and entry validity are validated after decode; no authorization decision or MVCC snapshot is cached."
   }
 }

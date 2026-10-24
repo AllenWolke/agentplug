@@ -223,14 +223,17 @@ class ExecutionLifecycle:
                  authorize_events: Callable[[EventRequest], Awaitable[None]] | None = None,
                  load_checkpoint: CheckpointHook | None = None,
                  load_recovery_checkpoint: RecoveryCheckpointHook | None = None,
-                 recovery_checkpoint_selector: RecoveryCheckpointSelector | None = None):
+                 recovery_checkpoint_selector: RecoveryCheckpointSelector | None = None,
+                 load_recovery_reference_page=None, output_schema_selector=None):
         self.store, self.registry = store, registry
         self.business, self.authorize_current = business, authorize_current
         self.output_schema = output_schema
+        self.output_schema_selector=output_schema_selector
         self.validate_input = validate_input
         self.authorize_events = authorize_events
         self.load_checkpoint = load_checkpoint
         self.load_recovery_checkpoint = load_recovery_checkpoint
+        self.load_recovery_reference_page=load_recovery_reference_page
         self.recovery_checkpoint_selector = recovery_checkpoint_selector
         self._generations: dict[str, _Generation] = {}
         self._origins: dict[str, str] = {}
@@ -384,7 +387,7 @@ class ExecutionLifecycle:
                 or self._origins.get(run_id) not in {"invoke", "run"}
                 or not self.registry.has_generation_exit_proof(identity.key)
                 or response.run_id != run_id or response.status != "failed"
-                or response.output_schema != self.output_schema or response.output
+                or response.output_schema != self._output_schema(request) or response.output
                 or error is None or error.model_dump() != expected_error.model_dump()):
             raise DomainExecutionError("RUN_RESULT_UNCONFIRMED")
         if (record is None or record.run_id != run_id or record.status != "failed"
@@ -437,7 +440,7 @@ class ExecutionLifecycle:
         if event.run_id != run_id or event.event_type != "failed" or event.payload != {"code": "INVALID_REQUEST"}:
             raise DomainExecutionError("RUN_RESULT_UNCONFIRMED")
         self._preflight_rejections[run_id] = identity
-        return ExecuteResponse(run_id=run_id, status="failed", output_schema=self.output_schema,
+        return ExecuteResponse(run_id=run_id, status="failed", output_schema=self._output_schema(request),
                                error=error)
 
     def _response(self, request: ExecuteRequest) -> ExecuteResponse:
@@ -448,7 +451,7 @@ class ExecutionLifecycle:
                 self._generations[request.scope.run_id].key):
             raise DomainExecutionError("RUN_RESULT_UNCONFIRMED")
         return ExecuteResponse(run_id=record.run_id, status=record.status,
-                               output_schema=self.output_schema,
+                               output_schema=self._output_schema(request),
                                output=record.output, error=record.error)
 
     async def invoke(self, request: ExecuteRequest) -> ExecuteResponse:
@@ -500,7 +503,7 @@ class ExecutionLifecycle:
         previous = self._generations.get(run_id)
         if run_id != request.scope.run_id:
             raise DomainExecutionError("RUN_GENERATION_UNVERIFIED")
-        if resume_input.get("version") == "runtime-recovery/v1":
+        if resume_input.get("version") in ("runtime-recovery/v1","runtime-recovery/v2"):
             return await self._resume_runtime_recovery(
                 request, identity, current_revision, previous, resume_input,
             )
@@ -563,6 +566,7 @@ class ExecutionLifecycle:
     def _runtime_recovery_reference(
         request: ExecuteRequest, identity: _Generation, execution_revision: int,
         resume_input: dict[str, Any],
+        *, maximum_checkpoints: int = 128,
     ) -> tuple[dict[str, Any], list[dict[str, Any]], tuple[AgentGroupHandoff, list[dict[str, Any]]] | None]:
         deny = lambda: DomainExecutionError("RUN_RESUME_UNCONFIRMED")
         required = {"version", "origin_operation", "reference"}
@@ -599,7 +603,7 @@ class ExecutionLifecycle:
             review = resume_input["business_review"]
             if (ref.get("operation") != "resume" or "confirmation_token" in resume_input or "group_resume" in resume_input
                     or not isinstance(review, dict) or set(review) != {"decision", "reviewer_id"}
-                    or review.get("decision") not in {"approve", "reject"}
+                    or review.get("decision") not in {"approve", "reject", "request_changes"}
                     or not isinstance(review.get("reviewer_id"), str) or re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", review["reviewer_id"]) is None
                     or review["reviewer_id"] == request.scope.principal_id):
                 raise deny()
@@ -641,7 +645,7 @@ class ExecutionLifecycle:
             raise deny()
 
         checkpoints = ref.get("checkpoints")
-        if not isinstance(checkpoints, list) or not 1 <= len(checkpoints) <= 128:
+        if maximum_checkpoints not in {128, 8192} or not isinstance(checkpoints, list) or not 1 <= len(checkpoints) <= maximum_checkpoints:
             raise deny()
         checkpoint_fields = {
             "state_key", "revision", "schema_id", "content_hash",
@@ -659,7 +663,7 @@ class ExecutionLifecycle:
                     or state_key <= previous_key
                     or not isinstance(content_hash, str) or re.fullmatch(r"[a-f0-9]{64}", content_hash) is None
                     or not _safe_group_schema(schema_id)
-                    or type(state_revision) is not int or not 1 <= state_revision <= 64
+                    or type(state_revision) is not int or not 1 <= state_revision <= 4096
                     or type(state_execution_revision) is not int
                     or not 1 <= state_execution_revision <= stopped
                     or not isinstance(expiry, str)):
@@ -739,7 +743,7 @@ class ExecutionLifecycle:
                     or state_key <= previous_key
                     or not _safe_group_schema(schema_id)
                     or not isinstance(content_hash, str) or re.fullmatch(r"[a-f0-9]{64}", content_hash) is None
-                    or type(revision) is not int or not 1 <= revision <= 64
+                    or type(revision) is not int or not 1 <= revision <= 4096
                     or type(state_execution_revision) is not int
                     or not 1 <= state_execution_revision <= receipt.execution_revision
                     or not isinstance(expiry, str)):
@@ -769,7 +773,7 @@ class ExecutionLifecycle:
         reference: dict[str, Any], result: Any,
     ) -> None:
         deny = lambda: DomainExecutionError("RUN_RESUME_UNCONFIRMED")
-        if (not isinstance(result, dict) or set(result) != {"state_key", "checkpoint"}
+        if (not isinstance(result, dict) or set(result) - {"checkpoint_history"} != {"state_key", "checkpoint"}
                 or result.get("state_key") != reference["state_key"]):
             raise deny()
         checkpoint = result.get("checkpoint")
@@ -787,6 +791,9 @@ class ExecutionLifecycle:
             raise deny()
         if (type(checkpoint.get("revision")) is not int
                 or type(checkpoint.get("execution_revision")) is not int):
+            raise deny()
+        from .checkpoint_capacity import reply_limit
+        if not 1 <= checkpoint["revision"] <= reply_limit(result):
             raise deny()
         # Compare instants as timestamps while retaining exact string type/shape
         # checks from the signed reference validator above.
@@ -867,7 +874,7 @@ class ExecutionLifecycle:
                     or len(schema_id) <= len("schema://") or len(schema_id) > 256
                     or any(character in schema_id for character in "\x00\r\n\t* ")
                     or not isinstance(content_hash, str) or re.fullmatch(r"[a-f0-9]{64}", content_hash) is None
-                    or type(state_revision) is not int or not 1 <= state_revision <= 64
+                    or type(state_revision) is not int or not 1 <= state_revision <= 4096
                     or type(state_execution_revision) is not int
                     or not 1 <= state_execution_revision <= receipt.execution_revision
                     or not isinstance(expiry, str)):
@@ -1104,14 +1111,30 @@ class ExecutionLifecycle:
         finally:
             current_agent_group_resume.reset(context_token)
 
+    def _output_schema(self,request):
+        value=self.output_schema_selector(request) if self.output_schema_selector else self.output_schema
+        if not isinstance(value,str) or not value.startswith("schema://") or len(value)>256:
+            raise DomainExecutionError("OUTPUT_SCHEMA_INVALID")
+        return value
+
+    async def _runtime_parts(self,request,identity,revision,resume_input):
+        maximum=128
+        if resume_input.get("version")=="runtime-recovery/v2":
+            if self.load_recovery_reference_page is None: raise DomainExecutionError("RUN_RESUME_UNCONFIRMED")
+            await self.authorize_current(request)
+            from .checkpoint_reference_set import expand_reference_set
+            async def fetch(group,offset,limit):
+                return await self.load_recovery_reference_page(request,group,offset,limit)
+            resume_input=await expand_reference_set(resume_input,fetch)
+            maximum=8192
+        return self._runtime_recovery_reference(request,identity,revision,resume_input,maximum_checkpoints=maximum)
+
     async def _resume_runtime_recovery(
         self, request: ExecuteRequest, identity: _Generation, execution_revision: int,
         previous: _Generation | None, resume_input: dict[str, Any],
     ) -> ExecuteResponse:
         deny = lambda: DomainExecutionError("RUN_RESUME_UNCONFIRMED")
-        ref, checkpoints, group_resume = self._runtime_recovery_reference(
-            request, identity, execution_revision, resume_input,
-        )
+        ref, checkpoints, group_resume = await self._runtime_parts(request,identity,execution_revision,resume_input)
         run_id = request.scope.run_id
         expected_origin = group_resume[0].origin_operation if group_resume is not None else "invoke"
         replay = await self._same_generation_runtime_replay(
@@ -1326,12 +1349,10 @@ class ExecutionLifecycle:
         previous = self._generations.get(request.scope.run_id)
         expected_origin = ""
         group_resume = None
-        if resume_input.get("version") == "runtime-recovery/v1":
+        if resume_input.get("version") in ("runtime-recovery/v1","runtime-recovery/v2"):
             # Re-parse every signed stop/business binding, but do not reload old
             # State heads: the exact admitted handler may already have advanced them.
-            _, _, group_resume = self._runtime_recovery_reference(
-                request, identity, current_revision, resume_input,
-            )
+            _, _, group_resume = await self._runtime_parts(request,identity,current_revision,resume_input)
             expected_origin = group_resume[0].origin_operation if group_resume is not None else "invoke"
         elif resume_input.get("version") == "agent-group-resume/v1":
             group_resume = self._agent_group_resume_parts(
@@ -1420,7 +1441,7 @@ class ExecutionLifecycle:
         if (not isinstance(reference, dict) or set(reference) != fields
                 or reference["namespace"] != "harness" or reference["key"] != receipt.harness_key
                 or reference["schema_id"] != "schema://agentplug/harness-loop/v1"
-                or type(reference["revision"]) is not int or not 1 <= reference["revision"] <= 64
+                or type(reference["revision"]) is not int or not 1 <= reference["revision"] <= 4096
                 or type(reference["execution_revision"]) is not int
                 or reference["execution_revision"] != receipt.execution_revision
                 or not isinstance(reference["content_hash"], str)
@@ -1522,7 +1543,7 @@ class ExecutionLifecycle:
                 raise asyncio.CancelledError
             self.store.complete(run_id, output)
             return ExecuteResponse(run_id=run_id, status="succeeded",
-                                   output_schema=self.output_schema, output=output)
+                                   output_schema=self._output_schema(request), output=output)
         except AgentGroupPause as pause:
             postprocess_token = None
             try:
@@ -1600,7 +1621,7 @@ class ExecutionLifecycle:
                 # Factory finalization still requires actual Registry exit,
                 # exact event/scope/idempotency bindings and no output.
                 return ExecuteResponse(run_id=run_id, status="failed",
-                                       output_schema=self.output_schema, error=error)
+                                       output_schema=self._output_schema(request), error=error)
             raise
 
     async def events(self, run_id: str, request: EventRequest, authorization: str) -> Any:

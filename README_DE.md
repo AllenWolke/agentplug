@@ -10,6 +10,8 @@
 
 </div>
 
+**Neue gemeinsame Funktionen:** Modellrouting, strukturierte Ausgaben, persistente Workflows, aktuelle Referenzberechtigungen sowie Kafka-Benachrichtigungen und Kompensation bei Abbruch. SDK-Funktionen: 2.1.0, Vorlagen: 1.1.0, Beispielagenten: 0.3.0 mit v3-Schemas. [Funktionen und Kompatibilität auf Englisch](docs/releases/public-capabilities-2.1.en.md).
+
 AgentPlug ist eine Plattform für Entwicklung, Ausführung und Governance von Unternehmensagenten. Erstellen Sie Agenten in **Go, Python oder Java**, stellen Sie diese unabhängig bereit und geben Sie sie für ausgewählte Unternehmen, Abteilungen und Benutzer frei. Über die SDKs nutzen Agenten gemeinsame Modellzugriffe, Wissenssuche, Werkzeuge, Speicher, Checkpoints und Zusammenarbeit.
 
 Die Konsole unterstützt **Chinesisch / Englisch**, mit sichtbaren Schaltern bei der Anmeldung und in der Kopfleiste. Die deutsche Dokumentation bedeutet keine deutsche Benutzeroberfläche. Für Anwender gibt es ein [englisches Handbuch](docs/用户手册/README.en.md).
@@ -99,7 +101,7 @@ Der Agentenkatalog ist zunächst leer. Nach dem Start der Basisdienste folgen En
 
 ### Lokaler Quellcode
 
-Installieren Sie Go 1.26.9+, Node.js 20+, Python 3.12+ und PostgreSQL 16 + pgvector. Java-Agenten benötigen zusätzlich JDK 21 und Maven. Bereiten Sie die vier privaten Konfigurationen gemäß [Hostbereitstellung, Englisch](docs/developer/en/deployment.md#local-source-and-host-processes) vor.
+Installieren Sie Go 1.26.10+, Node.js 20+, Python 3.12+ und PostgreSQL 16 + pgvector. Java-Agenten benötigen zusätzlich JDK 21 und Maven. Bereiten Sie die vier privaten Konfigurationen gemäß [Hostbereitstellung, Englisch](docs/developer/en/deployment.md#local-source-and-host-processes) vor.
 
 ```text
 python scripts/local.py build

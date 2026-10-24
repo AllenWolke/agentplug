@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/lexagent/platform/internal/sharedkernel"
 	"github.com/lexagent/platform/internal/sqlutil"
@@ -14,12 +15,20 @@ type MembershipCandidateRepository interface {
 	PageMembershipCandidates(context.Context, sharedkernel.Scope, string, int, int) (OrganizationPage[Principal], error)
 }
 
+type ScopedMembershipCandidateRepository interface {
+	PageMembershipCandidatesInDepartment(context.Context, sharedkernel.Scope, ManagementScope, string, int, int) (OrganizationPage[Principal], error)
+}
+
 // A member manager may search existing active accounts in the same company to
 // invite them into their department. This exposes identity metadata only,
 // never another department's roles, grants, memberships or credentials.
 func (s *SQLStore) PageMembershipCandidates(ctx context.Context, actor sharedkernel.Scope, id string, page, size int) (OrganizationPage[Principal], error) {
+	return s.PageMembershipCandidatesInDepartment(ctx, actor, ManagementScope{Type: "department", TenantID: actor.TenantID, DepartmentID: actor.DepartmentID}, id, page, size)
+}
+
+func (s *SQLStore) PageMembershipCandidatesInDepartment(ctx context.Context, actor sharedkernel.Scope, scope ManagementScope, id string, page, size int) (OrganizationPage[Principal], error) {
 	result := OrganizationPage[Principal]{Items: []Principal{}, Page: page, PageSize: size}
-	if actor.Validate() != nil || actor.PrincipalType != string(PrincipalUser) || page < 1 || page > 100000 || size < 1 || size > 100 || len(id) > 128 {
+	if actor.Validate() != nil || actor.PrincipalType != string(PrincipalUser) || scope.Type != "department" || scope.Validate() != nil || page < 1 || page > 100000 || size < 1 || size > 100 || len(id) > 128 {
 		return result, ErrInvalidResource
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
@@ -27,13 +36,15 @@ func (s *SQLStore) PageMembershipCandidates(ctx context.Context, actor sharedker
 		return result, err
 	}
 	defer tx.Rollback()
-	scope := ManagementScope{Type: "department", TenantID: actor.TenantID, DepartmentID: actor.DepartmentID}
 	if err := validatePermissionScope(ctx, tx, scope); err != nil {
 		return result, err
 	}
 	owner, err := loadPermissionSnapshot(ctx, tx, PrincipalUser, actor.PrincipalID)
 	if err != nil {
 		return result, err
+	}
+	if owner.Principal.TenantID != actor.TenantID {
+		return result, ErrPermissionDenied
 	}
 	allowed, err := managementCapabilityAvailable(owner, PermissionQuery{Action: "membership.manage", Scope: scope, Now: s.clock().UTC()})
 	if err != nil {
@@ -42,10 +53,10 @@ func (s *SQLStore) PageMembershipCandidates(ctx context.Context, actor sharedker
 	if !allowed {
 		return result, ErrPermissionDenied
 	}
-	if err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT COUNT(*) FROM platform_identity_principal WHERE principal_type='user' AND tenant_id=? AND active=TRUE AND (?='' OR id=?)`), actor.TenantID, id, id).Scan(&result.Total); err != nil {
+	if err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT COUNT(*) FROM platform_identity_principal WHERE principal_type='user' AND tenant_id=? AND active=TRUE AND (?='' OR id=?)`), scope.TenantID, id, id).Scan(&result.Total); err != nil {
 		return result, err
 	}
-	rows, err := tx.QueryContext(ctx, sqlutil.Bind(`SELECT id,principal_type,tenant_id,active,revision FROM platform_identity_principal WHERE principal_type='user' AND tenant_id=? AND active=TRUE AND (?='' OR id=?) ORDER BY id LIMIT ? OFFSET ?`), actor.TenantID, id, id, size, (page-1)*size)
+	rows, err := tx.QueryContext(ctx, sqlutil.Bind(`SELECT id,principal_type,tenant_id,active,revision FROM platform_identity_principal WHERE principal_type='user' AND tenant_id=? AND active=TRUE AND (?='' OR id=?) ORDER BY id LIMIT ? OFFSET ?`), scope.TenantID, id, id, size, (page-1)*size)
 	if err != nil {
 		return result, err
 	}
@@ -84,7 +95,27 @@ func (m *Module) membershipCandidates(w http.ResponseWriter, r *http.Request) {
 		m.error(w, http.StatusServiceUnavailable, "PERMISSION_SERVICE_UNAVAILABLE")
 		return
 	}
-	result, err := store.PageMembershipCandidates(r.Context(), actor.Scope, strings.TrimSpace(r.URL.Query().Get("principal_id")), page, size)
+	scope := memberDepartmentScope(r, actor)
+	var result OrganizationPage[Principal]
+	var err error
+	if scope.TenantID != actor.Scope.TenantID || scope.DepartmentID != actor.Scope.DepartmentID {
+		allowed := false
+		if actor.Policy != nil {
+			allowed, err = managementCapabilityAvailable(*actor.Policy, PermissionQuery{Action: "membership.manage", Scope: scope, Now: time.Now().UTC()})
+		}
+		if err != nil || !allowed {
+			m.permissionError(w, ErrPermissionDenied)
+			return
+		}
+		scoped, supported := m.store.(ScopedMembershipCandidateRepository)
+		if !supported {
+			m.permissionError(w, ErrPermissionDenied)
+			return
+		}
+		result, err = scoped.PageMembershipCandidatesInDepartment(r.Context(), actor.Scope, scope, strings.TrimSpace(r.URL.Query().Get("principal_id")), page, size)
+	} else {
+		result, err = store.PageMembershipCandidates(r.Context(), actor.Scope, strings.TrimSpace(r.URL.Query().Get("principal_id")), page, size)
+	}
 	if err != nil {
 		m.permissionError(w, err)
 		return

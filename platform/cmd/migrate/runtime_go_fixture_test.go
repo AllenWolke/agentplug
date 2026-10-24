@@ -38,6 +38,8 @@ type runtimeGoFixture struct {
 	cache                                               *runtimeKnowledgeReplay
 	answerCache                                         bool
 	python                                              bool
+	java                                                bool
+	toolLoop                                            bool
 	taskTimeoutSeconds                                  int
 }
 
@@ -58,10 +60,18 @@ func prepareRuntimeGoFixture(t *testing.T, ctx context.Context, db *sql.DB, base
 	t.Helper()
 	f := runtimeGoFixture{scope: base.scope, address: processFreeAddress(t), internal: processFreeAddress(t), calls: &atomic.Int32{}}
 	f.answerCache = os.Getenv("PLATFORM_TEST_PUBLIC_ANSWER_CACHE") == "1"
+	f.toolLoop = os.Getenv("PLATFORM_TEST_EXAMPLE_TOOL_LOOP") == "1"
 	f.scope.AgentID = "example-go-operations"
 	f.python = os.Getenv("PLATFORM_TEST_PYTHON_RUNTIME_CONFIG") != ""
+	f.java = os.Getenv("PLATFORM_TEST_JAVA_RUNTIME_CONFIG") != ""
+	if f.python && f.java {
+		t.Fatal("one external example process per isolated fixture")
+	}
 	if f.python {
 		f.scope.AgentID = "example-python-documents"
+	}
+	if f.java {
+		f.scope.AgentID = "example-java-tickets"
 	}
 	f.scope.AgentVersionID = "go-process-version"
 	f.scope.InstallationID = "go-process-install"
@@ -78,9 +88,15 @@ func prepareRuntimeGoFixture(t *testing.T, ctx context.Context, db *sql.DB, base
 	if f.python {
 		directory = filepath.Join("..", "..", "..", "examples", "python-documents")
 	}
+	if f.java {
+		directory = filepath.Join("..", "..", "..", "examples", "java-tickets")
+	}
 	f.binary = filepath.Join(t.TempDir(), "go-operations")
 	artifact := os.Getenv("PLATFORM_TEST_PYTHON_ARTIFACT")
-	if !f.python {
+	if f.java {
+		artifact = os.Getenv("PLATFORM_TEST_JAVA_ARTIFACT")
+	}
+	if !f.python && !f.java {
 		command := exec.CommandContext(ctx, "go", "build", "-race", "-o", f.binary, ".")
 		command.Dir = directory
 		if raw, err := command.CombinedOutput(); err != nil {
@@ -93,7 +109,7 @@ func prepareRuntimeGoFixture(t *testing.T, ctx context.Context, db *sql.DB, base
 		digest := sha256.Sum256(binary)
 		artifact = "sha256:" + hex.EncodeToString(digest[:])
 	} else if !strings.HasPrefix(artifact, "sha256:") || len(artifact) != 71 {
-		t.Fatal("formal Python image digest required")
+		t.Fatal("formal external example image digest required")
 	}
 	read := func(name string) json.RawMessage {
 		t.Helper()
@@ -104,6 +120,7 @@ func prepareRuntimeGoFixture(t *testing.T, ctx context.Context, db *sql.DB, base
 		return raw
 	}
 	seedRuntimeCatalog(t, ctx, db, f.scope, read("manifest.json"), read("input.schema.json"), read("output.schema.json"), artifact, "http://"+f.address)
+	var toolRequested atomic.Bool
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer isolated-process-provider-key" {
 			http.Error(w, "invalid provider credential", 403)
@@ -112,6 +129,7 @@ func prepareRuntimeGoFixture(t *testing.T, ctx context.Context, db *sql.DB, base
 		var input struct {
 			Input    []string                         `json:"input"`
 			Messages []struct{ Role, Content string } `json:"messages"`
+			Tools    []json.RawMessage                `json:"tools"`
 		}
 		if json.NewDecoder(r.Body).Decode(&input) != nil {
 			http.Error(w, "invalid provider request", 400)
@@ -129,6 +147,10 @@ func prepareRuntimeGoFixture(t *testing.T, ctx context.Context, db *sql.DB, base
 		}
 		if r.URL.Path != "/v1/chat/completions" || len(input.Messages) < 2 {
 			http.Error(w, "invalid chat request", 400)
+			return
+		}
+		if f.toolLoop && len(input.Tools) > 0 && toolRequested.CompareAndSwap(false, true) {
+			json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"finish_reason": "tool_calls", "message": map[string]any{"role": "assistant", "content": "", "tool_calls": []modelgateway.ToolCall{{ID: "process-inspect-call", Type: "function", Function: modelgateway.FunctionCall{Name: "inspect", Arguments: "{}"}}}}}}, "usage": map[string]int{"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30}})
 			return
 		}
 		text := "Check request tracing and latency baselines before changing configuration."
@@ -203,6 +225,9 @@ func prepareRuntimeGoFixture(t *testing.T, ctx context.Context, db *sql.DB, base
 	if f.python {
 		skillID = "example.documents.guidance"
 	}
+	if f.java {
+		skillID = "example.tickets.guidance"
+	}
 	skillPath := filepath.Join(directory, "skills", "guidance.v1.json")
 	skillJSON, err := os.ReadFile(skillPath)
 	if err != nil {
@@ -248,6 +273,12 @@ func prepareRuntimeGoFixture(t *testing.T, ctx context.Context, db *sql.DB, base
 		snapshot.Knowledge.DocumentBindings[0].KnowledgeScope = "python-documents"
 		snapshot.Knowledge.DocumentBindings[0].KnowledgeBaseID = "python-documents"
 		snapshot.Knowledge.DocumentBindings[0].OwnershipSource = "source:python-documents/runbook"
+	}
+	if f.java {
+		snapshot.Knowledge.AllowedScopes = []string{"java-tickets"}
+		snapshot.Knowledge.DocumentBindings[0].KnowledgeScope = "java-tickets"
+		snapshot.Knowledge.DocumentBindings[0].KnowledgeBaseID = "java-tickets"
+		snapshot.Knowledge.DocumentBindings[0].OwnershipSource = "source:java-tickets/runbook"
 	}
 	if f.live {
 		snapshot.Model.AllowExternal = true

@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"bytes"
 	"container/list"
 	"context"
 	"crypto/sha256"
@@ -9,6 +10,51 @@ import (
 	"sync"
 	"time"
 )
+
+// A caller can invalidate a known completed value when the generating model
+// lost eligibility. Global execution/IAM failures must not use this sentinel.
+var ErrCachedReceiptUnusable = errors.New("cached query receipt is no longer eligible")
+
+func (c *StageCache) discardValue(key string, expected []byte) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e := c.entries[key]; e != nil && bytes.Equal(e.Value.(cacheEntry).value, expected) {
+		c.remove(e)
+	}
+}
+
+// DoValidated checks every caller, including single-flight waiters. At most
+// one fresh governed load replaces an ineligible cache HIT. A fresh/unknown
+// model attempt is never resent here; its ordinary invocation key and native
+// recovery state still own all physical-send decisions.
+func (c *StageCache) DoValidated(ctx context.Context, key string, load func(context.Context) ([]byte, error), validate func(context.Context, []byte) error) ([]byte, bool, error) {
+	value, hit, err := c.Do(ctx, key, load)
+	if err != nil {
+		return nil, false, err
+	}
+	if validate == nil {
+		return value, hit, nil
+	}
+	if err = validate(ctx, value); err == nil {
+		return value, hit, nil
+	}
+	c.discardValue(key, value)
+	if !hit || load == nil || !errors.Is(err, ErrCachedReceiptUnusable) {
+		return nil, false, err
+	}
+	value, hit, err = c.Do(ctx, key, load)
+	if err == nil {
+		err = validate(ctx, value)
+	}
+	if err != nil {
+		c.discardValue(key, value)
+		return nil, false, err
+	}
+	return value, hit, nil
+}
 
 // StageCache is an optional, bounded process cache. Values are detached on both
 // insertion and return. It does not contain or replace authorization decisions.
@@ -59,7 +105,7 @@ func (c *StageCache) remove(e *list.Element) {
 // waiter; that waiter can become the next loader. Failures are never cached.
 // Authorization must be checked by EVERY caller before and after Do, including
 // waiters. The cache has no authority to make that decision itself.
-func (c *StageCache) Do(ctx context.Context, key string, load func(context.Context) ([]byte, error)) ([]byte, bool, error) {
+func (c *StageCache) Do(ctx context.Context, key string, load func(context.Context) ([]byte, error)) (returned []byte, hit bool, returnedErr error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
@@ -67,6 +113,7 @@ func (c *StageCache) Do(ctx context.Context, key string, load func(context.Conte
 		value, err := load(ctx)
 		return value, false, err
 	}
+	defer func() { observeCacheCall(ctx, hit, returnedErr) }()
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err

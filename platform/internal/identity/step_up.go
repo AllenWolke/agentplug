@@ -107,7 +107,7 @@ func (s *SQLStore) ConsumeToolStepUpTx(ctx context.Context, tx *sql.Tx, actor sh
 	if tx == nil || actor.Validate() != nil || actor.PrincipalType != string(PrincipalUser) || !toolStepUpAction(action) || len(sessionID) != 64 || authRevision == 0 {
 		return ErrStepUpRequired
 	}
-	if err := lockPermissionContinuity(ctx, tx); err != nil {
+	if err := s.AcquirePermissionReadContinuity(ctx, tx); err != nil {
 		return err
 	}
 	if err := s.validateToolStepUpSubject(ctx, tx, actor); err != nil {
@@ -167,7 +167,7 @@ func (s *SQLStore) createLocalStepUp(ctx context.Context, actor sharedkernel.Sco
 		return StepUpProof{}, err
 	}
 	defer tx.Rollback()
-	if err := lockPermissionContinuity(ctx, tx); err != nil {
+	if err := s.AcquirePermissionReadContinuity(ctx, tx); err != nil {
 		return StepUpProof{}, err
 	}
 	if authorize == nil {

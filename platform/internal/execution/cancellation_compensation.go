@@ -24,9 +24,14 @@ type CancellationCompensationPorts struct {
 	ValidateStepTx       func(context.Context, *sql.Tx, compensation.Step) error
 	ValidateCoverageTx   func(context.Context, *sql.Tx, sharedkernel.Scope) error
 	ValidateEnrollmentTx func(context.Context, *sql.Tx, sharedkernel.Scope, compensation.Step) error
+	// Optional live stop/model-accounting check for an already frozen tree.
+	// Omission retains the existing full cancellation fence on every inverse.
+	ProgressFenceTx func(context.Context, *sql.Tx, sharedkernel.Scope) error
 	// BeginTx creates the stopping job before exact admitted-tree enrollment.
 	// The callback must not execute a forward effect or invent a stop proof.
 	PrepareCoverageTx func(context.Context, *sql.Tx, sharedkernel.Scope, compensation.Coordinator) error
+	// BuildCoordinator 由组合根提供；本模块不构造其他模块的 SQL 仓储。
+	BuildCoordinator func(context.Context, compensation.Authority) (compensation.Coordinator, error)
 }
 
 // Cancellation can resolve a registered business effect from its owner receipt
@@ -67,12 +72,15 @@ func (m *Module) SetCancellationStopQuiescence(check func(context.Context, share
 // EnableCancellationCompensation is called once, before workers/HTTP start.
 // No production rollout may omit either coverage or the settlement barrier.
 func (s *SQLStore) EnableCancellationCompensation(ctx context.Context, ports CancellationCompensationPorts) (compensation.Coordinator, error) {
-	if s == nil || s.db == nil || ctx == nil || ports.ValidateStepTx == nil || ports.ValidateCoverageTx == nil || s.terminalOutcomeFence == nil || s.cancellationSaga != nil {
+	if s == nil || s.db == nil || ctx == nil || ports.ValidateStepTx == nil || ports.ValidateCoverageTx == nil || ports.BuildCoordinator == nil || s.terminalOutcomeFence == nil || s.cancellationSaga != nil {
 		return nil, compensation.ErrUnavailable
 	}
-	store, err := compensation.OpenCoordinator(ctx, s.db, cancellationAuthority{runs: s, ports: ports})
+	store, err := ports.BuildCoordinator(ctx, cancellationAuthority{runs: s, ports: ports})
 	if err != nil {
 		return nil, err
+	}
+	if store == nil {
+		return nil, compensation.ErrUnavailable
 	}
 	s.cancellationPorts, s.cancellationSaga = ports, store
 	return store, nil
@@ -207,6 +215,16 @@ func (s *SQLStore) cancellationStopProofTx(ctx context.Context, tx *sql.Tx, run 
 }
 
 func (a cancellationAuthority) ConfirmStoppedTx(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope, proof compensation.StopProof) error {
+	return a.confirmStoppedTx(ctx, tx, scope, proof, true)
+}
+
+// Coverage is frozen by the stop/enrollment transaction: later forward writes
+// and new enrollments are fenced. Individual inverses still validate their
+// enrolled immutable binding and lease. Re-scan the complete tree when the
+// stop proof is committed and immediately before finalization, not on every
+// intermediate lease/pending check. Root, proof and settlement checks remain
+// live in every transaction.
+func (a cancellationAuthority) confirmStoppedTx(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope, proof compensation.StopProof, fullCoverage bool) error {
 	run, err := a.rootTx(ctx, tx, scope)
 	if err != nil {
 		return err
@@ -222,7 +240,10 @@ func (a cancellationAuthority) ConfirmStoppedTx(ctx context.Context, tx *sql.Tx,
 		if err = a.runs.terminalOutcomeFence(ctx, tx, scope); err != nil {
 			return err
 		}
-		return a.ports.ValidateCoverageTx(ctx, tx, scope)
+		if fullCoverage {
+			return a.ports.ValidateCoverageTx(ctx, tx, scope)
+		}
+		return nil
 	}
 	if run.Status != platformruntime.StatusCancelling || run.Revision != proof.Revision || a.runs.terminalOutcomeFence == nil || a.ports.ValidateCoverageTx == nil {
 		return compensation.ErrPending
@@ -234,10 +255,19 @@ func (a cancellationAuthority) ConfirmStoppedTx(ctx context.Context, tx *sql.Tx,
 	if !found || recorded != proof {
 		return compensation.ErrConflict
 	}
-	if err := a.runs.checkCancellationFenceTx(ctx, tx, scope); err != nil {
-		return err
+	var fenceErr error
+	if !fullCoverage && a.ports.ProgressFenceTx != nil {
+		fenceErr = a.ports.ProgressFenceTx(ctx, tx, scope)
+	} else {
+		fenceErr = a.runs.checkCancellationFenceTx(ctx, tx, scope)
 	}
-	return a.ports.ValidateCoverageTx(ctx, tx, scope)
+	if fenceErr != nil {
+		return fenceErr
+	}
+	if fullCoverage {
+		return a.ports.ValidateCoverageTx(ctx, tx, scope)
+	}
+	return nil
 }
 
 func (a cancellationAuthority) GuardCompensationTx(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope) error {
@@ -250,7 +280,7 @@ func (a cancellationAuthority) GuardCompensationTx(ctx context.Context, tx *sql.
 		if err != nil {
 			return err
 		}
-		return a.ConfirmStoppedTx(ctx, tx, scope, proof)
+		return a.confirmStoppedTx(ctx, tx, scope, proof, false)
 	}
 	proof, found, err := a.runs.cancellationStopProofTx(ctx, tx, run)
 	if err != nil {
@@ -259,7 +289,7 @@ func (a cancellationAuthority) GuardCompensationTx(ctx context.Context, tx *sql.
 	if !found {
 		return compensation.ErrPending
 	}
-	return a.ConfirmStoppedTx(ctx, tx, scope, proof)
+	return a.confirmStoppedTx(ctx, tx, scope, proof, false)
 }
 
 func (a cancellationAuthority) FinishCancellationTx(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope, proof compensation.StopProof) error {

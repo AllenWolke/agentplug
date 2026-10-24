@@ -29,8 +29,10 @@ func TestPostgresKnowledgeQueryBackend(t *testing.T) {
 	}
 	defer db.Close()
 	ctx := context.Background()
-	for _, mode := range []string{"success", "delete-during-rerank", "invalid-rerank", "sql-success", "sql-machine-revoked-during-rerank", "sql-caller-revoked-during-rerank", "sql-machine-expired-during-rerank", "sql-caller-expired-during-rerank", "sql-machine-denied-before-model", "sql-cache-hit", "sql-cache-rewritten-query-reuse", "sql-cache-caller-model-revoked", "sql-cache-machine-model-revoked", "sql-cache-cold", "sql-cache-bypass", "sql-cache-invalid", "sql-answer-cache-hit", "sql-answer-cache-cold", "sql-answer-cache-bypass", "sql-answer-cache-model-revoked", "sql-answer-cache-generation-change", "sql-answer-invalid-citation", "sql-answer-source-deleted-during-model"} {
+	for _, mode := range []string{"success", "delete-during-rerank", "invalid-rerank", "sql-success", "sql-machine-revoked-during-rerank", "sql-caller-revoked-during-rerank", "sql-machine-expired-during-rerank", "sql-caller-expired-during-rerank", "sql-machine-denied-before-model", "sql-cache-hit", "sql-cache-rewritten-query-reuse", "sql-cache-caller-model-revoked", "sql-cache-machine-model-revoked", "sql-cache-cold", "sql-cache-bypass", "sql-cache-invalid", "sql-answer-cache-hit", "sql-answer-cache-cold", "sql-answer-cache-bypass", "sql-answer-cache-model-revoked", "sql-answer-cache-generation-change", "sql-answer-invalid-citation", "sql-answer-source-deleted-during-model", "sql-cache-routed-hit", "sql-answer-cache-routed-hit"} {
 		t.Run(mode, func(t *testing.T) {
+			routed := strings.Contains(mode, "-routed-")
+			mode = strings.Replace(mode, "-routed-", "-", 1)
 			answerCase := strings.HasPrefix(mode, "sql-answer-")
 			id := fmt.Sprintf("query-backend-%d", time.Now().UnixNano())
 			humanID, machineID := id+"-user", id+"-executor"
@@ -108,6 +110,16 @@ func TestPostgresKnowledgeQueryBackend(t *testing.T) {
 			}
 			defer pool.Close()
 			policy := policyasset.Snapshot{ModelProfileID: "models", PromptVersionID: "prompts", KnowledgePolicyID: "knowledge", ToolPolicyID: "tools", MemoryPolicyID: "memory", RuntimePolicyID: "runtime", Revision: 1, Hash: strings.Repeat("b", 64), Model: policyasset.ModelPolicy{Provider: "chat", Model: "chat", ModelVersionID: "chat-v1", EmbeddingProvider: "vectors", EmbeddingModel: "vectors", EmbeddingModelVersionID: "embedding-v1", MaxTokens: 4096}, Prompt: policyasset.PromptPolicy{Template: "Published instruction", TemplateHash: "prompt-hash"}, Tool: policyasset.ToolPolicy{AllowedTools: []string{"json.validate"}}, Memory: policyasset.MemoryPolicy{MaxEntries: 10}, Knowledge: policyasset.KnowledgePolicy{AllowedScopes: []string{"docs"}, DocumentBindings: documents}, Runtime: policyasset.RuntimePolicy{MaxAttempts: 1, TaskTimeoutSeconds: 60, LeaseSeconds: 30}}
+			chatVersion := "chat-v1"
+			if routed {
+				chatVersion = "chat-alt"
+				routing := policyasset.ModelRoutingPolicy{Version: "model-routing/v1", SimpleMaxInputTokens: 256, ComplexMinInputTokens: 8192, SimpleMaxOutputTokens: 128, MaxEstimatedMicros: 100000}
+				for i, version := range []string{"chat-v1", "chat-alt"} {
+					routing.Candidates = append(routing.Candidates, policyasset.ModelRouteCandidate{ModelVersionID: version, PriceVersionID: "price-" + version, QualityEvidenceID: "quality-" + version, CapabilitySHA256: strings.Repeat("a", 64), QualityEvidenceSHA256: strings.Repeat("b", 64), MaxComplexity: []string{"complex", "medium"}[i]})
+				}
+				routing.ExecutionContextSHA256 = policyasset.RoutingExecutionContextSHA256(policy)
+				policy.Model.Routing = &routing
+			}
 			calls := 0
 			modelCall := func(_ context.Context, operation string, input map[string]any) (map[string]any, error) {
 				calls++
@@ -119,7 +131,7 @@ func TestPostgresKnowledgeQueryBackend(t *testing.T) {
 					t.Fatal("published Prompt omitted")
 				}
 				if strings.HasPrefix(messages[1]["content"], "Rewrite the following question") {
-					return map[string]any{"model_version_id": "chat-v1", "invocation_id": "rewrite-call", "text": "recovery"}, nil
+					return map[string]any{"model_version_id": chatVersion, "invocation_id": "rewrite-call", "text": "recovery"}, nil
 				}
 				if strings.HasPrefix(messages[1]["content"], "Answer the question using only") {
 					var data struct {
@@ -142,7 +154,7 @@ func TestPostgresKnowledgeQueryBackend(t *testing.T) {
 						}
 					}
 					text, _ := json.Marshal(map[string]any{"answer": "recovery procedure", "citation_ids": []string{id}})
-					return map[string]any{"model_version_id": "chat-v1", "invocation_id": "answer-call", "text": string(text), "usage": map[string]int{"input_tokens": 42, "output_tokens": 17}, "billing": map[string]any{"price_version_id": "fixture-price-v1", "currency": "USD", "cost_micros": 59}}, nil
+					return map[string]any{"model_version_id": chatVersion, "invocation_id": "answer-call", "text": string(text), "usage": map[string]int{"input_tokens": 42, "output_tokens": 17}, "billing": map[string]any{"price_version_id": "fixture-price-v1", "currency": "USD", "cost_micros": 59}}, nil
 				}
 				instruction := messages[1]["content"]
 				if strings.Contains(instruction, "PRIVATE-CONTENT") {
@@ -187,10 +199,25 @@ func TestPostgresKnowledgeQueryBackend(t *testing.T) {
 				if mode == "invalid-rerank" {
 					text = `{"scores":[{"chunk_id":"invented","score":0.9}]}`
 				}
-				return map[string]any{"model_version_id": "chat-v1", "invocation_id": "rerank-call", "text": text}, nil
+				return map[string]any{"model_version_id": chatVersion, "invocation_id": "rerank-call", "text": text}, nil
 			}
 			backend := postgresKnowledgeBackend{source: db, projection: pool, authority: authority}
 			request := capability.KnowledgeSearchRequest{Query: "how do I recover?", KnowledgeScope: "docs", TopK: 1, Policy: policy, Documents: documents, ModelCall: modelCall}
+			if routed {
+				request.ModelReceiptCheck = func(ctx context.Context, operation, version string) error {
+					expected := chatVersion
+					if operation == "embed" {
+						expected = "embedding-v1"
+					}
+					if version != expected {
+						return &capability.KnowledgeModelError{Status: 403, Code: "MODEL_SELECTION_MISMATCH"}
+					}
+					return authority.AuthorizeCapabilityResource(ctx, scope, capability.CapabilityResourceAccess{Action: "model." + operation, ResourceType: "model", ResourceID: policy.ModelProfileID})
+				}
+				request.ModelCacheBinding = func(context.Context) (string, error) { return strings.Repeat("d", 64), nil }
+			}
+			var measured []capability.KnowledgeQueryObservation
+			request.ObservePerformance = func(_ context.Context, o capability.KnowledgeQueryObservation) { measured = append(measured, o) }
 			if answerCase {
 				request.Answer = true
 				backend.cache = knowledge.NewStageCache(32, 1<<20, time.Minute)
@@ -256,8 +283,31 @@ func TestPostgresKnowledgeQueryBackend(t *testing.T) {
 				}
 			}
 			result, err := backend.SearchKnowledge(ctx, scope, request)
+			if len(measured) == 0 {
+				t.Fatal("native query has no actual performance observation")
+			}
+			last := measured[len(measured)-1]
+			if last.StartedAt.IsZero() || last.FinishedAt.Before(last.StartedAt) || (last.Err != nil) != (err != nil) {
+				t.Fatal("native measured outcome/timing differs from actual query", last, err)
+			}
+			wanted := map[string][2]int64{
+				"sql-cache-hit": {4, 4}, "sql-cache-rewritten-query-reuse": {4, 3}, "sql-cache-cold": {4, 0}, "sql-cache-bypass": {0, 0},
+				"sql-answer-cache-hit": {5, 5}, "sql-answer-cache-cold": {5, 0}, "sql-answer-cache-bypass": {0, 0},
+			}
+			if counters, ok := wanted[mode]; ok {
+				if last.Lookups != counters[0] || last.Hits != counters[1] || last.Failures != 0 || err != nil {
+					t.Fatal("actual cache counters disagree with native pipeline", mode, last, err)
+				}
+				first := measured[0]
+				if len(measured) != 2 || first.Hits != 0 || first.Failures != 0 || first.Lookups != 4 && first.Lookups != 5 {
+					t.Fatal("cold precondition was not actually measured", mode, measured)
+				}
+			}
 			if answerCase {
 				denied := mode == "sql-answer-cache-model-revoked" || mode == "sql-answer-invalid-citation" || mode == "sql-answer-source-deleted-during-model"
+				if routed && err == nil && result["answer_model_version"] != chatVersion {
+					t.Fatal("routed answer reported primary model")
+				}
 				if denied {
 					if err == nil || result != nil {
 						t.Fatal("rejected answer escaped", mode, err)
@@ -299,6 +349,9 @@ func TestPostgresKnowledgeQueryBackend(t *testing.T) {
 				}
 				if err != nil || len(refs) != 1 || refs[0]["content"] != "recovery procedure" || refs[0]["kb_version"] != "generation-v1" || refs[0]["reranking_score"] != 0.9 || refs[0]["embedding_invocation_id"] != "embed-call" || calls != expectedCalls {
 					t.Fatal("backend result/provenance missing", err, result)
+				}
+				if routed && (refs[0]["rewrite_model_version"] != chatVersion || refs[0]["reranking_model_version"] != chatVersion || refs[0]["embedding_model_version"] != "embedding-v1") {
+					t.Fatal("routed cache provenance or pinned index model lost")
 				}
 				if mode == "sql-cache-hit" && (refs[0]["rewrite_cache_hit"] != true || refs[0]["embedding_cache_hit"] != true || refs[0]["reranking_cache_hit"] != true || refs[0]["retrieval_cache_hit"] != true) {
 					t.Fatal("cache receipt missing")

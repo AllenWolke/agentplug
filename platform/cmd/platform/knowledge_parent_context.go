@@ -105,7 +105,7 @@ func knowledgeFacts(facts []knowledge.DocumentFact) (map[string]knowledge.Docume
 }
 
 // Answer generation consumes the same authorized evidence expansion returned
-// to Agents. An incomplete regulatory section cannot silently become a fact.
+// to Agents. An incomplete source section cannot silently become a fact.
 func knowledgeAnswerChunks(chunks []knowledge.HybridChunk, references []map[string]any) ([]knowledge.HybridChunk, error) {
 	byID := make(map[string]map[string]any, len(references))
 	for _, ref := range references {

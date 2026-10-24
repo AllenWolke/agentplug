@@ -35,13 +35,15 @@ type ModelPolicy struct {
 	Model    string `json:"model"`
 	// ModelVersionID pins a published capability snapshot to an approved model
 	// catalog version. It is required when the governed invocation path is wired.
-	ModelVersionID          string  `json:"model_version_id,omitempty"`
-	EmbeddingModelVersionID string  `json:"embedding_model_version_id,omitempty"`
-	EmbeddingProvider       string  `json:"embedding_provider,omitempty"`
-	EmbeddingModel          string  `json:"embedding_model,omitempty"`
-	MaxTokens               int     `json:"max_tokens"`
-	MaxInputTokens          int     `json:"max_input_tokens,omitempty"`
-	Temperature             float64 `json:"temperature"`
+	ModelVersionID          string              `json:"model_version_id,omitempty"`
+	Routing                 *ModelRoutingPolicy `json:"routing,omitempty"`
+	ContextCache            *ContextCachePolicy `json:"context_cache,omitempty"`
+	EmbeddingModelVersionID string              `json:"embedding_model_version_id,omitempty"`
+	EmbeddingProvider       string              `json:"embedding_provider,omitempty"`
+	EmbeddingModel          string              `json:"embedding_model,omitempty"`
+	MaxTokens               int                 `json:"max_tokens"`
+	MaxInputTokens          int                 `json:"max_input_tokens,omitempty"`
+	Temperature             float64             `json:"temperature"`
 	// ReasoningMode is published policy, never an Agent request override.
 	ReasoningMode string `json:"reasoning_mode,omitempty"`
 	// ReasoningEffort is reviewed together with the chat policy and budget.
@@ -69,6 +71,8 @@ func (p ModelPolicy) ForEmbedding() (ModelPolicy, error) {
 	}
 	p.ReasoningMode = ""
 	p.ReasoningEffort = ""
+	p.Routing = nil      // Index embedding identity never depends on question complexity.
+	p.ContextCache = nil // Chat prefix caching does not apply to embedding requests.
 	return p, nil
 }
 
@@ -112,12 +116,14 @@ type ToolPolicy struct {
 	Functions           []FunctionDefinition `json:"functions,omitempty"`
 }
 type MemoryPolicy struct {
-	WorkingTTLSeconds int  `json:"working_ttl_seconds"`
-	SessionTTLSeconds int  `json:"session_ttl_seconds"`
-	TaskTTLSeconds    int  `json:"task_ttl_seconds"`
-	MaxEntries        int  `json:"max_entries"`
-	LongTermEnabled   bool `json:"long_term_enabled"`
-	SemanticEnabled   bool `json:"semantic_enabled"`
+	WorkingTTLSeconds   int                        `json:"working_ttl_seconds"`
+	SessionTTLSeconds   int                        `json:"session_ttl_seconds"`
+	TaskTTLSeconds      int                        `json:"task_ttl_seconds"`
+	MaxEntries          int                        `json:"max_entries"`
+	LongTermEnabled     bool                       `json:"long_term_enabled"`
+	SemanticEnabled     bool                       `json:"semantic_enabled"`
+	CheckpointHistory   *CheckpointHistoryPolicy   `json:"checkpoint_history,omitempty"`
+	CheckpointAdmission *CheckpointAdmissionPolicy `json:"checkpoint_admission,omitempty"`
 }
 type KnowledgePolicy struct {
 	DocumentBindings     []KnowledgeDocumentBinding `json:"document_bindings,omitempty"`
@@ -136,6 +142,24 @@ type RuntimePolicy struct {
 	Delegation         *AgentDelegationPolicy `json:"delegation,omitempty"`
 	RunBudget          *RunBudgetPolicy       `json:"run_budget,omitempty"`
 	Harness            *HarnessPolicy         `json:"harness,omitempty"`
+	RecoveryReferences string                 `json:"recovery_references,omitempty"`
+	Batch              *BatchPolicy           `json:"batch,omitempty"`
+}
+
+// BatchPolicy contains generic processing bounds. Domains decide what an item
+// means; publication, not a business request, chooses the profile.
+type BatchPolicy struct {
+	MaxItems           int `json:"max_items"`
+	ItemTimeoutSeconds int `json:"item_timeout_seconds"`
+	ElapsedSeconds     int `json:"elapsed_seconds"`
+}
+
+func (p BatchPolicy) Validate(taskTimeout int) error {
+	if p.MaxItems < 1 || p.MaxItems > 10000 || p.ItemTimeoutSeconds < 1 ||
+		p.ItemTimeoutSeconds > p.ElapsedSeconds || p.ElapsedSeconds > 3600 || p.ElapsedSeconds != taskTimeout {
+		return ErrMissingPolicy
+	}
+	return nil
 }
 
 // HarnessPolicy is approved with the immutable runtime asset. SDK options may
@@ -212,6 +236,12 @@ type ContextPolicy struct {
 }
 
 func (p RuntimePolicy) ValidateContext() error {
+	if p.Batch != nil && p.Batch.Validate(p.TaskTimeoutSeconds) != nil {
+		return ErrMissingPolicy
+	}
+	if p.RecoveryReferences != "" && p.RecoveryReferences != "paged/v1" {
+		return ErrMissingPolicy
+	}
 	if p.Harness != nil && p.Harness.Validate() != nil {
 		return ErrMissingPolicy
 	}
@@ -273,7 +303,10 @@ func (s Snapshot) Validate() error {
 // ValidateDetails is required for a production SQL snapshot. Fixture
 // resolvers may omit details for fast unit tests.
 func (s Snapshot) ValidateDetails() error {
-	if s.Runtime.ValidateContext() != nil || s.Model.ValidateInputLimit() != nil {
+	if s.Runtime.ValidateContext() != nil || s.Model.ValidateInputLimit() != nil || s.Model.ValidateRouting() != nil || s.Model.ValidateContextCache() != nil {
+		return ErrMissingPolicy
+	}
+	if s.Model.Routing != nil && s.Model.Routing.ExecutionContextSHA256 != RoutingExecutionContextSHA256(s) {
 		return ErrMissingPolicy
 	}
 	if s.Tool.ValidateFunctions() != nil {
@@ -294,7 +327,7 @@ func (s Snapshot) ValidateDetails() error {
 	if err := s.Knowledge.ValidateDocuments(); err != nil {
 		return ErrMissingPolicy
 	}
-	if s.Memory.MaxEntries < 1 || s.Runtime.MaxAttempts < 1 || s.Runtime.TaskTimeoutSeconds < 1 || s.Runtime.LeaseSeconds < 1 {
+	if s.Memory.MaxEntries < 1 || s.Memory.ValidateCheckpointHistory() != nil || s.Memory.ValidateCheckpointAdmission() != nil || s.Runtime.MaxAttempts < 1 || s.Runtime.TaskTimeoutSeconds < 1 || s.Runtime.LeaseSeconds < 1 {
 		return ErrMissingPolicy
 	}
 	if (strings.TrimSpace(s.Rule.Version) == "") != (strings.TrimSpace(s.Rule.Checksum) == "") {

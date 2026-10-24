@@ -1,14 +1,16 @@
 # Go 运维诊断助手
 
-业务输入使用 `schema://example-go-operations/input/v2`，包含 `service`、`symptom` 和可选的 `observations` 字符串；`notify_me`、`sandbox_check` 与 `collaborate` 默认均为 `false`。平台注入的 `policy_snapshot` 不由业务用户选择。
+当前 Agent 为 **0.3.0**，公共 SDK 能力版本为 **2.1.0**。业务输入使用 `schema://example-go-operations/input/v3`，输出为 `schema://example-go-operations/output/v3`。输入包含 `service`、`symptom` 和可选的 `observations` 字符串；`notify_me`、`sandbox_check` 与 `collaborate` 默认均为 `false`。平台注入的 `policy_snapshot` 不由业务用户选择。
 
-原已发布版本的不可变 input/output v1 契约分别保存在 `input.v1.schema.json` 与 `output.v1.schema.json`；当前 Manifest 单独引用 v2 Schema，不覆盖已发布 Catalog。
+当前 Manifest 单独引用 v3 Schema，v3 输出增加实际模型、路由、缓存与计费归属的 `model_metadata`。`input.v2.schema.json` / `output.v2.schema.json` 保留当前兼容读取路径，v2 请求继续选择旧输出和原指纹；原 v1 文件与对应历史 Catalog 也保留，不覆盖已发布版本。
+
+公共记忆、Prompt、模型和知识调用统一使用 SDK 便捷接口。冻结知识在使用前及最终返回前分别调用 `AuthorizeCachedResult` 复核当前引用权限；恢复只读取原操作收据，发送边界限流与阶段观测由公共客户端处理。完整能力和配置见[公共能力更新说明](../../docs/releases/public-capabilities-2.1.zh.md)。
 
 可选输入 `notify_me` 是严格布尔值，省略时默认为 `false`。默认模式只向 Harness 暴露只读 `inspect`。只有调用人明确设置 `notify_me: true`，模型才会额外看到 `notify_self`；该别名映射到平台 `notify.self` 工具，只接受 `title` 和 `text`，收件人由平台限制为当前认证调用人。每次通知都需要独立人工批准。批准或工具响应不表示通知已发送或送达；输出中的 `notify_me` 只是原请求回显，没有发送状态。用户文本、诊断证据都不能指定收件人。
 
 可选输入 `sandbox_check` 也是严格布尔值，省略时默认为 `false`。只有设为 `true` 时，公共 Harness 才会暴露 `sandbox_python`，它映射到已注册的 `code.python`。固定系统提示和Skill只允许提交短小、确定性的只读分析程序；工具使用一次性隔离环境，不连接宿主或业务服务。每次执行都须独立人工批准，并沿公共 Tool Observation 与只读回执恢复路径处理。代码、参数、权限、镜像和资源上限不由业务用户选择；输出中的 `sandbox_check` 仅回显选择，不表示代码执行或成功。该选项参与冻结证据指纹，恢复时不能切换。
 
-可选输入 `collaborate` 默认 `false`。显式设为 `true` 后，助手仍先冻结自己的诊断证据，再用固定 `documents.answer` 任务类型和单个固定子输入调用 SDK `RunAgentGroup`；用户不能选择目标 Agent、安装或端点，子请求固定使用 Python 文档助手 v2 的 direct 流程，并关闭其协作、通知与沙箱选项。协作计划 marker 在任何路由/准入副作用前持久化；SDK协调检查点保存计划与child引用，不缓存child输出。等待使用独立 AgentGroupPause/Handoff，恢复先按当前权限重新 Gather 原 child，不重新路由或重派发；Harness仍只读取本业务已冻结的证据。最终返回前会再查询一次当前 Group，`collaboration` 只含受限的文档回答/引用与摘要，并标注为不可信数据；此信息不写入 `last-diagnosis`。跨 Agent 的 human/machine `agent.delegate`、目标安装 `run` 权限以及完整 Runtime delegation/预算策略必须由管理员另行发布和授权，`collaborate` 不是授权。启用前须发布匹配的不可变 Agent/策略版本，并为调用用户、父机器和目标机器配置所需委托、安装与状态权限。
+可选输入 `collaborate` 默认 `false`。显式设为 `true` 后，助手仍先冻结自己的诊断证据，再用固定 `documents.answer` 任务类型和单个固定子输入调用 SDK `RunAgentGroup`；用户不能选择目标 Agent、安装或端点，子请求固定使用 Python 文档助手的 direct 流程；新 v3 请求绑定 v3 子契约，历史 v2 请求保留原 v2 子契约，并关闭其协作、通知与沙箱选项。协作计划 marker 在任何路由/准入副作用前持久化；SDK协调检查点保存计划与child引用，不缓存child输出。等待使用独立 AgentGroupPause/Handoff，恢复先按当前权限重新 Gather 原 child，不重新路由或重派发；Harness仍只读取本业务已冻结的证据。最终返回前会再查询一次当前 Group，`collaboration` 只含受限的文档回答/引用与摘要，并标注为不可信数据；此信息不写入 `last-diagnosis`。跨 Agent 的 human/machine `agent.delegate`、目标安装 `run` 权限以及完整 Runtime delegation/预算策略必须由管理员另行发布和授权，`collaborate` 不是授权。启用前须发布匹配的不可变 Agent/策略版本，并为调用用户、父机器和目标机器配置所需委托、安装与状态权限。
 
 助手直接依赖仓库 `sdk/go`：首次收集公共记忆、已发布 Prompt、`runtime.inspect` 和 `go-operations` 知识证据，将其冻结到公共检查点，再经SDK Harness、渐进Skill加载及受治理模型生成，最后保存记忆。可选Code调用同样经Harness和平台工具网关，不直连控制器；恢复复用原证据和公共工具回执。SDK负责上下文验签、能力请求签名、续期、运行事件和取消；平台负责双身份授权、模型幂等、预算、用量、审计和追踪。助手不持有模型厂商凭据，也不连接平台数据库。
 
@@ -27,7 +29,7 @@ go run ./cmd/example-release-bundle --example ../examples/go-operations --artifa
 
 草案使用前端 `/api/modules/catalog`，按提交、评测、审批、安装、部署和激活分组。使用登录会话和选定工作空间执行，审批遵守人员分离，部署就绪由真实控制器观测。出现 CAS 冲突时读取当前版本，不猜测版本或伪造就绪。`knowledge/runbook.md` 是自主知识资料，需要通过公共知识源管理及索引接口入库，随后在发布知识策略绑定明确文档与权限。
 
-当前异步运行使用 SDK 的进程内 L1 RunStore；进程重启不会保留业务运行事件。公共能力的持久化幂等和平台运行记录并不等同于 Agent 本地运行恢复，不能将本示例用于需要 L2/L3 持久化恢复的流程。
+当前异步运行使用 SDK 的进程内 L1 RunStore，进程重启不保留本地处理器和运行事件。跨进程续接需由平台持久 Run、当前检查点、真实停止证明和重新核验的授权共同支持；公共能力幂等或单份检查点不能代替停止与恢复证明。
 
 平台与 Agent 的 `AGENT_PLATFORM_AUDIENCE` 必须使用同一个执行服务 audience（默认 `agent-runtime`），签发者默认 `platform`。Agent 标识独立固定为 `example-go-operations`；SDK 同时校验签名绑定的 `scope.agent_id`，其他 Agent 的合法凭证也不能进入本助手。
 

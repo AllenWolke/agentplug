@@ -22,6 +22,7 @@ func TestCancellationDiagnosticsUseBoundedInnermostLabels(t *testing.T) {
 		{stopPhaseError{"agent_stop_commit", stopPhaseError{"compensation_coverage", compensation.ErrConflict}}, "compensation_coverage", "COMPENSATION_CONFLICT"},
 		{stopPhaseError{"compensation_enrollment", diagnosticDatabaseError{}}, "compensation_enrollment", "DATABASE_42501"},
 		{stopPhaseError{"remote_transport", errors.New("token=private")}, "remote_transport", "REMOTE_STOP_UNCONFIRMED"},
+		{stopPhaseError{"model_settlement", errors.New("private ledger detail")}, "model_settlement", "MODEL_SETTLEMENT_PENDING"},
 	} {
 		phase, code := stopDiagnostic(tc.err)
 		if phase != tc.phase || code != tc.code {

@@ -63,7 +63,10 @@ func (s *SQLToolApprovalStore) CheckApproval(ctx context.Context, claims ToolCon
 	}
 	var exists bool
 	err := s.db.QueryRowContext(ctx, sqlutil.Bind(`SELECT EXISTS(SELECT 1 FROM platform_tool_approval WHERE approval_id=? AND actor_id=? AND scope_hash=? AND claims_hash=? AND revoked=FALSE AND expires_at>clock_timestamp())`), claims.ApprovalID, claims.ActorID, claims.ScopeHash, toolApprovalDigest(claims)).Scan(&exists)
-	if err != nil || !exists {
+	if err != nil {
+		return errors.Join(ErrToolApprovalDenied, err)
+	}
+	if !exists {
 		return ErrToolApprovalDenied
 	}
 	return nil
@@ -73,18 +76,30 @@ func (s *SQLToolApprovalStore) CheckApproval(ctx context.Context, claims ToolCon
 // transaction. The caller must acquire IAM and Run/checkpoint fences first;
 // revocation takes the same approval row's UPDATE lock. No new grant is issued.
 func (s *SQLToolApprovalStore) CheckApprovalTx(ctx context.Context, tx *sql.Tx, claims ToolConfirmationClaims) error {
-	if s == nil || s.db == nil || tx == nil || claims.Version != "tool-confirmation/v1" || claims.ApprovalID == "" || claims.ActorID == "" || claims.ScopeHash == "" || !validPendingConfirmationReference(claims) || ctx.Err() != nil {
+	if s == nil || s.db == nil || tx == nil || claims.Version != "tool-confirmation/v1" || claims.ApprovalID == "" || claims.ActorID == "" || claims.ScopeHash == "" || !validPendingConfirmationReference(claims) {
 		return ErrToolApprovalDenied
+	}
+	if err := ctx.Err(); err != nil {
+		return errors.Join(ErrToolApprovalDenied, err)
 	}
 	var digest string
 	var revoked bool
 	var expires time.Time
 	err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT claims_hash,revoked,expires_at FROM platform_tool_approval WHERE approval_id=? AND actor_id=? AND scope_hash=? FOR SHARE`), claims.ApprovalID, claims.ActorID, claims.ScopeHash).Scan(&digest, &revoked, &expires)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return errors.Join(ErrToolApprovalDenied, err)
+	}
 	if err != nil || revoked || digest != toolApprovalDigest(claims) {
 		return ErrToolApprovalDenied
 	}
 	var now time.Time
-	if tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&now) != nil || ctx.Err() != nil || !expires.After(now) || claims.IssuedAt <= 0 || claims.IssuedAt > now.Unix()+5 || claims.ExpiresAt <= claims.IssuedAt || claims.ExpiresAt <= now.Unix() || claims.ExpiresAt-claims.IssuedAt > 300 {
+	if err := tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return errors.Join(ErrToolApprovalDenied, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return errors.Join(ErrToolApprovalDenied, err)
+	}
+	if !expires.After(now) || claims.IssuedAt <= 0 || claims.IssuedAt > now.Unix()+5 || claims.ExpiresAt <= claims.IssuedAt || claims.ExpiresAt <= now.Unix() || claims.ExpiresAt-claims.IssuedAt > 300 {
 		return ErrToolApprovalDenied
 	}
 	return nil
@@ -103,8 +118,9 @@ func (s *SQLToolApprovalStore) ResumeApproved(ctx context.Context, scope sharedk
 		return err
 	}
 	defer tx.Rollback()
+	ctx = sqlutil.WithContinuityTransaction(ctx, s.db, tx)
 	if err = authorize(ctx, tx); err != nil {
-		return ErrToolApprovalDenied
+		return errors.Join(ErrToolApprovalDenied, err)
 	}
 	if err = s.CheckApprovalTx(ctx, tx, claims); err != nil {
 		return err
@@ -139,8 +155,9 @@ func (s *SQLToolApprovalStore) Approve(ctx context.Context, scope sharedkernel.S
 		return err
 	}
 	defer tx.Rollback()
+	ctx = sqlutil.WithContinuityTransaction(ctx, s.db, tx)
 	if err = s.authorize(ctx, tx, scope, claims, "tool.approval.approve", proof); err != nil {
-		return ErrToolApprovalDenied
+		return errors.Join(ErrToolApprovalDenied, err)
 	}
 	var now time.Time
 	if err = tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
@@ -161,7 +178,10 @@ func (s *SQLToolApprovalStore) Approve(ctx context.Context, scope sharedkernel.S
 	if count == 0 {
 		var existing string
 		var revoked bool
-		if tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT claims_hash,revoked FROM platform_tool_approval WHERE approval_id=? FOR UPDATE`), claims.ApprovalID).Scan(&existing, &revoked) != nil || existing != digest || revoked {
+		if err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT claims_hash,revoked FROM platform_tool_approval WHERE approval_id=? FOR UPDATE`), claims.ApprovalID).Scan(&existing, &revoked); err != nil {
+			return errors.Join(ErrToolApprovalDenied, err)
+		}
+		if existing != digest || revoked {
 			return ErrToolApprovalDenied
 		}
 		return tx.Commit()
@@ -181,12 +201,16 @@ func (s *SQLToolApprovalStore) Revoke(ctx context.Context, scope sharedkernel.Sc
 		return err
 	}
 	defer tx.Rollback()
+	ctx = sqlutil.WithContinuityTransaction(ctx, s.db, tx)
 	if err = s.authorize(ctx, tx, scope, claims, "tool.approval.revoke", proof); err != nil {
-		return ErrToolApprovalDenied
+		return errors.Join(ErrToolApprovalDenied, err)
 	}
 	var digest string
 	var revoked bool
-	if tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT claims_hash,revoked FROM platform_tool_approval WHERE approval_id=? AND actor_id=? AND scope_hash=? FOR UPDATE`), claims.ApprovalID, scope.PrincipalID, claims.ScopeHash).Scan(&digest, &revoked) != nil || digest != toolApprovalDigest(claims) {
+	if err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT claims_hash,revoked FROM platform_tool_approval WHERE approval_id=? AND actor_id=? AND scope_hash=? FOR UPDATE`), claims.ApprovalID, scope.PrincipalID, claims.ScopeHash).Scan(&digest, &revoked); err != nil {
+		return errors.Join(ErrToolApprovalDenied, err)
+	}
+	if digest != toolApprovalDigest(claims) {
 		return ErrToolApprovalDenied
 	}
 	if revoked {

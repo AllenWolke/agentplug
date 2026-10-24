@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/lexagent/platform/internal/sharedkernel"
 	"github.com/lexagent/platform/internal/sqlutil"
 	"github.com/lexagent/platform/internal/telemetry"
 	"go.opentelemetry.io/otel/trace"
@@ -23,10 +24,45 @@ type ToolRecoveryStore interface {
 	DeferToolRecovery(context.Context, ToolExecutionLease) error
 }
 
-func (m *Module) reconcileTools(ctx context.Context) {
+const (
+	toolRecoveryPollFloor   = 2 * time.Second
+	toolRecoveryPollCeiling = 30 * time.Second
+	toolRecoveryLogInterval = 30 * time.Second
+)
+
+// nextToolRecoveryInterval backs off only when the durable due-work query is
+// empty (or unavailable). A non-empty page returns promptly to the base poll
+// interval so newly due unknown receipts are not delayed by an idle period.
+func nextToolRecoveryInterval(current time.Duration, dueRecords int) time.Duration {
+	if dueRecords > 0 {
+		return toolRecoveryPollFloor
+	}
+	if current < toolRecoveryPollFloor {
+		return toolRecoveryPollFloor
+	}
+	if current >= toolRecoveryPollCeiling/2 {
+		return toolRecoveryPollCeiling
+	}
+	return current * 2
+}
+
+func (m *Module) allowToolRecoveryLog(now time.Time) bool {
+	m.toolRecoveryLogMu.Lock()
+	defer m.toolRecoveryLogMu.Unlock()
+	if !m.toolRecoveryLogAt.IsZero() && now.Sub(m.toolRecoveryLogAt) < toolRecoveryLogInterval {
+		return false
+	}
+	m.toolRecoveryLogAt = now
+	return true
+}
+
+// reconcileTools returns -1 for a failed scan and otherwise the number of due
+// durable records observed. Recovery still queries only the original receipt;
+// it never replays a tool command or treats a missing receipt as success.
+func (m *Module) reconcileTools(ctx context.Context) int {
 	s, ok := m.toolStore.(ToolRecoveryStore)
 	if !ok {
-		return
+		return 0
 	}
 	ctx, span := telemetry.Start(ctx, "platform.worker.tool_recovery", trace.SpanKindInternal)
 	defer span.End()
@@ -37,12 +73,18 @@ func (m *Module) reconcileTools(ctx context.Context) {
 	if err != nil {
 		m.toolStats.Failed.Add(1)
 		telemetry.Failed(span, "TOOL_RECOVERY_READ_FAILED")
-		log.Print("tool recovery failed code=TOOL_RECOVERY_READ_FAILED")
-		return
+		if m.allowToolRecoveryLog(time.Now()) {
+			log.Print("tool recovery failed code=TOOL_RECOVERY_READ_FAILED")
+		}
+		return -1
 	}
+	if len(records) == 0 {
+		return 0
+	}
+	pending, backoffFailed := 0, 0
 	for _, r := range records {
 		if ctx.Err() != nil {
-			return
+			return len(records)
 		}
 		writeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		if r.Status == "running" && r.Phase == "preparing" {
@@ -67,30 +109,43 @@ func (m *Module) reconcileTools(ctx context.Context) {
 		}
 		cancel()
 		if err != nil {
+			pending++
 			m.toolStats.Failed.Add(1)
-			telemetry.Failed(span, "TOOL_RECOVERY_PENDING")
-			log.Print("tool recovery pending code=TOOL_RECOVERY_PENDING")
 			deferCtx, end := context.WithTimeout(ctx, 2*time.Second)
 			if err := s.DeferToolRecovery(deferCtx, r.Lease); err != nil {
-				log.Print("tool recovery backoff failed code=TOOL_RECOVERY_BACKOFF_FAILED")
+				backoffFailed++
 			}
 			end()
 		} else {
 			m.toolStats.Completed.Add(1)
 		}
 	}
+	if pending > 0 {
+		telemetry.Failed(span, "TOOL_RECOVERY_PENDING")
+		if m.allowToolRecoveryLog(time.Now()) {
+			log.Printf("tool recovery pending code=TOOL_RECOVERY_PENDING count=%d backoff_failed=%d", pending, backoffFailed)
+		}
+	}
+	return len(records)
 }
 
 func (m *Module) toolRecoveryLoop(ctx context.Context, done chan struct{}) {
 	defer close(done)
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
+	interval := time.Second
 	for {
-		m.reconcileTools(ctx)
+		due := m.reconcileTools(ctx)
+		interval = nextToolRecoveryInterval(interval, due)
+		timer := time.NewTimer(interval)
 		select {
 		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
 			return
-		case <-ticker.C:
+		case <-timer.C:
 		}
 	}
 }
@@ -156,7 +211,7 @@ func (s *SQLToolInvocationStore) ListToolRecovery(ctx context.Context, limit int
 	if limit < 1 || limit > 64 {
 		return nil, errors.New("invalid tool recovery page")
 	}
-	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT scope_hash,call_id,fingerprint,status,phase,lease_owner,lease_token,lease_fence,lease_until,recovery_query FROM platform_tool_invocation WHERE lease_token<>'' AND (retry_after IS NULL OR retry_after<=clock_timestamp()) AND (status='unknown' OR status='running' AND lease_until<=clock_timestamp()) ORDER BY updated_at,scope_hash,call_id LIMIT ?`), limit)
+	rows, err := s.db.QueryContext(ctx, sqlutil.Bind(`SELECT scope_hash,call_id,fingerprint,status,phase,lease_owner,lease_token,lease_fence,lease_until,recovery_query FROM platform_tool_invocation WHERE lease_token<>'' AND scope_hash NOT IN (SELECT jsonb_array_elements_text(?::jsonb)) AND (retry_after IS NULL OR retry_after<=clock_timestamp()) AND (status='unknown' OR status='running' AND lease_until<=clock_timestamp()) ORDER BY updated_at,scope_hash,call_id LIMIT ?`), s.recoveryHolds.RunIDsJSON(), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -185,6 +240,9 @@ func (s *SQLToolInvocationStore) ListToolRecovery(ctx context.Context, limit int
 	return out, rows.Err()
 }
 func (s *SQLToolInvocationStore) recoverExpired(ctx context.Context, l ToolExecutionLease, phase, status string) error {
+	if s.recoveryHolds.Contains(l.ScopeHash) {
+		return sharedkernel.ErrAutomaticRecoveryHeld
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -216,8 +274,16 @@ func (s *SQLToolInvocationStore) RecoverToolPreparation(ctx context.Context, l T
 func (s *SQLToolInvocationStore) ExpireSubmittedTool(ctx context.Context, l ToolExecutionLease) error {
 	return s.recoverExpired(ctx, l, "executing", "unknown")
 }
+
+// Unknown receipts are retried forever, but long-unresolved ones are polled
+// proportionally less often (age/10, clamped 5s..5m) so idle recovery cannot
+// saturate the shared pool. Backoff only schedules work; it never resolves.
+// 未知回执永久重试，按存在时长的十分之一退避（5秒至5分钟），避免空闲期占满共享连接池；退避只安排重试，不代表结果已确定。
 func (s *SQLToolInvocationStore) DeferToolRecovery(ctx context.Context, l ToolExecutionLease) error {
-	r, err := s.db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_tool_invocation SET retry_after=(clock_timestamp() + INTERVAL '5 seconds'),updated_at=clock_timestamp() WHERE scope_hash=? AND call_id=? AND fingerprint=? AND lease_owner=? AND lease_token=? AND lease_fence=? AND status IN ('running','unknown')`), l.ScopeHash, l.CallID, l.Fingerprint, l.Owner, l.Token, l.Fence)
+	if s.recoveryHolds.Contains(l.ScopeHash) {
+		return sharedkernel.ErrAutomaticRecoveryHeld
+	}
+	r, err := s.db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_tool_invocation SET retry_after=(clock_timestamp() + LEAST(GREATEST((clock_timestamp()-created_at)/10, INTERVAL '5 seconds'), INTERVAL '5 minutes')),updated_at=clock_timestamp() WHERE scope_hash=? AND call_id=? AND fingerprint=? AND lease_owner=? AND lease_token=? AND lease_fence=? AND status IN ('running','unknown')`), l.ScopeHash, l.CallID, l.Fingerprint, l.Owner, l.Token, l.Fence)
 	if err != nil {
 		return err
 	}

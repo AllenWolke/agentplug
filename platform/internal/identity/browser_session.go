@@ -42,15 +42,27 @@ func (s *SQLStore) ValidateBrowserSession(ctx context.Context, scope sharedkerne
 	if err != nil || len(raw) != 32 || hex.EncodeToString(raw) != sessionID || revision == 0 {
 		return ErrRefreshSessionRejected
 	}
-	var id string
-	now := s.clock().UTC()
-	// Authentication and the selected workspace use one committed snapshot.
-	// Management contexts need live management authority, not business membership.
+	if bound, joined, joinError := sqlutil.ContinuityTransaction(ctx, s.db); joined {
+		if joinError != nil {
+			return joinError
+		}
+		return s.validateBrowserSessionFacts(ctx, bound, scope, sessionID, revision)
+	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err = s.validateBrowserSessionFacts(ctx, tx, scope, sessionID, revision); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *SQLStore) validateBrowserSessionFacts(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope, sessionID string, revision uint64) error {
+	var id string
+	now := s.clock().UTC()
+	var err error
 	var originDepartment, originApplication, policyMode string
 	err = tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT f.id,
 		CASE WHEN o.family_id IS NULL THEN c.department_id ELSE b.department_id END,
@@ -94,5 +106,20 @@ func (s *SQLStore) ValidateBrowserSession(ctx context.Context, scope sharedkerne
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
+}
+
+func (s *SQLStore) ValidateBrowserSessionTx(ctx context.Context, tx *sql.Tx, scope sharedkernel.Scope, sessionID string, revision uint64) error {
+	if s == nil || tx == nil || scope.Validate() != nil || scope.PrincipalType != string(PrincipalUser) || sessionID == "" || revision == 0 {
+		return ErrRefreshSessionRejected
+	}
+	var id string
+	err := tx.QueryRowContext(ctx, sqlutil.Bind(`SELECT id FROM platform_identity_refresh_family WHERE id=? AND principal_id=? AND tenant_id=? AND department_id=? AND application_id=? AND auth_revision=? AND revoked=FALSE AND expires_at>? FOR SHARE`), sessionID, scope.PrincipalID, scope.TenantID, scope.DepartmentID, scope.ApplicationID, revision, s.clock().UTC()).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrRefreshSessionRejected
+	}
+	if err != nil {
+		return err
+	}
+	return s.ValidateBrowserSession(sqlutil.WithContinuityTransaction(ctx, s.db, tx), scope, sessionID, revision)
 }

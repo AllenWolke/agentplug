@@ -19,7 +19,7 @@ import (
 )
 
 func TestTaskEmbeddingRequestBindsSignedCanonicalCommand(t *testing.T) {
-	for _, mode := range []string{"allowed", "allowed-rule-bundle", "changed-rule-bundle", "changed-input", "changed-scope", "changed-policy", "changed-operation", "invalid-secret", "missing-credential", "expired", "retained-token"} {
+	for _, mode := range []string{"allowed", "allowed-rule-bundle", "allowed-nested-rule-bundle", "changed-rule-bundle", "changed-input", "changed-scope", "changed-policy", "changed-operation", "invalid-secret", "missing-credential", "expired", "retained-token"} {
 		t.Run(mode, func(t *testing.T) {
 			public, private, err := ed25519.GenerateKey(rand.Reader)
 			if err != nil {
@@ -35,6 +35,9 @@ func TestTaskEmbeddingRequestBindsSignedCanonicalCommand(t *testing.T) {
 			}
 			if mode == "expired" {
 				signer.Clock = func() time.Time { return time.Now().Add(-5 * time.Minute) }
+			}
+			if mode == "allowed-nested-rule-bundle" {
+				request.Input["policy_snapshot"].(map[string]any)["rule_bundle"] = map[string]any{"version": "0.4.0", "checksum": strings.Repeat("d", 64)}
 			}
 			token, err := signer.Sign(sharedkernel.BindExecutionLease(context.Background(), 4, "private-lease-token"), scope, request)
 			if err != nil {
@@ -61,7 +64,7 @@ func TestTaskEmbeddingRequestBindsSignedCanonicalCommand(t *testing.T) {
 			}
 			module := NewModule("internal-token", "signing-secret", public, "platform", "agent-runtime")
 			r, err := module.BuildTaskEmbeddingRequest(context.Background(), request, token, credential)
-			if mode != "allowed" && mode != "allowed-rule-bundle" {
+			if mode != "allowed" && mode != "allowed-rule-bundle" && mode != "allowed-nested-rule-bundle" {
 				if err == nil || r != nil {
 					t.Fatal("changed or stale command accepted", mode)
 				}
@@ -74,12 +77,18 @@ func TestTaskEmbeddingRequestBindsSignedCanonicalCommand(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if mode == "allowed-nested-rule-bundle" {
+				var decoded envelope
+				if json.Unmarshal(body, &decoded) != nil || decoded.Context.RuleBundleVersion != "0.4.0" || decoded.Context.RuleBundleChecksum != strings.Repeat("d", 64) {
+					t.Fatal("nested published rule binding was lost")
+				}
+			}
 			var wire envelope
 			if json.Unmarshal(body, &wire) != nil || wire.Context.TaskID != scope.RunID || wire.Context.ModelProfileID != "model" {
 				t.Fatal("incorrect capability context")
 			}
 			if mode == "allowed-rule-bundle" && (wire.Context.RuleBundleVersion != "0.2.0" || wire.Context.RuleBundleChecksum != strings.Repeat("d", 64)) {
-				t.Fatal("signed regulatory rule binding was omitted")
+				t.Fatal("signed published rule binding was omitted")
 			}
 			mac := hmac.New(sha256.New, []byte(module.signingSecret))
 			mac.Write(requestSignaturePayload(r.Method, r.URL.RequestURI(), body))

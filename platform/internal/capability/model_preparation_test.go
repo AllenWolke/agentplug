@@ -2,6 +2,7 @@ package capability
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/lexagent/platform/internal/sqlutil"
@@ -119,6 +120,7 @@ func TestSQLPreparingCrashRecoveryFencesStaleAttempt(t *testing.T) {
 	if n, err := reopened.RecoverExpiredPreparations(ctx); err != nil || n != 1 {
 		t.Fatal("SQL expired preparation not recovered")
 	}
+	assertSQLUnsentPreparationClosed(t, ctx, db, scope, id)
 	replacement, _, err := reopened.ReserveGoverned(ctx, scope, id, fp)
 	if err != nil || replacement.AttemptToken == original.AttemptToken {
 		t.Fatal("restart reused invocation nonce")
@@ -219,7 +221,7 @@ func TestSQLPreparationRecoveryConcurrentBoundedBatches(t *testing.T) {
 		t.Fatal("recovery duplicated work or changed protected requests", err)
 	}
 	var recovered int
-	if err = db.QueryRowContext(ctx, sqlutil.Bind(`SELECT COUNT(*) FROM platform_model_invocation WHERE scope_hash=? AND status='failed' AND invocation_token='' AND preparation_deadline IS NULL`), scope).Scan(&recovered); err != nil || recovered != 32 {
+	if err = db.QueryRowContext(ctx, sqlutil.Bind(`SELECT COUNT(*) FROM platform_model_invocation WHERE scope_hash=? AND status='failed' AND billing_state='done' AND invocation_token='' AND preparation_deadline IS NULL AND billing_recovery_json IS NULL AND response_json IS NULL`), scope).Scan(&recovered); err != nil || recovered != 32 {
 		t.Fatal("durable recovered rows mismatch", err)
 	}
 	var token string
@@ -231,5 +233,84 @@ func TestSQLPreparationRecoveryConcurrentBoundedBatches(t *testing.T) {
 	}
 	if err = store.FailPreparation(ctx, scope, "submitted", "fp", submitted.AttemptToken); !errors.Is(err, ErrModelInvocationConflict) {
 		t.Fatal("submitted invocation became an unsent preparation", err)
+	}
+}
+
+func assertSQLUnsentPreparationClosed(t *testing.T, ctx context.Context, db *sql.DB, scope, key string) {
+	t.Helper()
+	var count int
+	if err := db.QueryRowContext(ctx, sqlutil.Bind(`SELECT COUNT(*) FROM platform_model_invocation
+WHERE scope_hash=? AND idempotency_key=? AND status='failed' AND billing_state='done'
+AND invocation_token='' AND preparation_deadline IS NULL AND billing_recovery_json IS NULL AND response_json IS NULL`), scope, key).Scan(&count); err != nil || count != 1 {
+		t.Fatal("unsent preparation did not durably close its billing lifecycle", err)
+	}
+}
+
+func TestSQLPreparationFailureClosesOnlyUnsentAttempt(t *testing.T) {
+	dsn := os.Getenv("PUBLIC_TEST_POSTGRES_MIGRATION_DSN")
+	if dsn == "" {
+		t.Skip("isolated PostgreSQL fixture not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	db, err := sqlutil.OpenPostgres(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	store, err := NewSQLModelInvocationStore(db)
+	if err != nil || store.EnsureSchema(ctx) != nil {
+		t.Fatal("schema unavailable", err)
+	}
+	scope := fmt.Sprintf("%064x", time.Now().UnixNano())
+	defer func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 2*time.Second)
+		defer stop()
+		if _, err := db.ExecContext(cleanup, sqlutil.Bind(`DELETE FROM platform_model_invocation WHERE scope_hash=?`), scope); err != nil {
+			t.Error(err)
+		}
+	}()
+	unsent, _, err := store.ReserveGoverned(ctx, scope, "unsent", "fp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FailPreparation(ctx, scope, "unsent", "fp", "stale-token"); !errors.Is(err, ErrModelInvocationConflict) {
+		t.Fatal("stale producer closed another attempt", err)
+	}
+	if err := store.FailPreparation(ctx, scope, "unsent", "fp", unsent.AttemptToken); err != nil {
+		t.Fatal(err)
+	}
+	assertSQLUnsentPreparationClosed(t, ctx, db, scope, "unsent")
+	if err := store.CheckModelQuiescence(ctx, scope); err != nil {
+		t.Fatal("unsent failure blocked public completion", err)
+	}
+
+	submitted, _, err := store.ReserveGoverned(ctx, scope, "submitted", "fp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveBillingRecovery(ctx, scope, "submitted", "fp", nil, 0, BillingRecovery{AttemptToken: submitted.AttemptToken, SendDeadline: time.Now().Add(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FailPreparation(ctx, scope, "submitted", "fp", submitted.AttemptToken); !errors.Is(err, ErrModelInvocationConflict) {
+		t.Fatal("submitted request was declared unsent", err)
+	}
+	if err := store.CheckModelQuiescence(ctx, scope); !errors.Is(err, ErrModelInvocationReconciliationNeeded) {
+		t.Fatal("unknown submitted request was declared quiescent", err)
+	}
+
+	response, _, err := store.ReserveGoverned(ctx, scope, "response", "fp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An inconsistent persisted response is still not proof that nothing sent.
+	if _, err := db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_model_invocation SET response_json='{}',preparation_deadline=clock_timestamp()-INTERVAL '1 second' WHERE scope_hash=? AND idempotency_key='response'`), scope); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FailPreparation(ctx, scope, "response", "fp", response.AttemptToken); !errors.Is(err, ErrModelInvocationConflict) {
+		t.Fatal("existing response was discarded as an unsent failure", err)
+	}
+	if n, err := store.RecoverExpiredPreparations(ctx); err != nil || n != 0 {
+		t.Fatal("recovery overwrote a persisted response or send intent", err)
 	}
 }

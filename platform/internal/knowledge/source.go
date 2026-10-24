@@ -87,14 +87,12 @@ func scanSourceDocument(row sourceRowScanner) (SourceDocument, error) {
 	if err := row.Scan(&indexed.ID, &indexed.Version, &indexed.SourceRevision, &indexed.ACLRevision, &indexed.Deleted, &indexed.ContentDigest, &raw); err != nil {
 		return document, err
 	}
-	if err := json.Unmarshal(raw, &document); err != nil {
+	var err error
+	document, err = sourceDocumentValues.Decode(raw)
+	if err != nil {
 		return SourceDocument{}, ErrSourceCorrupt
 	}
-	digest, err := sourceDigest(struct {
-		Body     string
-		Metadata map[string]string `json:"metadata,omitempty"`
-	}{document.Body, document.Metadata})
-	if err != nil || document.ID != indexed.ID || document.Version != indexed.Version || document.SourceRevision != indexed.SourceRevision || document.ACLRevision != indexed.ACLRevision || document.Deleted != indexed.Deleted || document.ContentDigest != indexed.ContentDigest || digest != document.ContentDigest || document.Version < 1 || document.SourceRevision < 1 || document.ACLRevision < 1 || (document.Deleted && document.Body != "") {
+	if document.ID != indexed.ID || document.Version != indexed.Version || document.SourceRevision != indexed.SourceRevision || document.ACLRevision != indexed.ACLRevision || document.Deleted != indexed.Deleted || document.ContentDigest != indexed.ContentDigest {
 		return SourceDocument{}, ErrSourceCorrupt
 	}
 	return document, nil

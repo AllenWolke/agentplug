@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	agenteval "github.com/lexagent/agent-evaluation"
@@ -65,16 +66,28 @@ func (m *Module) inspect(w http.ResponseWriter, r *http.Request, actor Actor, pa
 		return
 	}
 	if parts[0] == "trajectories" && len(parts) == 2 && validID(parts[1]) {
-		if len(r.URL.Query()) != 0 {
+		query, queryErr := url.ParseQuery(r.URL.RawQuery)
+		if queryErr != nil {
 			m.writeError(w, 400, "INVALID_QUERY")
 			return
+		}
+		projection := query.Get("tool_argument_projection")
+		profile := query.Get("evidence_read_profile")
+		for key, values := range query {
+			valid := len(values) == 1 && ((key == "tool_argument_projection" && projection == agenteval.ToolArgumentProjectionV2) ||
+				(key == "evidence_read_profile" && profile == agenteval.EvidenceReadProfileLargeV1))
+			if !valid {
+				m.writeError(w, 400, "INVALID_QUERY")
+				return
+			}
 		}
 		revision, err := strconv.ParseUint(r.Header.Get("X-Authentication-Revision"), 10, 64)
 		if err != nil || revision == 0 {
 			m.writeError(w, 401, "SESSION_INVALID")
 			return
 		}
-		result, err := m.inspection.Trajectory(r.Context(), actor, parts[1], r.Header.Get("X-Authentication-Session"), revision)
+		ctx := WithEvidenceReadProfile(WithToolArgumentProjection(r.Context(), projection), profile)
+		result, err := m.inspection.Trajectory(ctx, actor, parts[1], r.Header.Get("X-Authentication-Session"), revision)
 		if err != nil {
 			m.inspectionError(w, err)
 			return

@@ -146,7 +146,7 @@ type LocalEffectPort struct {
 	owner             LocalEffectOwner
 }
 
-func (s *LocalEffectLedger) Port(provider, version string, owner LocalEffectOwner) (Port, error) {
+func (s *LocalEffectLedger) Port(provider, version string, owner LocalEffectOwner) (*LocalEffectPort, error) {
 	if s == nil || owner == nil || !token(provider, 128) || !token(version, 128) {
 		return nil, ErrInvalid
 	}

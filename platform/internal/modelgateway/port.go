@@ -2,21 +2,25 @@ package modelgateway
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/lexagent/platform/internal/policyasset"
 	"github.com/lexagent/platform/internal/sharedkernel"
 )
 
 type GenerateRequest struct {
-	Prompt         string
-	Model          string
-	ModelVersionID string
-	ProviderID     string
-	ModelID        string
-	Messages       []Message
-	Temperature    float64
-	MaxTokens      int
-	FunctionNames  []string
+	Prompt             string
+	Model              string
+	ModelVersionID     string
+	ProviderID         string
+	ModelID            string
+	Messages           []Message
+	Temperature        float64
+	MaxTokens          int
+	FunctionNames      []string
+	RequireJSON        bool
+	ResponseSchema     json.RawMessage
+	ResponseSchemaMode string
 }
 
 type Message struct {
@@ -38,6 +42,8 @@ type FunctionCall struct {
 }
 
 type GenerateResult struct {
+	ResponseSchema *ResponseSchemaReceipt
+	CacheUsage
 	Text         string
 	InputTokens  int
 	OutputTokens int
@@ -45,6 +51,16 @@ type GenerateResult struct {
 	Incomplete   bool
 	FinishReason string
 	ToolCalls    []ToolCall
+}
+
+type ResponseSchemaReceipt struct {
+	Version       string `json:"version"`
+	RequestedMode string `json:"requested_mode"`
+	AppliedFormat string `json:"applied_format"`
+	Dialect       string `json:"dialect,omitempty"`
+	SchemaSHA256  string `json:"schema_sha256"`
+	WireProtocol  string `json:"wire_protocol,omitempty"`
+	Strict        bool   `json:"strict"`
 }
 
 // UsageEmbeddingPort is required by billable embedding execution. A provider

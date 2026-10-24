@@ -92,7 +92,7 @@ func CanonicalExecuteBodyHash(request ExecuteRequest) (string, error) {
 		return "", fmt.Errorf("marshal execution envelope: %w", err)
 	}
 	var envelope map[string]any
-	if err := json.Unmarshal(raw, &envelope); err != nil {
+	if err := DecodeJSONPreservingNumbers(raw, &envelope); err != nil {
 		return "", fmt.Errorf("normalize execution envelope: %w", err)
 	}
 	delete(envelope, "context_token")

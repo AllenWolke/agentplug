@@ -1,5 +1,7 @@
 # 開発者向けの入門ルート
 
+新しい共通機能、SDK 2.1、サンプル Agent と互換性については[更新説明（英語）](../../releases/public-capabilities-2.1.en.md)を参照してください。
+
 [日本語 README](../../../README_JA.md) · [简体中文](../zh/README.md) · [English](../en/README.md) · [Deutsch](../de/README.md)
 
 基盤と Agent の役割を理解し、業務コードを実行してから、会社・部門・ユーザーへ配信します。詳細な技術文書は中国語・英語です。以下は英語版へのリンクです。

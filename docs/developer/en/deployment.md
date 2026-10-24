@@ -6,7 +6,7 @@ Deployment changes process locations, not authorization or publication requireme
 
 ## Local source and host processes
 
-Install Go 1.26.9+, Node.js 20+, Python 3.12+ and PostgreSQL 16 + pgvector. Provision the database, migration/schema-owner account and independent `platform_runtime` DML role. Local migration can provision the development runtime role with an explicit `PLATFORM_DEV_RUNTIME_PASSWORD`; production uses DBA-managed roles.
+Install Go 1.26.10+, Node.js 20+, Python 3.12+ and PostgreSQL 16 + pgvector. Provision the database, migration/schema-owner account and independent `platform_runtime` DML role. Local migration can provision the development runtime role with an explicit `PLATFORM_DEV_RUNTIME_PASSWORD`; production uses DBA-managed roles.
 
 Copy the public templates into private configuration without overwriting existing files:
 

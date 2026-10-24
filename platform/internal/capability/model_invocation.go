@@ -9,6 +9,9 @@ import (
 	"github.com/lexagent/platform/internal/sqlutil"
 	"sync"
 	"time"
+
+	"github.com/lexagent/platform/internal/policyasset"
+	"github.com/lexagent/platform/internal/usagecost"
 )
 
 // ModelInvocation is the platform-owned idempotency record for one model call.
@@ -58,9 +61,13 @@ type ModelInvocationReconciliationStore interface {
 }
 
 type memoryModelInvocationStore struct {
-	mu      sync.Mutex
-	records map[string]ModelInvocation
-	spent   map[string]int64
+	mu              sync.Mutex
+	records         map[string]ModelInvocation
+	spent           map[string]int64
+	routes          map[string]StoredModelRoute
+	selections      map[string]policyasset.ModelSelectionBinding
+	availability    map[string]ModelRouteAvailabilityState
+	routeExecutions map[string]ModelRouteExecution
 }
 
 // newMemoryModelInvocationStore is used only by unit tests and no-DB mode.
@@ -192,7 +199,10 @@ func cloneMap(value map[string]any) map[string]any {
 // SQLModelInvocationStore provides transactional idempotency and budget
 // accounting for a single platform process. A remote store can implement the
 // same Port when the platform becomes distributed.
-type SQLModelInvocationStore struct{ db *sql.DB }
+type SQLModelInvocationStore struct {
+	db             *sql.DB
+	budgetClosures usagecost.ModelBudgetClosureReader
+}
 
 func NewSQLModelInvocationStore(db *sql.DB) (*SQLModelInvocationStore, error) {
 	if db == nil {
@@ -218,7 +228,22 @@ CREATE TABLE IF NOT EXISTS platform_model_invocation (
   created_at TIMESTAMPTZ(6) NOT NULL,
   updated_at TIMESTAMPTZ(6) NOT NULL,
   PRIMARY KEY (scope_hash, idempotency_key));
-CREATE INDEX IF NOT EXISTS idx_platform_model_invocation_scope ON platform_model_invocation (scope_hash, status);`))
+CREATE INDEX IF NOT EXISTS idx_platform_model_invocation_scope ON platform_model_invocation (scope_hash, status);
+-- Operator/observer reads must not repeatedly scan completed invocation
+-- history. Keep all unresolved states (including unknown sends) visible.
+CREATE INDEX IF NOT EXISTS idx_model_invocation_billing_tail ON platform_model_invocation (billing_state,updated_at DESC)
+ WHERE billing_state IN ('manual','decision_pending','resolved');
+CREATE INDEX IF NOT EXISTS idx_model_invocation_unsettled ON platform_model_invocation (updated_at,scope_hash,idempotency_key)
+ WHERE NOT (
+  (status IN ('completed','failed') AND billing_state IN ('done','resolved'))
+  OR (status='failed' AND billing_state='' AND billing_recovery_json IS NULL AND response_json IS NULL AND invocation_token='' AND preparation_deadline IS NULL)
+ );
+-- Settlement verifies the original invocation twice while holding accounting
+-- fences. Keep that lookup independent of accumulated invocation history.
+-- Non-unique intentionally: BudgetEvidenceTx must reject ambiguous evidence.
+CREATE INDEX IF NOT EXISTS idx_model_invocation_budget_reservation ON platform_model_invocation
+  ((billing_recovery_json::jsonb->'reservation'->>'reservation_id'))
+  WHERE billing_recovery_json IS NOT NULL;`))
 	if err != nil {
 		return fmt.Errorf("migrate model invocation: %w", err)
 	}
@@ -229,7 +254,10 @@ created_at TIMESTAMPTZ(6) NOT NULL,applied_at TIMESTAMPTZ(6) NULL,
 PRIMARY KEY(scope_hash,idempotency_key,reservation_id)
 );
 `))
-	return err
+	if err != nil {
+		return err
+	}
+	return s.ensureModelRouteSchema(ctx)
 }
 
 func (s *SQLModelInvocationStore) Reserve(ctx context.Context, scopeHash, key, fingerprint string, budget, estimate int64) (ModelInvocation, bool, error) {

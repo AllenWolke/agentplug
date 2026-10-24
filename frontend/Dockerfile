@@ -6,7 +6,7 @@ COPY frontend/index.html frontend/vite.config.js frontend/styles.css ./
 COPY frontend/src ./src
 RUN npm run build
 
-FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm AS gateway-build
+FROM --platform=$BUILDPLATFORM golang:1.26.10-bookworm AS gateway-build
 ARG TARGETOS=linux
 ARG TARGETARCH
 WORKDIR /src/frontend

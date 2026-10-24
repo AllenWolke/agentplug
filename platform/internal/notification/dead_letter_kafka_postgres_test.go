@@ -82,6 +82,26 @@ func TestDeadLetterRealKafkaPostgresLostAckAndRestart(t *testing.T) {
 	if e = admin.CreateTopics(kafka.TopicConfig{Topic: topic, NumPartitions: 1, ReplicationFactor: 1}, kafka.TopicConfig{Topic: dlq, NumPartitions: 1, ReplicationFactor: 1}); e != nil {
 		t.Fatal(e)
 	}
+	// Controller creation acknowledgment precedes broker metadata propagation.
+	// Wait for both leaders before the one original business write; retrying
+	// that write would obscure the lost-acknowledgment invariant below.
+	for _, name := range []string{topic, dlq} {
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			probe, err := kafka.DialLeader(ctx, "tcp", broker, name, 0)
+			if err == nil {
+				_, err = probe.ReadFirstOffset()
+				probe.Close()
+				if err == nil {
+					break
+				}
+			}
+			if time.Now().After(deadline) || ctx.Err() != nil {
+				t.Fatalf("created topic leader not visible: %s: %v", name, err)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
 	event := Event{ID: "event-" + suffix, TenantID: "t1", DepartmentID: "d1", ApplicationID: "a1", Topic: topic, EventType: "fixture.v1", PartitionKey: "p1", Payload: map[string]any{"body": "PRIVATE_DLQ_BODY"}}
 	body, _ := json.Marshal(event)
 	producer := &kafka.Writer{Addr: kafka.TCP(broker), RequiredAcks: kafka.RequireAll, AllowAutoTopicCreation: false}

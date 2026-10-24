@@ -31,7 +31,7 @@ type CommittedBusinessReview struct {
 }
 
 func (r CommittedBusinessReview) valid(scope sharedkernel.Scope) bool {
-	return r.Reviewer != "" && len(r.Reviewer) <= 128 && r.Reviewer != scope.PrincipalID && (r.Decision == "approve" || r.Decision == "reject")
+	return r.Reviewer != "" && len(r.Reviewer) <= 128 && r.Reviewer != scope.PrincipalID && (r.Decision == "approve" || r.Decision == "reject" || r.Decision == "request_changes")
 }
 
 func committedBusinessReview(input []byte, scope sharedkernel.Scope) *CommittedBusinessReview {

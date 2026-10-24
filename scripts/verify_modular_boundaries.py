@@ -236,7 +236,7 @@ def scan_sql_writes(files: list[Path]) -> list[SqlWrite]:
                     continue
                 if operation in {"FROM", "JOIN"} and relation in aliases and match.start() >= aliases[relation]:
                     continue
-                if operation in {"FROM", "JOIN"} and relation in {"jsonb_to_recordset", "unnest"} and re.match(r"\s*\(", statement[match.end():]):
+                if operation in {"FROM", "JOIN"} and relation in {"jsonb_to_recordset", "jsonb_array_elements", "unnest"} and re.match(r"\s*\(", statement[match.end():]):
                     continue
                 if operation in {"FROM", "JOIN"} and relation in {
                     "information_schema.columns",

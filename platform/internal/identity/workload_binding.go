@@ -11,15 +11,17 @@ import (
 )
 
 type WorkloadBinding struct {
-	TenantID       string `json:"tenant_id"`
-	DepartmentID   string `json:"department_id"`
-	ApplicationID  string `json:"application_id"`
-	InstallationID string `json:"installation_id"`
-	AgentID        string `json:"agent_id"`
-	AgentVersionID string `json:"agent_version_id"`
-	PrincipalID    string `json:"principal_id"`
-	Status         string `json:"status"`
-	Revision       uint64 `json:"revision"`
+	SchemaVersion          string   `json:"schema_version,omitempty"`
+	AllowedAgentVersionIDs []string `json:"allowed_agent_version_ids,omitempty"`
+	TenantID               string   `json:"tenant_id"`
+	DepartmentID           string   `json:"department_id"`
+	ApplicationID          string   `json:"application_id"`
+	InstallationID         string   `json:"installation_id"`
+	AgentID                string   `json:"agent_id"`
+	AgentVersionID         string   `json:"agent_version_id"`
+	PrincipalID            string   `json:"principal_id"`
+	Status                 string   `json:"status"`
+	Revision               uint64   `json:"revision"`
 }
 type WorkloadBindingCommand struct {
 	Binding          WorkloadBinding `json:"binding"`
@@ -51,14 +53,29 @@ func (s *SQLStore) ResolveWorkloadIdentity(ctx context.Context, scope sharedkern
 		return WorkloadBinding{}, ErrInvalidResource
 	}
 	key := workloadScopeHash(WorkloadBinding{TenantID: scope.TenantID, DepartmentID: scope.DepartmentID, ApplicationID: scope.ApplicationID, InstallationID: scope.InstallationID})
+	var reader interface {
+		QueryRowContext(context.Context, string, ...any) *sql.Row
+	} = s.db
+	if tx, joined, err := sqlutil.ContinuityTransaction(ctx, s.db); joined {
+		if err != nil {
+			return WorkloadBinding{}, err
+		}
+		if err := s.AcquirePermissionReadContinuity(ctx, tx); err != nil {
+			return WorkloadBinding{}, err
+		}
+		reader = tx
+	}
 	var raw []byte
-	if err := s.db.QueryRowContext(ctx, sqlutil.Bind(`SELECT payload FROM platform_identity_workload_binding WHERE scope_hash=? AND status='active'`), key).Scan(&raw); err != nil {
+	if err := reader.QueryRowContext(ctx, sqlutil.Bind(`SELECT payload FROM platform_identity_workload_binding WHERE scope_hash=? AND status='active'`), key).Scan(&raw); err != nil {
 		return WorkloadBinding{}, err
 	}
 	var b WorkloadBinding
-	if json.Unmarshal(raw, &b) != nil || b.Revision == 0 || b.Status != "active" || b.TenantID != scope.TenantID || b.DepartmentID != scope.DepartmentID || b.ApplicationID != scope.ApplicationID || b.InstallationID != scope.InstallationID || b.AgentID != scope.AgentID || b.AgentVersionID != scope.AgentVersionID || b.PrincipalID == "" {
+	if json.Unmarshal(raw, &b) != nil || validateWorkloadBindingVersions(b) != nil || b.Revision == 0 || b.Status != "active" || b.TenantID != scope.TenantID || b.DepartmentID != scope.DepartmentID || b.ApplicationID != scope.ApplicationID || b.InstallationID != scope.InstallationID || b.AgentID != scope.AgentID || !workloadBindingAllowsVersion(b, scope.AgentVersionID) || b.PrincipalID == "" {
 		return b, ErrPermissionDenied
 	}
+	// The effective version is the server-pinned run version, explicitly included
+	// in this binding. The persisted primary version and policy are not rewritten.
+	b.AgentVersionID = scope.AgentVersionID
 	return b, nil
 }
 
@@ -73,6 +90,9 @@ func (s *SQLStore) ChangeWorkloadBinding(ctx context.Context, actor sharedkernel
 		if !validPermissionResourceID(id) {
 			return WorkloadBindingReceipt{}, ErrInvalidResource
 		}
+	}
+	if err := validateWorkloadBindingVersions(b); err != nil {
+		return WorkloadBindingReceipt{}, err
 	}
 	if s.administrativeRecorder == nil {
 		return WorkloadBindingReceipt{}, ErrPermissionRecorderUnavailable
@@ -135,7 +155,7 @@ func (s *SQLStore) ChangeWorkloadBinding(ctx context.Context, actor sharedkernel
 	}
 	if revision > 0 {
 		var current WorkloadBinding
-		if json.Unmarshal(currentRaw, &current) != nil {
+		if json.Unmarshal(currentRaw, &current) != nil || validateWorkloadBindingVersions(current) != nil {
 			return WorkloadBindingReceipt{}, ErrInvalidResource
 		}
 		if c.Revoke && (current.AgentID != b.AgentID || current.AgentVersionID != b.AgentVersionID) {
@@ -143,6 +163,9 @@ func (s *SQLStore) ChangeWorkloadBinding(ctx context.Context, actor sharedkernel
 		}
 		if current.PrincipalID != b.PrincipalID && (c.Revoke || current.Status != "revoked") {
 			return WorkloadBindingReceipt{}, ErrIdentityConflict
+		}
+		if c.Revoke {
+			b = current // Revoke every explicitly retained version together.
 		}
 	}
 	if !c.Revoke {
@@ -167,6 +190,16 @@ func (s *SQLStore) ChangeWorkloadBinding(ctx context.Context, actor sharedkernel
 		}
 		if r.Type != "agent_installation" || r.ID != b.InstallationID || r.InstallationID != b.InstallationID || r.TenantID != b.TenantID || r.DepartmentID != b.DepartmentID || r.ApplicationID != b.ApplicationID || r.AgentID != b.AgentID || r.AgentVersionID != b.AgentVersionID {
 			return WorkloadBindingReceipt{}, ErrInvalidResource
+		}
+		if b.SchemaVersion == WorkloadBindingSchemaV2 {
+			validator, ok := s.capabilityResourceResolver.(WorkloadBindingVersionValidator)
+			if !ok {
+				return WorkloadBindingReceipt{}, ErrInvalidResource
+			}
+			versionScope := sharedkernel.Scope{TenantID: b.TenantID, DepartmentID: b.DepartmentID, ApplicationID: b.ApplicationID, InstallationID: b.InstallationID, AgentInstanceID: b.InstallationID, AgentID: b.AgentID, AgentVersionID: b.AgentVersionID, PrincipalID: b.PrincipalID, PrincipalType: "service_principal"}
+			if err := validator.ValidateWorkloadBindingVersions(ctx, versionScope, b.AllowedAgentVersionIDs); err != nil {
+				return WorkloadBindingReceipt{}, err
+			}
 		}
 	}
 	if _, err := tx.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_identity_principal SET revision=revision+1 WHERE principal_type='service_principal' AND id=?`), b.PrincipalID); err != nil {

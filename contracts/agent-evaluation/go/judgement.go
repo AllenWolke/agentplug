@@ -13,6 +13,30 @@ import (
 const RubricVersion = "agent-eval-rubric/v1"
 const JudgementVersion = "agent-eval-judgement/v1"
 
+const JudgeInputV1 = "agent-eval-judge-input/v1"
+const JudgeInputV2 = "agent-eval-judge-input/v2"
+const JudgeInputV3 = "agent-eval-judge-input/v3"
+
+// V2 admits a complete bounded multi-step output. Gold and individual event
+// limits, verdict rules and source authorization remain the V1 contract.
+func IsJudgeInputVersion(value any) bool {
+	version, ok := value.(string)
+	return ok && (version == JudgeInputV1 || version == JudgeInputV2 || version == JudgeInputV3)
+}
+
+func JudgeInputByteLimit(version string) int {
+	switch version {
+	case JudgeInputV1:
+		return 64 << 10
+	case JudgeInputV2:
+		return 128 << 10
+	case JudgeInputV3:
+		return 384 << 10
+	default:
+		return 0
+	}
+}
+
 type Rubric struct {
 	Version  string            `json:"version"`
 	ID       string            `json:"id"`
@@ -138,7 +162,7 @@ func (in JudgeInput) Validate() error {
 func (in JudgeInput) ValidateHuman() error { return in.validate(true) }
 
 func (in JudgeInput) validate(human bool) error {
-	if in.Version != "agent-eval-judge-input/v1" || !reviewIDPattern.MatchString(in.SourceRunID) || !digestPattern.MatchString(in.SourceOutputHash) || in.Rubric.Version != RubricVersion || !reviewIDPattern.MatchString(in.Rubric.ID) || in.RubricHash != RubricDigest(in.Rubric) || len(in.Rubric.Criteria) < 1 || len(in.Rubric.Criteria) > 16 || len(in.Evidence) < 1 || len(in.Evidence) > 64 {
+	if !IsJudgeInputVersion(in.Version) || !reviewIDPattern.MatchString(in.SourceRunID) || !digestPattern.MatchString(in.SourceOutputHash) || in.Rubric.Version != RubricVersion || !reviewIDPattern.MatchString(in.Rubric.ID) || in.RubricHash != RubricDigest(in.Rubric) || len(in.Rubric.Criteria) < 1 || len(in.Rubric.Criteria) > 16 || len(in.Evidence) < 1 || len(in.Evidence) > 64 {
 		return errors.New("invalid frozen evaluation rubric or source binding")
 	}
 	for id, criterion := range in.Rubric.Criteria {
@@ -147,7 +171,14 @@ func (in JudgeInput) validate(human bool) error {
 		}
 	}
 	for id, value := range in.Evidence {
-		if !reviewIDPattern.MatchString(id) || len(value) == 0 || len(value) > 48<<10 || !json.Valid(value) {
+		limit := 48 << 10
+		if in.Version == JudgeInputV2 && id == "output" {
+			limit = 96 << 10
+		}
+		if in.Version == JudgeInputV3 && id == "output" {
+			limit = 256 << 10
+		}
+		if !reviewIDPattern.MatchString(id) || len(value) == 0 || len(value) > limit || !json.Valid(value) {
 			return errors.New("invalid bounded evidence")
 		}
 	}
@@ -170,7 +201,7 @@ func (in JudgeInput) validate(human bool) error {
 		}
 	}
 	b, _ := json.Marshal(in)
-	if len(b) > 64<<10 {
+	if len(b) > JudgeInputByteLimit(in.Version) {
 		return errors.New("review input exceeds limit")
 	}
 	return nil
@@ -186,6 +217,9 @@ func ValidateVerdicts(in JudgeInput, verdicts []Verdict) error {
 			return errors.New("invalid model verdict")
 		}
 		seen[v.MetricID] = true
+		if !metricApplicabilityValid(in.Evidence["output"], v) {
+			return errors.New("empty actual citation denominator requires an unknown verdict")
+		}
 		if v.Value != nil && len(v.Evidence) == 0 {
 			return errors.New("measured model verdict requires evidence")
 		}
@@ -230,6 +264,9 @@ func validBoundJudgement(t Trial, j Judgement) bool {
 	}
 	seen := map[string]bool{}
 	for _, v := range j.Verdicts {
+		if !metricApplicabilityValid(t.Trajectory.Output, v) {
+			return false
+		}
 		if seen[v.MetricID] || (v.Value != nil && len(v.Evidence) == 0) {
 			return false
 		}

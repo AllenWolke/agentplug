@@ -41,11 +41,12 @@ func (m *Module) prepareModelSend(ctx context.Context, scope, key, fingerprint s
 	}
 	store, ok := m.modelStore.(ModelBillingRecoveryStore)
 	_, lifecycle := m.modelStore.(ModelSendLifecycleStore)
+	_, dispatch := m.modelStore.(ModelDispatchStore)
 	hold, retained := m.modelBudgets.(usagecost.ModelBudgetReconciliationStore)
-	if !ok || !lifecycle || !retained {
+	if !ok || !lifecycle || !dispatch || !retained {
 		return errors.New("model send persistence unavailable")
 	}
-	intent := BillingRecovery{Reservation: reservation, PriceID: reservation.PriceVersionID, SendDeadline: deadline}
+	intent := BillingRecovery{Reservation: reservation, PriceID: reservation.PriceVersionID, SendDeadline: deadline, SendPhase: "prepared"}
 	if len(tokens) == 1 {
 		intent.AttemptToken = tokens[0]
 	} else if len(tokens) > 1 {
@@ -96,7 +97,7 @@ func (s *SQLModelInvocationStore) PromoteExpiredSend(ctx context.Context, r Mode
 	if err != nil {
 		return err
 	}
-	updated, err := s.db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_model_invocation SET billing_state='manual',billing_recovery_json=?,billing_retry_at=NULL,updated_at=clock_timestamp() WHERE scope_hash=? AND idempotency_key=? AND fingerprint=? AND status='reconcile' AND billing_state='inflight' AND billing_recovery_json=? AND billing_retry_at<=clock_timestamp()`), string(raw), r.ScopeHash, r.Key, r.Fingerprint, string(original))
+	updated, err := s.db.ExecContext(ctx, sqlutil.Bind(`UPDATE platform_model_invocation SET billing_state='manual',billing_recovery_json=?,billing_retry_at=NULL,updated_at=clock_timestamp() WHERE scope_hash=? AND idempotency_key=? AND fingerprint=? AND status='reconcile' AND billing_state='inflight' AND billing_recovery_json::jsonb=?::jsonb AND billing_retry_at<=clock_timestamp()`), string(raw), r.ScopeHash, r.Key, r.Fingerprint, string(original))
 	if err != nil {
 		return err
 	}

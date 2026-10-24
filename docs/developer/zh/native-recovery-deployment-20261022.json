@@ -1,0 +1,383 @@
+{
+  "schema": "agentplug-native-recovery-acceptance/v1",
+  "project": "agentplug",
+  "checked_at": "2026-10-22T15:34:24.060370+00:00",
+  "cases": [
+    {
+      "language": "go",
+      "run_id": "native-recovery-20261022-go-v2-run",
+      "result": "PASS",
+      "waiting_platform_restart_verified": false,
+      "agent_process_pause_resume_verified": true,
+      "interruption_scope": "actual Agent container pause/resume plus dropped committed tool HTTP response; not crash/replacement",
+      "original_receipt_read_count": 1,
+      "effectful_notification_forward_count": 1,
+      "same_operation_binding": true,
+      "next_model_held_before_forward": true,
+      "notification_event_id": "agent-tool-ae1428733a38fc4082c54d08713b4a59d87c5fb14182969a15a0b06b5408a948",
+      "delivery_before_cancel": {
+        "outbox": "published",
+        "delivery": "published",
+        "inbox": "delivered"
+      },
+      "cancellation": {
+        "phase": "complete",
+        "stop_proof": true,
+        "inbox": "withdrawn",
+        "original_payload": true,
+        "reversal_receipt": true,
+        "open_model_budgets": 0,
+        "open_tree_holds": 0,
+        "active_session_lease": 0
+      },
+      "withdrawal_durable_after_platform_restart": true,
+      "terminal_replay_without_resend": true,
+      "fault_events_sha256": "c4ece0960d59263545e24c32338d450369ec4a1e77b1144da01852ed098c76e4"
+    },
+    {
+      "language": "java",
+      "run_id": "native-recovery-20261022-java-run",
+      "result": "PASS",
+      "waiting_platform_restart_verified": true,
+      "agent_process_pause_resume_verified": true,
+      "interruption_scope": "actual Agent container pause/resume plus dropped committed tool HTTP response; not crash/replacement",
+      "original_receipt_read_count": 1,
+      "effectful_notification_forward_count": 1,
+      "same_operation_binding": true,
+      "next_model_held_before_forward": true,
+      "notification_event_id": "agent-tool-9699afa9acd81b9adf8ebd17f1581f9c40c1c36d447541c175534eced73e503a",
+      "delivery_before_cancel": {
+        "outbox": "published",
+        "delivery": "published",
+        "inbox": "delivered"
+      },
+      "cancellation": {
+        "phase": "complete",
+        "stop_proof": true,
+        "inbox": "withdrawn",
+        "original_payload": true,
+        "reversal_receipt": true,
+        "open_model_budgets": 0,
+        "open_tree_holds": 0,
+        "active_session_lease": 0
+      },
+      "withdrawal_durable_after_platform_restart": true,
+      "terminal_replay_without_resend": true,
+      "fault_events_sha256": "eb08cb47acef41b07516eff876bc42ff28254c18bbded5271d3b76aaff186e67"
+    },
+    {
+      "language": "python",
+      "run_id": "native-recovery-20261022-python-run",
+      "result": "PASS",
+      "waiting_platform_restart_verified": true,
+      "agent_process_pause_resume_verified": true,
+      "interruption_scope": "actual Agent container pause/resume plus dropped committed tool HTTP response; not crash/replacement",
+      "original_receipt_read_count": 1,
+      "effectful_notification_forward_count": 1,
+      "same_operation_binding": true,
+      "next_model_held_before_forward": true,
+      "notification_event_id": "agent-tool-dc0a837410ea12fe742bb815aa79598cce797da675ffc978df066fe93471e3eb",
+      "delivery_before_cancel": {
+        "outbox": "published",
+        "delivery": "published",
+        "inbox": "delivered"
+      },
+      "cancellation": {
+        "phase": "complete",
+        "stop_proof": true,
+        "inbox": "withdrawn",
+        "original_payload": true,
+        "reversal_receipt": true,
+        "open_model_budgets": 0,
+        "open_tree_holds": 0,
+        "active_session_lease": 0
+      },
+      "withdrawal_durable_after_platform_restart": true,
+      "terminal_replay_without_resend": true,
+      "fault_events_sha256": "bb28b7a22587440414c71c072c4fd9eab0c04720932225d04205487d21ed5631"
+    }
+  ],
+  "accounts": [
+    {
+      "username": "platform.recovery",
+      "login_and_current_permissions": "PASS",
+      "original_history_preserved": true
+    },
+    {
+      "username": "system.admin",
+      "login_and_current_permissions": "PASS",
+      "original_history_preserved": true
+    },
+    {
+      "username": "permission.admin",
+      "login_and_current_permissions": "PASS",
+      "original_history_preserved": true
+    },
+    {
+      "username": "demo.go.user",
+      "login_and_current_permissions": "PASS",
+      "original_history_preserved": true
+    },
+    {
+      "username": "demo.java.user",
+      "login_and_current_permissions": "PASS",
+      "original_history_preserved": true
+    },
+    {
+      "username": "demo.python.user",
+      "login_and_current_permissions": "PASS",
+      "original_history_preserved": true
+    }
+  ],
+  "services": [
+    {
+      "service": "code-runtime",
+      "image": "sha256:d92e7e834d32fd5e68a0e71a82306bb8e3b01878325bb43a3e3d3800ea46f530",
+      "health": "running",
+      "volumes": [
+        "agentplug_code-runtime-state"
+      ]
+    },
+    {
+      "service": "example-go",
+      "image": "sha256:3d841d42684d47a1a313987f72a9c1163713b7c9512e6a128b20cc2759e25f3a",
+      "health": "running",
+      "volumes": []
+    },
+    {
+      "service": "example-java",
+      "image": "sha256:1613babe3496bfc764a78664a13ef3ba65401e41decce76c5809f69e9ffe3219",
+      "health": "running",
+      "volumes": []
+    },
+    {
+      "service": "example-python",
+      "image": "sha256:cae7a7f9094dfaf9fc3fcafe1cc7392c527bacb518a2fc40696602ed68e755a2",
+      "health": "running",
+      "volumes": []
+    },
+    {
+      "service": "frontend",
+      "image": "sha256:e28d94bb2006088919230380b3cf5bb09634764878c91ae9342d48681ea799c0",
+      "health": "healthy",
+      "volumes": []
+    },
+    {
+      "service": "kafka",
+      "image": "sha256:44a48f9d78af26959fa4d61accb9be35f939a79bfdae05cad6df4baca8e22eeb",
+      "health": "healthy",
+      "volumes": [
+        "c9f554d467fdf01ed4c5179d49d8a7722641bb7c0e4385639a77f3fe7443a1ce",
+        "agentplug_modular-kafka-data",
+        "6a597cefa0cfbb0b530dfc7da8745a66fe518f1b0120f7fda95f103989941d23"
+      ]
+    },
+    {
+      "service": "metric-runner",
+      "image": "sha256:a422ad5ce6cfce56d50fd964339b5bad70d0c2da908d927dd5062c588aa5b7ab",
+      "health": "healthy",
+      "volumes": []
+    },
+    {
+      "service": "platform-app",
+      "image": "sha256:1b45a3a620ed3de33401b6da4e19fb958a6f1a2c56f91c945bb4a5393f5351fa",
+      "health": "healthy",
+      "volumes": []
+    },
+    {
+      "service": "postgres",
+      "image": "sha256:f1447071e6c8449dcf4056aa0994c81d3566ce5ee232de36b04dc25696a116dd",
+      "health": "healthy",
+      "volumes": [
+        "agentplug_modular-postgres-data"
+      ]
+    }
+  ],
+  "historical_preservation": {
+    "platform_execution_run": {
+      "historical_rows": 319,
+      "current_rows": 323,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_model_invocation": {
+      "historical_rows": 658,
+      "current_rows": 671,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_tool_invocation": {
+      "historical_rows": 310,
+      "current_rows": 319,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_notification_outbox": {
+      "historical_rows": 12298,
+      "current_rows": 12545,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_notification_delivery": {
+      "historical_rows": 2595,
+      "current_rows": 2842,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_notification_inbox": {
+      "historical_rows": 6,
+      "current_rows": 9,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_kafka_delivery_attempt": {
+      "historical_rows": 2676,
+      "current_rows": 2923,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_kafka_dead_letter": {
+      "historical_rows": 32,
+      "current_rows": 32,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_kafka_dead_letter_action": {
+      "historical_rows": 2,
+      "current_rows": 2,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_cancellation_operation": {
+      "historical_rows": 10,
+      "current_rows": 13,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_cancellation_effect": {
+      "historical_rows": 5,
+      "current_rows": 11,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_compensation_step": {
+      "historical_rows": 24,
+      "current_rows": 31,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_compensation_event": {
+      "historical_rows": 73,
+      "current_rows": 110,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_compensation_local_effect": {
+      "historical_rows": 14,
+      "current_rows": 15,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_identity_membership": {
+      "historical_rows": 12,
+      "current_rows": 12,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_identity_role_binding": {
+      "historical_rows": 105,
+      "current_rows": 105,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_identity_grant": {
+      "historical_rows": 452,
+      "current_rows": 452,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_identity_workload_binding": {
+      "historical_rows": 5,
+      "current_rows": 5,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_policy_snapshot": {
+      "historical_rows": 37,
+      "current_rows": 37,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_schema_version": {
+      "historical_rows": 8,
+      "current_rows": 8,
+      "all_historical_rows_unchanged": true
+    },
+    "platform_compensation_schema_version": {
+      "historical_rows": 3,
+      "current_rows": 3,
+      "all_historical_rows_unchanged": true
+    }
+  },
+  "all_three_original_agent_environments_and_images_restored": true,
+  "all_temporary_gates_removed": true,
+  "historical_unknowns_automatically_processed": false,
+  "reference_project_accessed": false,
+  "model_requests": {
+    "prior_authorization_used": 46,
+    "remaining_at_start": 26,
+    "used_this_round": 13,
+    "overall_used": 59,
+    "overall_authorized_maximum": 72,
+    "remaining": 13,
+    "start_counters": {
+      "invocations": 658,
+      "physical_attempts": 63,
+      "manual_unknown": 5
+    },
+    "final_counters": {
+      "invocations": 671,
+      "physical_attempts": 76,
+      "manual_unknown": 5
+    },
+    "known_terminal_exploratory_task_included": true,
+    "unknown_requests_resent": false
+  },
+  "result": "PASS",
+  "regression": {
+    "native_scenarios": "all three examples passed",
+    "fault_boundary_tests": 4,
+    "release_e2e_tests": 473,
+    "static_checks": 14,
+    "platform_sdk_frontend_images": "unchanged; previous platform/SDK/frontend/template regression retained"
+  },
+  "evidence": [
+    {
+      "path": ".tmp/native-recovery-20261022/final.json",
+      "sha256": "49624618d61b36e77c8afbf9a8ad5491865df6f05ee470fefa0dc46ae339d5dd"
+    },
+    {
+      "path": ".tmp/native-recovery-20261022/native-historical-preservation.json",
+      "sha256": "8e1f6994d835e01b079f027ad14cb7381ef834436d61e945e82cc95d327b7b63"
+    },
+    {
+      "path": ".tmp/native-recovery-20261022/release-e2e.log",
+      "sha256": "7f9ccd5e2bc13e65e21d8b3707c64fde7f2807a2ec28a3ff054090164d6039d2"
+    },
+    {
+      "path": ".tmp/native-recovery-20261022/go.log",
+      "sha256": "0e5d6f85e667d3d985c88fc9af36c3e96186543b08e5532cceb311b6e4643848"
+    },
+    {
+      "path": ".tmp/native-recovery-20261022/go-v2.log",
+      "sha256": "d447479e686b827bee60c28cfaa0e8d928a1489fe212838f68c676221f6042ee"
+    },
+    {
+      "path": ".tmp/native-recovery-20261022/java.log",
+      "sha256": "16c6d7ebe40d3f74085ac2aa3bfaf099c932203cb57bbd53d925516b6471d54d"
+    },
+    {
+      "path": ".tmp/native-recovery-20261022/python.log",
+      "sha256": "942098bdb91412ca89d7b5c454e22b66adcfb1fac32028b5748b0ebd7b99c6fd"
+    },
+    {
+      "path": ".tmp/native-recovery-20261022/cleanup.log",
+      "sha256": "15c12cd39d092f50027d7f5d9b42b75c98c02ff162e7c645995de2d4ea4d5751"
+    },
+    {
+      "path": "tests/e2e/native_recovery_proxy.py",
+      "sha256": "40cbdee2be6f7abe1218a851a2179b701080f85216dc436ce17b0ffc5f64d880"
+    },
+    {
+      "path": "tests/e2e/test_native_recovery_proxy.py",
+      "sha256": "4aabd43690f257a6ecec675d7ab3ccd22fc52c60ef124d51d5182ea2658b2259"
+    },
+    {
+      "path": ".tmp/native-recovery-20261022/final-static-report.json",
+      "sha256": "a561d5168e4bc397bbe48cc52cab934bc5013403a3fdc2e47aa6e2e5fb27cf60"
+    }
+  ],
+  "model_or_tool_receipts_fabricated": false,
+  "provider_credentials_or_signed_requests_logged": false
+}

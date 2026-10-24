@@ -123,6 +123,9 @@ func TestSQLBillingManualDecisionAuditAndCompensation(t *testing.T) {
 		t.Fatal(err)
 	}
 	budgets := usagecost.NewSQLStore(db)
+	if err := store.SetModelBudgetClosureReader(budgets); err != nil {
+		t.Fatal(err)
+	}
 	if err := budgets.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +225,11 @@ func TestSQLBillingManualDecisionAuditAndCompensation(t *testing.T) {
 			}
 			defer reopenedDB.Close()
 			reopened, _ := NewSQLModelInvocationStore(reopenedDB)
-			restarted := &Module{modelStore: reopened, modelBudgets: usagecost.NewSQLStore(reopenedDB)}
+			restartedBudgets := usagecost.NewSQLStore(reopenedDB)
+			if err := reopened.SetModelBudgetClosureReader(restartedBudgets); err != nil {
+				t.Fatal(err)
+			}
+			restarted := &Module{modelStore: reopened, modelBudgets: restartedBudgets}
 			restarted.reconcileBilling(ctx)
 			restarted.reconcileBilling(ctx)
 			if restarted.billingStats.Completed.Load() != 1 {

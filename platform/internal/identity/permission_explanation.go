@@ -173,6 +173,9 @@ func explainPermissionSnapshot(snapshot PermissionSnapshot, query PermissionQuer
 			}
 			continue
 		}
+		if !agentPackageAllowsGrant(snapshot, g, query.Now) || hasAgentPackageStamp(g) && (query.RequirePublishedVersion && query.PublishedAgentVersionID == "" || query.PublishedAgentVersionID != "" && !agentPackageMatchesVersion(snapshot, g, query.PublishedAgentVersionID)) {
+			continue
+		}
 		out.Grants = append(out.Grants, g)
 	}
 	for _, b := range out.Bindings {
@@ -299,6 +302,9 @@ func (s *SQLStore) explainPermission(ctx context.Context, actor sharedkernel.Sco
 		return PermissionExplanation{}, err
 	}
 	query.Now = now
+	if err = s.bindAgentPackagePublishedVersion(ctx, snapshot, &query); err != nil {
+		return PermissionExplanation{}, err
+	}
 	if objectID != "" {
 		viewer := snapshot
 		if other {

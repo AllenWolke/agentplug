@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/lexagent/platform/internal/contract"
+	"github.com/lexagent/platform/internal/policyasset"
 )
 
 // TaskWorkloadCredential is supplied by an operator-owned secret resolver.
@@ -50,6 +51,17 @@ func (m *Module) BuildTaskEmbeddingRequest(ctx context.Context, command contract
 	s := command.Scope
 	c := harnessContext{TenantID: s.TenantID, DepartmentID: s.DepartmentID, ApplicationID: s.ApplicationID, AgentID: s.AgentID, AgentInstanceID: s.AgentInstanceID, InstallationID: s.InstallationID, AgentVersionID: s.AgentVersionID, PrincipalType: s.PrincipalType, ActorID: s.PrincipalID, SessionID: s.SessionID, TaskID: s.RunID, ParentRunID: s.ParentRunID, TraceID: s.TraceID, AuthorizationEpoch: s.AuthorizationEpoch, RequestID: "index-model:" + s.RunID, PlatformContextToken: token, ModelProfileID: ref("model_profile_id"), PromptVersionID: ref("prompt_version_id"), ToolPolicyID: ref("tool_policy_id"), MemoryPolicyID: ref("memory_policy_id"), KnowledgePolicyID: ref("knowledge_policy_id"), RuntimePolicyID: ref("runtime_policy_id")}
 	c.RuleBundleVersion, c.RuleBundleChecksum = ref("rule_bundle_version"), ref("rule_bundle_checksum")
+	if value, exists := policy["rule_bundle"]; exists {
+		raw, err := json.Marshal(value)
+		var rule policyasset.RulePolicy
+		if err != nil || json.Unmarshal(raw, &rule) != nil || rule.Version == "" || len(rule.Checksum) != 64 {
+			return denied()
+		}
+		if (c.RuleBundleVersion != "" && c.RuleBundleVersion != rule.Version) || (c.RuleBundleChecksum != "" && c.RuleBundleChecksum != rule.Checksum) {
+			return denied()
+		}
+		c.RuleBundleVersion, c.RuleBundleChecksum = rule.Version, rule.Checksum
+	}
 	for _, id := range []string{c.ModelProfileID, c.PromptVersionID, c.ToolPolicyID, c.MemoryPolicyID, c.KnowledgePolicyID, c.RuntimePolicyID} {
 		if id == "" || len(id) > 128 {
 			return denied()

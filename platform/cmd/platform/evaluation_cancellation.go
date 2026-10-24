@@ -45,10 +45,7 @@ func (c evaluationCancellationCoordinator) children(ctx context.Context, expecte
 	if json.Unmarshal(parent.Data, &data) != nil {
 		return nil, evaluationproduct.ErrInvalid
 	}
-	ids, err := c.runs.EvaluationBatchChildIDsTx(ctx, tx, execution.EvaluationBatchParent{
-		TenantID: parent.Scope.TenantID, DepartmentID: parent.Scope.DepartmentID,
-		ApplicationID: parent.Scope.ApplicationID, EvaluationID: parent.ID,
-	})
+	ids, err := c.runs.DirectChildRunIDsTx(ctx, tx, parent.Scope.TenantID, parent.Scope.DepartmentID, parent.Scope.ApplicationID, parent.ID, 10000)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +57,7 @@ func (c evaluationCancellationCoordinator) children(ctx context.Context, expecte
 			return nil, err
 		}
 		var request contract.ExecuteRequest
-		if json.Unmarshal(facts.RequestJSON, &request) != nil || request.Validate() != nil || request.Operation != "invoke" || request.ResumeInput != nil || !evaluationCreatorMatches(parent, facts.Scope) || request.Scope != evaluationContractScope(facts.Scope) || !evaluationScopeMatchesSnapshot(facts.Scope, snapshot.AgentID(), snapshot.AgentVersionID()) {
+		if contract.DecodeJSONPreservingNumbers(facts.RequestJSON, &request) != nil || request.Validate() != nil || request.Operation != "invoke" || request.ResumeInput != nil || !evaluationCreatorMatches(parent, facts.Scope) || request.Scope != evaluationContractScope(facts.Scope) || !evaluationScopeMatchesSnapshot(facts.Scope, snapshot.AgentID(), snapshot.AgentVersionID()) {
 			return nil, evaluationproduct.ErrForbidden
 		}
 		fingerprint, err := contract.CanonicalExecuteBodyHash(request)

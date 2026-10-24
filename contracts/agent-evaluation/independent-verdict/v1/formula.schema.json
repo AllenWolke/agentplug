@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Independent verdict formula v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "metric_id"],
+  "properties": {
+    "version": {"const": "independent-verdict/v1"},
+    "metric_id": {"enum": ["domain_correctness", "task_success", "plan_correctness", "replan_success", "early_stop_accuracy", "groundedness", "faithfulness", "citation_accuracy", "context_precision", "context_recall", "memory_precision"]}
+  }
+}
