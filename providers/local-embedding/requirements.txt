@@ -2,6 +2,9 @@ torch==2.14.1
 transformers==5.11.0
 tokenizers==0.22.2
 huggingface-hub==1.19.0
+# Torch's CPU index can leave an older already-satisfied transitive dependency.
+# GHSA-v4x8-3wr5-3wq8 / CVE-2026-112940 is fixed in 4.2.1.
+filelock==4.2.1
 numpy==2.1.1
 # Keep installation tooling and its vendored dependencies on the security baseline.
 setuptools==84.0.0

@@ -1,5 +1,7 @@
 # GitHub Actions 两项故障修复与后续阶段验收（2026-10-24）
 
+后续提交 `c7a07e0` 的 GitHub 质量工作流已实际完成，30 个 job 全部成功。其后供应链 Local Embedding 漏洞及本轮复核见[供应链修复记录](local-embedding-supply-chain-fix-20261024.md)。以下保留上一轮修复完成时的原始验收状态。
+
 针对 [GitHub 运行 40058748411](https://github.com/AllenWolke/agentplug/actions/runs/40058748411)，修复 `identity-sql` 的知识套件选择错误，以及 `conditional-public-contracts` 的 PostgreSQL 初始化就绪竞态。两个 job 的全部必需阶段和被阻塞的 `compose-e2e` 均已在本项目隔离环境补验通过。
 
 本轮修复尚未上传并触发新的 GitHub 托管运行，因此下文结果属于本地隔离复验。上传后仍需以同一新提交的完整 Actions 运行作为最终托管验收。原运行中已有 27 个 job 成功、2 个失败、1 个因依赖失败跳过；不能把原提交的成功结果描述为修复后重新执行的结果。

@@ -1,0 +1,1090 @@
+{
+  "schema": "agentplug-local-embedding-supply-chain-acceptance/v1",
+  "date": "2026-10-24",
+  "baseline_sha": "c7a07e028b39d90eae02b552dd474e1d30b72467",
+  "source_sha256": {
+    "providers/local-embedding/requirements.txt": "ba1405f62d7a763b7be84bf91772760b5a0fa6b26a00184a2a25854b1f6a2e1b",
+    "providers/local-embedding/Dockerfile": "dc0c1f7415bc85a18be562244eafe36c11164a0325507e6d941ee25925849bb1",
+    ".github/workflows/supply-chain.yml": "a4638691669165713dfb49eaec0c51b54d793b247711187d078acccf709b0894",
+    "scripts/summarize_trivy.py": "dbad1ca8d351ab64b6e07bf8bd14639d56b3b54e17082dfeb8515a1bafc764a5",
+    "tests/release-validation/test_trivy_summary.py": "81090bf768c0835672ed66c2438def8606700a7a4662a0abbc325be8279f8b18"
+  },
+  "advisory": {
+    "id": "CVE-2026-112940",
+    "package": "filelock",
+    "installed_before": "3.32.3",
+    "fixed_pin": "4.2.1",
+    "severity": "HIGH",
+    "upstream": "https://github.com/tox-dev/filelock/security/advisories/GHSA-v4x8-3wr5-3wq8"
+  },
+  "baseline_hosted_runs": {
+    "quality": {
+      "url": "https://github.com/AllenWolke/agentplug/actions/runs/40063402814",
+      "job_conclusions": {
+        "success": 30
+      }
+    },
+    "supply_chain": {
+      "url": "https://github.com/AllenWolke/agentplug/actions/runs/40063979538",
+      "job_conclusions": {
+        "success": 23,
+        "failure": 1
+      }
+    }
+  },
+  "hosted_run_after_fix": "not_triggered_local_patch_not_pushed",
+  "before": {
+    "scanner": "Trivy 0.70.0",
+    "image": "ghcr.io/allenwolke/agentplug@sha256:3bb7ec2519371fb2dc8966291ef8c35fffb2d8fbcfc2035b373b683ebd453ad7",
+    "scans": [
+      {
+        "architecture": "amd64",
+        "exit_code": 1,
+        "seconds": 34.4,
+        "vulnerabilities": [
+          {
+            "VulnerabilityID": "CVE-2026-112940",
+            "PkgName": "filelock",
+            "InstalledVersion": "3.32.3",
+            "FixedVersion": "4.2.1",
+            "Severity": "HIGH",
+            "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-112940",
+            "Title": "filelock: filelock: Arbitrary file overwrite via insecure database file reopening"
+          }
+        ]
+      },
+      {
+        "architecture": "arm64",
+        "exit_code": 1,
+        "seconds": 25.18,
+        "vulnerabilities": [
+          {
+            "VulnerabilityID": "CVE-2026-112940",
+            "PkgName": "filelock",
+            "InstalledVersion": "3.32.3",
+            "FixedVersion": "4.2.1",
+            "Severity": "HIGH",
+            "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-112940",
+            "Title": "filelock: filelock: Arbitrary file overwrite via insecure database file reopening"
+          }
+        ]
+      }
+    ]
+  },
+  "fixed_build": {
+    "schema": "agentplug-fixed-oci-build/v1",
+    "source_sha256": {
+      "Dockerfile": "dc0c1f7415bc85a18be562244eafe36c11164a0325507e6d941ee25925849bb1",
+      "engine.py": "bb4d8a6fbb788b8d5eff92799f7bae705be23d87c54e50c29c46d1f39e6a2012",
+      "models.lock.json": "48d376bad959a12b252b4796b3f9d90e7c0368ec70dc44245c0c2601975677ef",
+      "prepare.py": "e1309d85405a715d2f069cbc2cd0449cb94afe692d30460c247f5212555bad1d",
+      "requirements.txt": "ba1405f62d7a763b7be84bf91772760b5a0fa6b26a00184a2a25854b1f6a2e1b",
+      "server.py": "250172e5f3d308217ae09af6cd0ad5e8bc6dde1b633e34ebd97a8cd3acaa6836"
+    },
+    "exit_code": 0,
+    "seconds": 2065.86,
+    "complete": true,
+    "push": false,
+    "platforms": [
+      "linux/amd64",
+      "linux/arm64"
+    ],
+    "sbom": true,
+    "provenance": "mode=max",
+    "log_sha256": "ff40be40149191392e3d3bcc48fb93ffda9dda3ec87128960b78c019cf75ef96"
+  },
+  "fixed_image_scans": {
+    "schema": "agentplug-fixed-image-scans/v1",
+    "archive_sha256": "357f75113aaa581c3b06e0ae9ab1edf6226dd0642a18834f4d575fd13ea153bd",
+    "images": {
+      "amd64": {
+        "manifest_digest": "sha256:ed7eed783bf5cfdf89cee5a1f87a59c1bbf86a64c47e71a905ba4a3a5f95d06b",
+        "configuration_digest": "sha256:b8a7fd0cd7b0826a56f87daf211dc6eceeee2ef847533b304d1b0f62fa08c76d"
+      },
+      "arm64": {
+        "manifest_digest": "sha256:57c433c873777bf73ecb4ef456952654f23ebcc02dfdcbe653f64a12d1c97687",
+        "configuration_digest": "sha256:fd01d0720908e1775839b74a4b25c40ee8ce6c541056ecc31f38919c7db69c80"
+      }
+    },
+    "attestations": [
+      {
+        "predicate_type": "https://spdx.dev/Document",
+        "digest": "sha256:97206ed0ae684f2b6e79a1d8b875b8027cd56f8cfdac73f5e632d778f6b2187b",
+        "subjects": [
+          {
+            "name": "pkg:docker/agentplug-test@supply-chain-fix-20261024-local-embedding?platform=linux%2Famd64",
+            "digest": {
+              "sha256": "ed7eed783bf5cfdf89cee5a1f87a59c1bbf86a64c47e71a905ba4a3a5f95d06b"
+            }
+          }
+        ],
+        "filelock_versions": [
+          "4.2.1"
+        ]
+      },
+      {
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "digest": "sha256:0570e1b156d39da4d287f18e590088d25e5dc502e78c9d23c5509223af968826",
+        "subjects": [
+          {
+            "name": "pkg:docker/agentplug-test@supply-chain-fix-20261024-local-embedding?platform=linux%2Famd64",
+            "digest": {
+              "sha256": "ed7eed783bf5cfdf89cee5a1f87a59c1bbf86a64c47e71a905ba4a3a5f95d06b"
+            }
+          }
+        ],
+        "filelock_versions": []
+      },
+      {
+        "predicate_type": "https://spdx.dev/Document",
+        "digest": "sha256:f3a7680c1ca86b77d0b744286ae953cb924f0643a23ac6b4bcfcb388bc781f1b",
+        "subjects": [
+          {
+            "name": "pkg:docker/agentplug-test@supply-chain-fix-20261024-local-embedding?platform=linux%2Farm64",
+            "digest": {
+              "sha256": "57c433c873777bf73ecb4ef456952654f23ebcc02dfdcbe653f64a12d1c97687"
+            }
+          }
+        ],
+        "filelock_versions": [
+          "4.2.1"
+        ]
+      },
+      {
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "digest": "sha256:95011df38c2d9acdb3595e221eee79cbe80bb9679025c18062a4c5bb8c970728",
+        "subjects": [
+          {
+            "name": "pkg:docker/agentplug-test@supply-chain-fix-20261024-local-embedding?platform=linux%2Farm64",
+            "digest": {
+              "sha256": "57c433c873777bf73ecb4ef456952654f23ebcc02dfdcbe653f64a12d1c97687"
+            }
+          }
+        ],
+        "filelock_versions": []
+      }
+    ],
+    "scans": [
+      {
+        "architecture": "amd64",
+        "exit_code": 0,
+        "seconds": 5.14,
+        "actual_architecture": "amd64",
+        "vulnerabilities": [],
+        "passed": true
+      },
+      {
+        "architecture": "arm64",
+        "exit_code": 0,
+        "seconds": 4.75,
+        "actual_architecture": "arm64",
+        "vulnerabilities": [],
+        "passed": true
+      }
+    ],
+    "complete": true,
+    "local_input": "per-platform OCI layout views preserving all original blob and configuration digests"
+  },
+  "unchanged_image_matrix": {
+    "schema": "agentplug-unchanged-image-matrix-recheck/v1",
+    "baseline_sha": "c7a07e028b39d90eae02b552dd474e1d30b72467",
+    "images": {
+      "frontend": "ghcr.io/allenwolke/agentplug@sha256:11d78a1d5c76970260a2433861e94f3bd3be8793f26a13d4583b590aeb3fb308",
+      "platform": "ghcr.io/allenwolke/agentplug@sha256:5e54e3f66b435dcdd81579385db2ca832007872f1e67391fc6a76e7770ec0e3a",
+      "metric-runner": "ghcr.io/allenwolke/agentplug@sha256:65339152e6d63f0ae69d664189fce2e0fff32aa69dac06eb4792fc8b24a8275c",
+      "example-go": "ghcr.io/allenwolke/agentplug@sha256:efa54da129d906e6b9147c6ebdc9e6f8a93ef2aa9d5442036382813d8002024c",
+      "example-java": "ghcr.io/allenwolke/agentplug@sha256:d612753c3e69e28fa7ee3db54d956456bcc2a6e5dc56d38a04d139e7a9baffa2",
+      "example-python": "ghcr.io/allenwolke/agentplug@sha256:a2b31d1a219ae61692f18c6f4491830885f698c3ff6bfa03fc12ae244b8a6505",
+      "agent-eval": "ghcr.io/allenwolke/agentplug@sha256:d053d004a90425f6ef4cf7a531432d503508d2c8a1e6c4b3928eca3f59b5a451",
+      "code-runtime": "ghcr.io/allenwolke/agentplug@sha256:98e9f73b5a64e353e5d44c43ac2f4ae013bb43729780dae37f7cf7cd0c5eec85",
+      "code-sandbox-python": "ghcr.io/allenwolke/agentplug@sha256:1645d7b3d4f6ad45a8b989fad6e6e59c578d749a5cb665a6c93a543331a80f4b",
+      "template-go-generic": "ghcr.io/allenwolke/agentplug@sha256:7e4f1d068476f6656da935b46503a00cda62a1f26a3b57a4822d82ad3f810b52",
+      "code-sandbox-shell": "ghcr.io/allenwolke/agentplug@sha256:b759ddf33783cbf2b69594f4e48f93a55c73239dfef5adddb5e17eabe39a5d88",
+      "code-sandbox-javascript": "ghcr.io/allenwolke/agentplug@sha256:f2dca15ffd5768c0c425ce2680ff5ab85f3874f0af9565e8f9f2e6982a10eba8",
+      "template-go-eino": "ghcr.io/allenwolke/agentplug@sha256:cedb028775e28e6c8026f2ec5e4456e7b26ad7a84236bceb230e195f84439653",
+      "template-java-spring-ai": "ghcr.io/allenwolke/agentplug@sha256:8e41d9ccee01b00f410407d2e07e76956d783aa1345a62d9cc038dd3878803a6",
+      "template-java-generic": "ghcr.io/allenwolke/agentplug@sha256:01e1fea3f8c431df7fe09ef3953d444a8846f56f1ee26a84b01a6d18c5656c41",
+      "template-python-langgraph": "ghcr.io/allenwolke/agentplug@sha256:ddac34a2a6c068860b354af87817c77c4f05893e008d827e5ee75845542c92be",
+      "template-python-generic": "ghcr.io/allenwolke/agentplug@sha256:c3a76a80867ca4a6292e3d481c4297c6050ecf0ee14d9b3290633e92ac0fbcc1"
+    },
+    "scans": [
+      {
+        "name": "frontend",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:11d78a1d5c76970260a2433861e94f3bd3be8793f26a13d4583b590aeb3fb308",
+        "exit_code": 0,
+        "seconds": 3.99,
+        "log_sha256": "7ee2d856bab24fe3e1295cb1225b1442d83950b1eaf0205741a778ff75a34b02",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "d1f68e487bed23dc45a1ca75a478f0a176dab4488e379865d1340f494a2c4260",
+        "passed": true
+      },
+      {
+        "name": "frontend",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:11d78a1d5c76970260a2433861e94f3bd3be8793f26a13d4583b590aeb3fb308",
+        "exit_code": 0,
+        "seconds": 4.52,
+        "log_sha256": "b9e6bd85537fbab2e988a88221c73f4611326801c56cfaf6f4f93982895b04d3",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "33573b0f121f87a4e5b6905ef469f075609e804cedec2bee86b271daa73fe194",
+        "passed": true
+      },
+      {
+        "name": "metric-runner",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:65339152e6d63f0ae69d664189fce2e0fff32aa69dac06eb4792fc8b24a8275c",
+        "exit_code": 0,
+        "seconds": 4.53,
+        "log_sha256": "a562eedf5b3a694356b8532a30403c85729fa4abcdb2ac7a2103fa2f8dd505ba",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "31eabb92b0aca5807abf72f6a1ddf150cc82825ee34796407c771ca6a2362fb0",
+        "passed": true
+      },
+      {
+        "name": "platform",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:5e54e3f66b435dcdd81579385db2ca832007872f1e67391fc6a76e7770ec0e3a",
+        "exit_code": 0,
+        "seconds": 10.27,
+        "log_sha256": "b629be78461ba334f29aa7d14c15aedf784333c44fe8e0b6acbb7241b248f75b",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "9c4e4902675208b070f9b5e67cc5ab137d35fee32c51468c4b1ba33bdfe19891",
+        "passed": true
+      },
+      {
+        "name": "metric-runner",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:65339152e6d63f0ae69d664189fce2e0fff32aa69dac06eb4792fc8b24a8275c",
+        "exit_code": 0,
+        "seconds": 3.26,
+        "log_sha256": "c7e7fbbb4c1eb5b2be91c5f42dd5a151fda7865089ff5c6a301f8a6e6982588c",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "80a9a45601600622b134e88af6b747b406935510e120771192c9126d91a7db8e",
+        "passed": true
+      },
+      {
+        "name": "example-go",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:efa54da129d906e6b9147c6ebdc9e6f8a93ef2aa9d5442036382813d8002024c",
+        "exit_code": 0,
+        "seconds": 4.49,
+        "log_sha256": "d7dd907c578cb3b5aaae2345cd759d29ec9acbf967adb3db949fe78ca6d8cac3",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "985e01b59d56df8d958f858458e543f5186d1f0385a73cf2fc65d623bfe1ef94",
+        "passed": true
+      },
+      {
+        "name": "platform",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:5e54e3f66b435dcdd81579385db2ca832007872f1e67391fc6a76e7770ec0e3a",
+        "exit_code": 0,
+        "seconds": 12.2,
+        "log_sha256": "7bade3376b75d6edff4fb798b564ad010283d9eaad3155dbc58bd815b3e7c9c1",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "431c5328ce1e212b2c800df34e24fc32498062563f4acf6cb144a801d1e33e00",
+        "passed": true
+      },
+      {
+        "name": "example-go",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:efa54da129d906e6b9147c6ebdc9e6f8a93ef2aa9d5442036382813d8002024c",
+        "exit_code": 0,
+        "seconds": 4.45,
+        "log_sha256": "fbdaf001c37b952027ef03e7a93f8e61b8457f2183805c0d13f717bc4ebd5280",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "ff73e5dc7286d584cd3b0bc3aae8a24bdf3487c5e8952070b2b04db30e289ba8",
+        "passed": true
+      },
+      {
+        "name": "example-python",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:a2b31d1a219ae61692f18c6f4491830885f698c3ff6bfa03fc12ae244b8a6505",
+        "exit_code": 0,
+        "seconds": 6.26,
+        "log_sha256": "ac6151421ea5b5fd611d49ab065dda8312ec94e010d61ce3dabfb38dd7b86658",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "a2080c5c199fd2efecc4733f4c122850b9c625f895c3055b13e5e39a2514e0ec",
+        "passed": true
+      },
+      {
+        "name": "example-python",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:a2b31d1a219ae61692f18c6f4491830885f698c3ff6bfa03fc12ae244b8a6505",
+        "exit_code": 0,
+        "seconds": 10.04,
+        "log_sha256": "acaf9afb1b57c44fef7215f4cc37e14a6dc47f4d476782c0df30883d1afe2d3c",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "fe5061674bb13ddb1ca38f100b1c240884f9071a5707b58cc19c8001ecf81892",
+        "passed": true
+      },
+      {
+        "name": "agent-eval",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:d053d004a90425f6ef4cf7a531432d503508d2c8a1e6c4b3928eca3f59b5a451",
+        "exit_code": 0,
+        "seconds": 3.61,
+        "log_sha256": "4a52f1225f9b94c30f42532bdf87c9f93fdcd82d789eb2935a0e25405eaca168",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "8c7e4109f9fdd639a59bcb3e13ad7f7ec241ad849d3dac6a87f7d0c1a7932c9e",
+        "passed": true
+      },
+      {
+        "name": "agent-eval",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:d053d004a90425f6ef4cf7a531432d503508d2c8a1e6c4b3928eca3f59b5a451",
+        "exit_code": 0,
+        "seconds": 3.59,
+        "log_sha256": "565491fd11940f5b853d1d22c2dcac7476ab3950c096e4a5a66ef60ba4b671a1",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "ce24adde2674b3349aabcbba84f6c334b44bf4f6c185341af5c3e5ce6d45cd2e",
+        "passed": true
+      },
+      {
+        "name": "code-runtime",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:98e9f73b5a64e353e5d44c43ac2f4ae013bb43729780dae37f7cf7cd0c5eec85",
+        "exit_code": 0,
+        "seconds": 6.19,
+        "log_sha256": "4ea448ed3f04dd79598f138da61abd1768915c1fd38ef9199c7a3344def288e0",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "d8b054dabd13776f9289848b80f08dcb136603ad78c9a9014494444e13a7bb98",
+        "passed": true
+      },
+      {
+        "name": "code-runtime",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:98e9f73b5a64e353e5d44c43ac2f4ae013bb43729780dae37f7cf7cd0c5eec85",
+        "exit_code": 0,
+        "seconds": 7.96,
+        "log_sha256": "9a7c454e7221466a3b063bfc71020c0a0cc44e49eff6bf098fade163f2834e50",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "3ab82a98917955f8535504af088ae3beb9b6d2fe50e430b8572d9e2ef4b77c80",
+        "passed": true
+      },
+      {
+        "name": "code-sandbox-python",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:1645d7b3d4f6ad45a8b989fad6e6e59c578d749a5cb665a6c93a543331a80f4b",
+        "exit_code": 0,
+        "seconds": 6.67,
+        "log_sha256": "8424d84180e00c9250fd181c4edf927b554195e88da9d0b50d47f34b23cd4117",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "cb0d556b0a384edc756dd3156ab610eca53804cfb4bcdce02b482f05a38e4a19",
+        "passed": true
+      },
+      {
+        "name": "code-sandbox-python",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:1645d7b3d4f6ad45a8b989fad6e6e59c578d749a5cb665a6c93a543331a80f4b",
+        "exit_code": 0,
+        "seconds": 6.43,
+        "log_sha256": "5a04dc9844129456f8b684feb81d818df91d53d59a521e2350cf8e9b4d0404bf",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "6ebe1259c678f2aa7f6699226370101ce9602476ab006d8952f54eb15707c158",
+        "passed": true
+      },
+      {
+        "name": "template-go-generic",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:7e4f1d068476f6656da935b46503a00cda62a1f26a3b57a4822d82ad3f810b52",
+        "exit_code": 0,
+        "seconds": 4.48,
+        "log_sha256": "efe3fdd32ceab68d15874f7c8cad187808de15d8d4e5827dc0b270c5b816a3ca",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "ce6b605a9d17079d1fef5ad14b4e000e5ebd547a417d6f93bd039913857cff06",
+        "passed": true
+      },
+      {
+        "name": "template-go-generic",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:7e4f1d068476f6656da935b46503a00cda62a1f26a3b57a4822d82ad3f810b52",
+        "exit_code": 0,
+        "seconds": 3.6,
+        "log_sha256": "8ba3f8d9014efd1d86934ce1e5973104f82d052edf53c2aa3247c0da5e40490a",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "055b9854ccbe8945b12e8d8eb611b48a2c4b164ad4fa28a0a469feb502a6783e",
+        "passed": true
+      },
+      {
+        "name": "code-sandbox-shell",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:b759ddf33783cbf2b69594f4e48f93a55c73239dfef5adddb5e17eabe39a5d88",
+        "exit_code": 0,
+        "seconds": 2.97,
+        "log_sha256": "f5bf4dc9cf3294e81caf86f8038d635cedbefe9c81a4aaf0541ad161c8a4180f",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "e2387687d7895d7d4a66500ee67d5c2982626e566aba9c4fcac003b7d87f4c61",
+        "passed": true
+      },
+      {
+        "name": "code-sandbox-shell",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:b759ddf33783cbf2b69594f4e48f93a55c73239dfef5adddb5e17eabe39a5d88",
+        "exit_code": 0,
+        "seconds": 3.15,
+        "log_sha256": "a1c630ec337fa77961a68462ed40bdda5ce41ca7cba97f12c6cd7d3ce221bdfd",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "ea72f66e8d86494882dd41fd499c0ab50b095985d617651ee9f96575352e884c",
+        "passed": true
+      },
+      {
+        "name": "example-java",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:d612753c3e69e28fa7ee3db54d956456bcc2a6e5dc56d38a04d139e7a9baffa2",
+        "exit_code": 0,
+        "seconds": 70.82,
+        "log_sha256": "b90e4b63b7f01ad8a253540dfa0e6d254c95def01926078e2c6d9414549bc44a",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "acd26b74a2df9d7c1b699a4b82a4c7b3430e29fe766af656be0cbf98045e2f34",
+        "passed": true
+      },
+      {
+        "name": "example-java",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:d612753c3e69e28fa7ee3db54d956456bcc2a6e5dc56d38a04d139e7a9baffa2",
+        "exit_code": 0,
+        "seconds": 73.19,
+        "log_sha256": "48318fe493d5ef1eddcf7ea8ec442319bd605af3be7c1599ca9300924cdce358",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "3bf97bb5f2e1d9805376f4c405d961bbfab2931ae96e8c4fd207e6aae17fe641",
+        "passed": true
+      },
+      {
+        "name": "code-sandbox-javascript",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:f2dca15ffd5768c0c425ce2680ff5ab85f3874f0af9565e8f9f2e6982a10eba8",
+        "exit_code": 0,
+        "seconds": 6.07,
+        "log_sha256": "d9bd3acb95f40587d3e892e2561bec22febb3f899aa211461f1e07432709cbcf",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "df97af5d6918b4af53666c088c0e3ca50f81e5f79ab1a77128eb02ba1fc15805",
+        "passed": true
+      },
+      {
+        "name": "template-go-eino",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:cedb028775e28e6c8026f2ec5e4456e7b26ad7a84236bceb230e195f84439653",
+        "exit_code": 0,
+        "seconds": 3.52,
+        "log_sha256": "2b5d294561e11a91b147a8c29b29fd117888289e6c727a4b1c3cc24df9eb8934",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "7bed59c273968c4898ad9262e36dfcdfc977a5fd7eabb57373139a286bd3bba6",
+        "passed": true
+      },
+      {
+        "name": "template-go-eino",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:cedb028775e28e6c8026f2ec5e4456e7b26ad7a84236bceb230e195f84439653",
+        "exit_code": 0,
+        "seconds": 5.02,
+        "log_sha256": "c369c1296c423929df9d846fb6796a6be56a1b001e98c4a6ed16abc5553d32ae",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "687e5fa5db80ef0f734cfae88470f0b59e60c124449caed8663eb406d25b8034",
+        "passed": true
+      },
+      {
+        "name": "code-sandbox-javascript",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:f2dca15ffd5768c0c425ce2680ff5ab85f3874f0af9565e8f9f2e6982a10eba8",
+        "exit_code": 0,
+        "seconds": 7.69,
+        "log_sha256": "6eb5ec01568b8ba1cb24a619d3874f75e33c7b1fde1f115cb6842de580d23fa3",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "b1535b0da9c421d9cba195620bb076826411916854ace2567f9507fc9c502200",
+        "passed": true
+      },
+      {
+        "name": "template-java-generic",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:01e1fea3f8c431df7fe09ef3953d444a8846f56f1ee26a84b01a6d18c5656c41",
+        "exit_code": 0,
+        "seconds": 11.17,
+        "log_sha256": "8c12a6ad984697d612030aa52dbfa10c26a8ba7e5912b8e1787cc979344c46b7",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "0346c58ce2f3fe93a8008783c37fcfad53e73bac34934c4480ef48eb04a34af5",
+        "passed": true
+      },
+      {
+        "name": "template-java-generic",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:01e1fea3f8c431df7fe09ef3953d444a8846f56f1ee26a84b01a6d18c5656c41",
+        "exit_code": 0,
+        "seconds": 6.17,
+        "log_sha256": "6f9a19a11d468676d1c86443d03ca673cbcea212e228606193d46e17deab4381",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "9decaade9ad735940484009c7e231e6e0d7573d6b4d145f33c296860903a44a7",
+        "passed": true
+      },
+      {
+        "name": "template-java-spring-ai",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:8e41d9ccee01b00f410407d2e07e76956d783aa1345a62d9cc038dd3878803a6",
+        "exit_code": 0,
+        "seconds": 19.29,
+        "log_sha256": "091bda00f61b062ba68c70b956f56104594643f251a987369d69b29ce76b08bb",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "d57f526a021f25dc3cabaf797278e0c0c050d5c8c85316ab4995c83455a622e2",
+        "passed": true
+      },
+      {
+        "name": "template-python-langgraph",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:ddac34a2a6c068860b354af87817c77c4f05893e008d827e5ee75845542c92be",
+        "exit_code": 0,
+        "seconds": 7.57,
+        "log_sha256": "198e3309a7c7942e1d1ab2a4b02dab4380c9ef01ff4fe63a0ceddd30b646ceb2",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "adb3e6d20cb314a91479b4506ef852cd5fe128239179ad32faa0431dc9ef56ec",
+        "passed": true
+      },
+      {
+        "name": "template-python-langgraph",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:ddac34a2a6c068860b354af87817c77c4f05893e008d827e5ee75845542c92be",
+        "exit_code": 0,
+        "seconds": 8.68,
+        "log_sha256": "a0cf9baf48b27b3899788fe4088913fcac15b012123d59c40e567c0804095845",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "f4ae4f97fc33ee21a2f5144e8a62a01845c39d03bf850bbeb5ea9948e8edd38c",
+        "passed": true
+      },
+      {
+        "name": "template-python-generic",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:c3a76a80867ca4a6292e3d481c4297c6050ecf0ee14d9b3290633e92ac0fbcc1",
+        "exit_code": 0,
+        "seconds": 5.52,
+        "log_sha256": "d0e0e68a6d01c5576e2407ee4af4617fa22ca614bbd6a7f49ca9d3aac61d4eb1",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "8533265930ad4d06610cafc7c616f1977f193e4e92dcd24df3ff1633dec81798",
+        "passed": true
+      },
+      {
+        "name": "template-python-generic",
+        "architecture": "arm64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:c3a76a80867ca4a6292e3d481c4297c6050ecf0ee14d9b3290633e92ac0fbcc1",
+        "exit_code": 0,
+        "seconds": 5.87,
+        "log_sha256": "1a0f6f0dfc6e27ce3d08a9d731e21f97d10df4c3bc8b96584ec790f33aaccc8a",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "735fba034a36b012f8d88f23f570ad5fdd183b2e018961831c77ce69dab15930",
+        "passed": true
+      },
+      {
+        "name": "template-java-spring-ai",
+        "architecture": "amd64",
+        "reference": "ghcr.io/allenwolke/agentplug@sha256:8e41d9ccee01b00f410407d2e07e76956d783aa1345a62d9cc038dd3878803a6",
+        "exit_code": 0,
+        "seconds": 61.18,
+        "log_sha256": "0983b13c17eb6b51006006ef5125d15a80f38271d1f3143d46923421566dd7f5",
+        "vulnerabilities": [],
+        "summary_verified": true,
+        "report_sha256": "c00736def631efc846193d825e68a4dcdfc29f80b6aeb0817b768e886a50208d",
+        "passed": true
+      }
+    ],
+    "complete": true
+  },
+  "image_scan_acceptance": {
+    "images": 18,
+    "architecture_checks_passed": 36,
+    "architectures": [
+      "linux/amd64",
+      "linux/arm64"
+    ],
+    "policy": "CRITICAL,HIGH; ignore-unfixed=true; exit-code=1; scanners=vuln",
+    "scope": "local-embedding rebuilt locally; other 17 images use immutable published baseline digests"
+  },
+  "provider_offline_runtime": {
+    "schema": "agentplug-shared-fixture-provider-runtime/v1",
+    "external_model_requests": 0,
+    "fixture_generation": "AMD64; frozen safetensors and tokenizer consumed without modification on both architectures",
+    "fixture_manifest_sha256": "1e120771269962cebbe3652fd3d85a79ea8233e7dddfe3e31b5ef18129df9550",
+    "architectures": [
+      {
+        "architecture": "amd64",
+        "image_id": "sha256:b8a7fd0cd7b0826a56f87daf211dc6eceeee2ef847533b304d1b0f62fa08c76d",
+        "configuration_matches_scanned_oci": true,
+        "exit_code": 0,
+        "seconds": 4.51,
+        "probe": {
+          "complete": true,
+          "architecture": "x86_64",
+          "filelock": "4.2.1",
+          "torch": "2.14.1+cpu",
+          "non_root": true,
+          "cpu_only": true,
+          "health": true,
+          "unauthorized_denied": true,
+          "document_and_query_embeddings": true,
+          "finite_normalized_dimensions": 1024,
+          "invalid_input_denied": true,
+          "model_source": "frozen tiny fixture generated once on AMD64; same files for both architectures",
+          "external_model_requests": 0
+        },
+        "log_sha256": "56f6a271b283b4a5dab731f28e29239cba6d6cc0e11151536a6301ce670c34fd",
+        "passed": true
+      },
+      {
+        "architecture": "arm64",
+        "image_id": "sha256:fd01d0720908e1775839b74a4b25c40ee8ce6c541056ecc31f38919c7db69c80",
+        "configuration_matches_scanned_oci": true,
+        "exit_code": 1,
+        "seconds": 36.38,
+        "probe": null,
+        "log_sha256": "2c80ee2a6d0c5a8b10cc8199676af9343a6a2cc3886199c72264369a5b6f6ed5",
+        "passed": false,
+        "emulated_cpu": "cortex-a72"
+      }
+    ],
+    "complete": false
+  },
+  "arm_emulation_comparison": {
+    "schema": "agentplug-arm-emulation-baseline-comparison/v1",
+    "baseline_reference": "ghcr.io/allenwolke/agentplug@sha256:40da5c317f8abec44a98fdb1646e0c6512c40b3a7a7ab0cf704afd403ddf44da",
+    "baseline_image_id": "sha256:09b2547e50a0699b7bafdc5069f18723ce7e77cde3fdcbf3b9e42f234e41dad1",
+    "baseline_image_downloaded_this_task": true,
+    "baseline_runtime_exit_code": 1,
+    "seconds": 38.4,
+    "same_frozen_fixture": true,
+    "emulated_cpu": "cortex-a72",
+    "baseline_sigsegv": true,
+    "fixed_sigsegv": true,
+    "baseline_log_sha256": "ebc1809aeb9e06be81e10579d185ce29975788b8897e6c7d6d41910656ba8e69",
+    "native_arm_hardware_tested": false,
+    "external_model_requests": 0,
+    "same_failure_reproduced": true
+  },
+  "default_qemu_runtime_failure_retained": {
+    "schema": "agentplug-offline-provider-runtime/v1",
+    "external_model_requests": 0,
+    "architectures": [
+      {
+        "architecture": "amd64",
+        "image_id": "sha256:b8a7fd0cd7b0826a56f87daf211dc6eceeee2ef847533b304d1b0f62fa08c76d",
+        "configuration_matches_scanned_oci": true,
+        "exit_code": 0,
+        "seconds": 9.81,
+        "log_sha256": "3b36b912116a2124a4fab0042f604022e861b2ab77c04f7579798531b82a628a",
+        "probe": {
+          "complete": true,
+          "architecture": "x86_64",
+          "filelock": "4.2.1",
+          "torch": "2.14.1+cpu",
+          "non_root": true,
+          "cpu_only": true,
+          "health": true,
+          "unauthorized_denied": true,
+          "document_and_query_embeddings": true,
+          "finite_normalized_dimensions": 1024,
+          "invalid_input_denied": true,
+          "model_source": "generated random tiny local fixture",
+          "external_model_requests": 0
+        },
+        "passed": true
+      },
+      {
+        "architecture": "arm64",
+        "image_id": "sha256:fd01d0720908e1775839b74a4b25c40ee8ce6c541056ecc31f38919c7db69c80",
+        "configuration_matches_scanned_oci": true,
+        "exit_code": 137,
+        "seconds": 456.56,
+        "log_sha256": "880280c21dec27d4289d86e2dbe8434a64c8e8cca25655f1dd0d048ceec8abe3",
+        "probe": null,
+        "passed": false
+      }
+    ]
+  },
+  "compatible_qemu_import_probe": {
+    "exit_code": 0,
+    "seconds": 29.24,
+    "QEMU_CPU": "cortex-a72"
+  },
+  "source_vulnerability_scan": {
+    "exit_code": 0,
+    "report_sha256": "8c415c641b442eac34605b851a9ad63fa58013abd894bed8d68005828295e6d8"
+  },
+  "workflow_syntax": {
+    "actionlint_version": "1.7.12",
+    "all_three_workflows_passed": true,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "quality_checks": {
+    "environment": {
+      "python": "Python 3.12.14",
+      "go": "go version go1.26.10 linux/amd64",
+      "network": "none",
+      "docker_socket_mounted": false
+    },
+    "commands": [
+      {
+        "stage": "check_gofmt.py",
+        "exit_code": 1,
+        "passed": false,
+        "seconds": 3.18,
+        "log_sha256": "44d4d95c40a77eb64aba7df0b379a3320b77f24b8b58fea2ff9249b9d3157284"
+      },
+      {
+        "stage": "verify_modular_process.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 5.08,
+        "log_sha256": "3c72f3ee68717214545f4a7ccf9831d7769d5cfcf3fb9cc8ebc5d6e42bf30e5d"
+      },
+      {
+        "stage": "verify_modular_boundaries.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 48.07,
+        "log_sha256": "22464ae122313fcded248ef7840dd870faf67f94987f53bf59dea24805ddcd9a"
+      },
+      {
+        "stage": "check_contract_breaking.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.17,
+        "log_sha256": "28d9102df84c8adaae24cb717806850d57bc60e5fc838cd0f198017e91e88ccc"
+      },
+      {
+        "stage": "lint_execution_contract.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.17,
+        "log_sha256": "b0ecc6c6b2c7d9374eb32fac1a8626a1dd820d3e2a4adaa6ff39430a410a4928"
+      },
+      {
+        "stage": "check_removed_architecture.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 5.93,
+        "log_sha256": "ef02e80d5fc308239d86f118f7aeb637e5b876500ada7dd2e50b7b457c3a03c7"
+      },
+      {
+        "stage": "check_publication.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 27.9,
+        "log_sha256": "0888c6568afe17ec1e02a39e93e18ea57d4b1dcd9ebfa78fbcc28fe02399a067"
+      },
+      {
+        "stage": "check_markdown_links.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 30.56,
+        "log_sha256": "e3fb74f01f408c6b23875d66d44cf5e181bb2e628bcf22340843caf3bebd90e1"
+      },
+      {
+        "stage": "check_agent_productization_contracts.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.22,
+        "log_sha256": "87101f9e0c3518623010abfa51761b951aaba803a7ecee3e4f6c099ed6aa6d1d"
+      },
+      {
+        "stage": "check_agent_code_ownership.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 1.92,
+        "log_sha256": "98f6a422178f8a5d8bce4d7c41ee12e27109e003226f96a2de45369acad41cfe"
+      },
+      {
+        "stage": "scan_secrets.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 24.64,
+        "log_sha256": "6b0bc342e769e989b43e39671b595e1c08bd8b0cbc6019e296e26ddfe3f33c7f"
+      },
+      {
+        "stage": "test_scan_secrets.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.42,
+        "log_sha256": "ea652c61c25295c95e783b19a5963ad9ef37626f6bd948a5bb9a37049998521d"
+      },
+      {
+        "stage": "test_codeql_false_positives.py",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 1.62,
+        "log_sha256": "05497b18b718ca6654576549d7cf8bc8fd75c9591b6275e2ba7924cc7793824f"
+      },
+      {
+        "stage": "sdk-sync",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 4.23,
+        "log_sha256": "e0a6570f69200ff83a853f19586da91659e015de5d3c80d76067290a7c92e337"
+      },
+      {
+        "stage": "release-validation",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 37.98,
+        "log_sha256": "99e975d76bb233abaa270df02acc69d29f158a26cbe7d7420686b1a0abe1f4db"
+      },
+      {
+        "stage": "e2e-contracts",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 13.91,
+        "log_sha256": "c8de63ca9c04243417e90e1fcb6ad13198deb8fb63136cdd35e4e19459760dc9"
+      }
+    ],
+    "linux_format_recheck": {
+      "schema": "agentplug-linux-line-endings-recheck/v1",
+      "exit_code": 0,
+      "complete": true,
+      "scope": "temporary source checkout only; original repository untouched",
+      "normalized_go_files": 1673,
+      "log_sha256": "f0ab3d242318dc644fcb62c7a174c5eaaced8727c91da8835671b3dd82070950"
+    },
+    "final_complete": true,
+    "release_validation_passed": 320,
+    "release_validation_skipped": 0,
+    "e2e_contracts_passed": 83,
+    "e2e_contracts_skipped": 0
+  },
+  "scanner": {
+    "trivy_version": "0.70.0",
+    "archive": "trivy_0.70.0_windows-64bit.zip",
+    "archive_sha256": "eea5442eab86f9e26cd718d7618d43899e72a83767619e8bee47911bddbfb825",
+    "binary_sha256": "e9f115fe62504938cabe510c16f2a0b0e960460213c23f06cddbae9ef9afeeaf"
+  },
+  "other_tools": {
+    "actionlint_version": "1.7.12",
+    "actionlint_archive_sha256": "6e7241b51e6817ea6a047693d8e6fed13b31819c9a0dd6c5a726e1592d22f6e9",
+    "kubectl_version": "1.37.1",
+    "kubectl_sha256": "65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8"
+  },
+  "native_preservation": {
+    "schema": "agentplug-supply-chain-native-preservation/v1",
+    "containers": [
+      {
+        "name": "/agentplug-platform-app-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-example-python-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-example-go-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-example-java-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-frontend-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-code-runtime-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-metric-runner-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-postgres-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-kafka-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      }
+    ],
+    "health": [
+      {
+        "name": "frontend",
+        "passed": true
+      },
+      {
+        "name": "platform",
+        "passed": true
+      },
+      {
+        "name": "example-go",
+        "passed": true
+      },
+      {
+        "name": "example-java",
+        "passed": true
+      },
+      {
+        "name": "example-python",
+        "passed": true
+      }
+    ],
+    "historical_holds_unchanged_from_prior_acceptance": true,
+    "database_migrations_or_tests_against_existing_data": false,
+    "reference_project_modified": false,
+    "external_model_requests": 0,
+    "complete": true
+  },
+  "temporary_cleanup": {
+    "schema": "agentplug-supply-chain-owned-cleanup/v1",
+    "removed_image_tags": [
+      "agentplug-test:supply-chain-fix-20261024-quality",
+      "agentplug-test:supply-chain-fix-20261024-local-embedding-amd64",
+      "agentplug-test:supply-chain-fix-20261024-local-embedding-arm64"
+    ],
+    "builder_removed": true,
+    "state_volume_removed": true,
+    "removed_paths": [
+      ".tmp/supply-chain-fix-20261024/source",
+      ".tmp/supply-chain-fix-20261024/scan-source",
+      ".tmp/supply-chain-fix-20261024/quality-tool",
+      ".tmp/supply-chain-fix-20261024/quality-scratch",
+      ".tmp/supply-chain-fix-20261024/provider-context",
+      ".tmp/supply-chain-fix-20261024/docker-client",
+      ".tmp/supply-chain-fix-20261024/trivy-cache",
+      ".tmp/supply-chain-fix-20261024/fixed-local-embedding.oci.tar",
+      ".tmp/supply-chain-fix-20261024/fixed-oci-layout",
+      ".tmp/supply-chain-fix-20261024/fixed-layout-amd64",
+      ".tmp/supply-chain-fix-20261024/fixed-layout-arm64",
+      ".tmp/supply-chain-fix-20261024/trivy-tmp",
+      ".tmp/supply-chain-fix-20261024/shared-fixture",
+      ".tmp/supply-chain-fix-20261024/provider-context.tar",
+      ".tmp/supply-chain-fix-20261024/trivy.exe",
+      ".tmp/supply-chain-fix-20261024/actionlint.exe",
+      ".tmp/supply-chain-fix-20261024/trivy_0.70.0_windows-64bit.zip",
+      ".tmp/supply-chain-fix-20261024/matrix-scans/cache-0",
+      ".tmp/supply-chain-fix-20261024/matrix-scans/cache-1",
+      ".tmp/supply-chain-fix-20261024/matrix-scans/cache-2"
+    ],
+    "logical_bytes_removed": 14243878545,
+    "global_cache_pruned": false,
+    "removed_baseline_reference": "ghcr.io/allenwolke/agentplug@sha256:40da5c317f8abec44a98fdb1646e0c6512c40b3a7a7ab0cf704afd403ddf44da",
+    "complete": true
+  },
+  "release_policy": {
+    "critical_high_gate_unchanged": true,
+    "new_cve_exceptions": 0,
+    "continue_on_error_added": false,
+    "both_architectures_required_before_sbom_and_signing": true,
+    "registry_pushes_in_this_task": 0,
+    "keyless_signing_performed_locally": false
+  },
+  "initial_local_environment_failures": [
+    {
+      "step": "Windows Python 3.13 targeted tests",
+      "result": "32 passed, 1 failed",
+      "reason": "CodeQL negative-control subprocess output did not use UTF-8; fully covered by passing Linux Python 3.12 release suite"
+    },
+    {
+      "step": "initial build context",
+      "result": "failed before Dockerfile build",
+      "reason": "client treated stdin tar as a Dockerfile; fresh directory context succeeded"
+    },
+    {
+      "step": "initial quality tool build",
+      "result": "failed before build",
+      "reason": "builder/default-context mismatch; explicit per-command context fixed it"
+    },
+    {
+      "step": "initial Go format checks",
+      "result": "failed",
+      "reason": "Windows Git archive exported CRLF; temporary Linux text normalization restored original gate success"
+    },
+    {
+      "step": "local OCI archive inputs",
+      "result": "failed",
+      "reason": "Trivy 0.70 needs a layout directory and selects the first image of nested local indices; digest-preserving per-platform layout views passed"
+    },
+    {
+      "step": "additional ARM64 inference",
+      "result": "failed; not counted as passed",
+      "reason": "SIGSEGV under local QEMU reproduces with the unchanged published baseline and the same frozen fixture",
+      "workflow_gate": false,
+      "native_arm_hardware_verification": "not performed"
+    }
+  ],
+  "private_evidence_directory": ".tmp/supply-chain-fix-20261024",
+  "existing_database_or_accounts_used_for_tests": false,
+  "reference_project_changed": false,
+  "real_model_requests": 0,
+  "workflow_required_checks_complete": true,
+  "additional_native_arm_runtime_complete": false
+}

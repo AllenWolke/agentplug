@@ -138,9 +138,13 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - uses: anchore/sbom-action@v0
         with: {path: ., format: cyclonedx-json, output-file: lexagent-sbom.cdx.json, upload-artifact: false}
-      - uses: aquasecurity/trivy-action@v0.36.0
+      - id: source-scan
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: v0.70.0
           scan-type: fs
@@ -151,6 +155,9 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
+      - name: Summarize source vulnerabilities
+        if: ${{ !cancelled() && (steps.source-scan.outcome == 'success' || steps.source-scan.outcome == 'failure') }}
+        run: python scripts/summarize_trivy.py --report source=trivy-source.json
       - uses: actions/upload-artifact@v6
         if: always()
         with:
@@ -277,6 +284,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
@@ -300,7 +310,9 @@ jobs:
           provenance: mode=max
           sbom: true
           tags: ${{ steps.registry.outputs.prefix }}/agentplug:${{ matrix.name }}-${{ github.event.workflow_run.head_sha }}
-      - uses: aquasecurity/trivy-action@v0.36.0
+      - name: Scan AMD64 image
+        id: scan-amd64
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: v0.70.0
           scan-type: image
@@ -314,6 +326,7 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
       - name: Scan ARM64 image
+        id: scan-arm64
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -328,7 +341,14 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
+      - name: Summarize image vulnerabilities
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: >-
+          python scripts/summarize_trivy.py
+          --report linux/amd64=trivy-image-amd64.json
+          --report linux/arm64=trivy-image-arm64.json
       - uses: anchore/sbom-action@v0
+        if: ${{ success() && steps.scan-amd64.outcome == 'success' && steps.scan-arm64.outcome == 'success' }}
         with:
           image: ${{ steps.registry.outputs.prefix }}/agentplug@${{ steps.build.outputs.digest }}
           format: spdx-json
