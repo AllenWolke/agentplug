@@ -44,6 +44,8 @@ def selected_cases(inventory: dict) -> list[dict]:
 
 
 def main() -> int:
+    from owned_postgres_fixture import wait_for_postgres
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inventory", type=Path, required=True,
                         help="sanitized full-suite receipt or published GitHub verification inventory")
@@ -92,12 +94,7 @@ def main() -> int:
                  "--tmpfs", "/var/lib/postgresql/data:rw,noexec,nosuid,size=1g,uid=999,gid=999,mode=0700",
                  "--tmpfs", "/var/run/postgresql:rw,nosuid,uid=999,gid=999,mode=0700",
                  "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m", image["Id"]])
-        for _ in range(90):
-            if subprocess.run(["docker", "exec", name, "pg_isready", "-U", "postgres"], capture_output=True).returncode == 0:
-                break
-            time.sleep(0.5)
-        else:
-            raise RuntimeError("isolated PostgreSQL readiness timed out")
+        receipt["postgres_readiness"] = wait_for_postgres(name, "postgres")
         metadata = json.loads(command(["docker", "inspect", name]))[0]
         if metadata["Config"]["Labels"].get("agentplug.test.owner") != owner:
             raise RuntimeError("fixture container ownership mismatch")

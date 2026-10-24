@@ -13,7 +13,6 @@ from pathlib import Path
 import re
 import secrets
 import subprocess
-import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +26,8 @@ TESTS = {
 
 
 def main() -> int:
+    from owned_postgres_fixture import fixture_command, wait_for_postgres
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--batch-id", required=True)
     args = parser.parse_args()
@@ -47,10 +48,8 @@ def main() -> int:
               "packages": [], "cleanup_errors": [], "complete": False}
 
     def command(arguments: list[str], *, data: bytes | None = None, timeout: int = 60) -> bytes:
-        result = subprocess.run(arguments, input=data, capture_output=True, timeout=timeout)
-        if result.returncode:
-            raise RuntimeError("fixture command failed; private diagnostics suppressed")
-        return result.stdout
+        return fixture_command(arguments, record=record, stage=record.get("fixture_stage", "setup"),
+                               private=private, secrets=(password,), data=data, timeout=timeout)
 
     def logged(label: str, arguments: list[str], timeout: int = 660) -> tuple[int, Path]:
         path = private / (label + ".jsonl")
@@ -63,9 +62,11 @@ def main() -> int:
         if not download.is_dir():
             raise RuntimeError("existing offline Go download cache required")
         for image in ("pgvector/pgvector:pg16", IMAGE):
+            record["fixture_stage"] = "image-inspection"
             command(["docker", "image", "inspect", image])
         env_file.write_text("POSTGRES_PASSWORD=" + password + "\nPOSTGRES_DB=conditional_test\n"
                             "POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=trust\n", encoding="utf-8")
+        record["fixture_stage"] = "postgres-start"
         command(["docker", "run", "--detach", "--name", name, "--network", "none",
                  "--label", "agentplug.test.owner=" + owner, "--env-file", str(env_file),
                  "--read-only", "--user", "postgres", "--cap-drop", "ALL",
@@ -73,12 +74,9 @@ def main() -> int:
                  "--tmpfs", "/var/lib/postgresql/data:rw,noexec,nosuid,size=512m,uid=999,gid=999,mode=0700",
                  "--tmpfs", "/var/run/postgresql:rw,nosuid,uid=999,gid=999,mode=0700",
                  "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m", "pgvector/pgvector:pg16"])
-        for _ in range(90):
-            if subprocess.run(["docker", "exec", name, "pg_isready", "-U", "postgres"], capture_output=True).returncode == 0:
-                break
-            time.sleep(0.5)
-        else:
-            raise RuntimeError("owned PostgreSQL readiness timeout")
+        record["fixture_stage"] = "postgres-ready"
+        record["postgres_readiness"] = wait_for_postgres(name, "conditional_test")
+        record["fixture_stage"] = "cache-schema"
         command(["docker", "exec", "-i", name, "psql", "-X", "-v", "ON_ERROR_STOP=1",
                  "-U", "postgres", "-d", "conditional_test"], data=b"CREATE SCHEMA ctxcache_20261012_conditional;\n")
         dsn = f"postgres://postgres:{password}@127.0.0.1:5432/conditional_test?sslmode=disable"
@@ -89,6 +87,7 @@ def main() -> int:
                     "GOMAXPROCS": "2", "GOFLAGS": "-buildvcs=false", "GOMODCACHE": "/test-cache/mod",
                     "GOCACHE": "/test-cache/build", "SDK_GO_NUMERIC_FIXTURE": "/test-cache/numeric-receiver"}
         env_file.write_text("".join(k + "=" + v + "\n" for k, v in settings.items()), encoding="utf-8")
+        record["fixture_stage"] = "go-runner-start"
         command(["docker", "run", "--detach", "--name", go_name,
                  "--label", "agentplug.test.owner=" + owner, "--network", "container:" + name,
                  "--env-file", str(env_file),

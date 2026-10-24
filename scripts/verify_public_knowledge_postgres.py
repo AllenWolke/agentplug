@@ -19,6 +19,17 @@ import time
 import uuid
 from types import SimpleNamespace
 
+# Knowledge includes both the repository and its signed platform composition.
+# Use domain prefixes, not every TestPostgres function in cmd/platform: some
+# require the separate compensation fixture and are gated by another CI job.
+KNOWLEDGE_GO_TEST_PATTERN = (
+    r"^(TestBM25.*|TestDenied.*|TestChinese.*|TestHybrid.*|"
+    r"TestPostgres(Source.*|Index.*|Corpus.*|FinalAuthority.*|Generation.*|Governed.*|"
+    r"Metadata.*|RuntimeCannotRunDDL|Retrieval.*|Knowledge.*|SignedModelBudget.*|ToolApprovalHTTP.*)|"
+    r"TestVectorLiteral.*|TestCurrentKnowledgeSource.*|TestStageCache.*|TestCachedQueryModels.*|"
+    r"TestIndexEmbeddings.*|TestIndexEmbeddingWorker.*)$"
+)
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--suite', choices=['index', 'source', 'knowledge', 'foundation', 'identity', 'identity-full', 'scale', 'usage', 'tree-budget', 'execution', 'execution-recovery', 'models', 'policy', 'conversation', 'erasure-audit', 'platform-ports', 'process', 'maintenance', 'kafka', 'evaluation', 'capability', 'capability-recovery', 'capability-billing', 'schema', 'administration', 'checkpoint', 'platform-all-go'], default='knowledge')
 parser.add_argument('--sdk-full', action='store_true')
@@ -717,7 +728,7 @@ try:
         selection = []
     if args.suite == 'knowledge':
         packages = ['./internal/knowledge', './cmd/platform']
-        selection = ['-run', 'TestBM25|TestDenied|TestChinese|TestHybrid|TestPostgres|TestVectorLiteral|TestCurrentKnowledgeSource|TestStageCache|TestCachedQueryModels|TestIndexEmbeddings|TestIndexEmbeddingWorker']
+        selection = ['-run', KNOWLEDGE_GO_TEST_PATTERN]
     if args.suite == 'identity':
         packages = ['./internal/identity']
         selection = ['-run', 'TestSQLRefreshSessionLifecycle|TestSQLPermissionChangeAtomicRetryAndStalePlan|TestSQLAdministratorAuthenticationAndContinuity|TestSQLOIDCBindingFollowsCurrentIAMState|TestSQLAuthorizationEpochTracksIAMAndRejectsRevocation']
@@ -1395,6 +1406,16 @@ REVOKE DELETE ON platform_compensation_step,platform_compensation_local_effect,p
         receipt['critical_coverage_scope'] = 'All nine critical packages with owned real PostgreSQL; packages run serially; original thresholds unchanged'
         receipt['tests_passed'] = receipt['tests_passed'] and receipt['critical_coverage_passed']
     if not receipt["tests_passed"]:
+        print(json.dumps({
+            'suite': args.suite,
+            'acceptance_failure': {
+                'test_exit_code': receipt.get('test_exit_code'),
+                'skipped_tests': receipt.get('skipped_tests', []),
+                'missing_required_tests': sorted(set(receipt.get('required_parent_tests', [])) -
+                                                 set(receipt.get('passed_tests', []))),
+                'critical_coverage_passed': receipt.get('critical_coverage_passed'),
+            },
+        }, ensure_ascii=True), flush=True)
         raise RuntimeError("PostgreSQL suite acceptance failed; see saved log")
 except Exception as error:
     # Never dump subprocess stdout/stderr or its credential-bearing environment.

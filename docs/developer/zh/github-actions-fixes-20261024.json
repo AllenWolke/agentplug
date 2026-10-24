@@ -1,0 +1,708 @@
+{
+  "schema": "agentplug-github-actions-fixes/v1",
+  "date": "2026-10-24",
+  "baseline_sha": "7d71d00b3d10026cfe3c5df05a98d92458ede4a5",
+  "hosted_baseline": {
+    "url": "https://github.com/AllenWolke/agentplug/actions/runs/40058748411",
+    "conclusions": {
+      "success": 27,
+      "failure": 2,
+      "skipped": 1
+    },
+    "failed_jobs": [
+      "conditional-public-contracts",
+      "identity-sql"
+    ]
+  },
+  "hosted_run_after_fix": "not_run_patch_is_local",
+  "source_sha256": {
+    "scripts/owned_postgres_fixture.py": "b0ca9216ce80ea36dfc5b9f8dc5f6115a9715324f696b5883db918e3513f68d8",
+    "scripts/verify_dedicated_postgres_tests.py": "2a45f7ccb2eb9dfd9d181856dc1a1cf05f91c0c7f6a540addd2567b7dfeb8a4a",
+    "scripts/verify_isolated_cache_contracts.py": "e4998f375a4cabd0bcfe9f1382afd0de420bd3ab1f89b1880891ce6d0d7f0ece",
+    "scripts/verify_public_knowledge_postgres.py": "648f821dbc6281acca2095d5c7aaf0a418cb21cce7b7a395d0479343669499e3",
+    "tests/release-validation/test_owned_postgres_readiness.py": "95d39d6f8e89772b5b9af79c4b0de62feb05dc56ef245aae1abb095518bd55df"
+  },
+  "fixes": {
+    "knowledge_suite_domain_tests_preserved": 54,
+    "unrelated_test_left_in_dedicated_fixture": "TestPostgresCancellationProgressCompositionDoesNotReadFrozenToolHistory",
+    "no_skip_acceptance_rule_unchanged": true,
+    "critical_coverage_thresholds_unchanged": true,
+    "readiness_requires_final_tcp_server_and_readonly_target_database_query": true,
+    "no_write_retries_added": true,
+    "setup_failure_reports_stage_exit_code_and_redacted_diagnostics": true
+  },
+  "bootstrap_reproduction": {
+    "receipt_sha256": "a49607b2a360e2ac280a1bb49ef077537a67344c6c7df2c483049ea4b1c857eb",
+    "trials": 10,
+    "old_schema_command_failures": 1,
+    "new_readiness_passed": 10,
+    "new_readiness_query": "SELECT 1",
+    "hosted_private_setup_error_not_available": true
+  },
+  "environment": {
+    "os": "Ubuntu 20.04.6 LTS",
+    "python": "Python 3.12.15",
+    "go": "go version go1.26.10 linux/amd64"
+  },
+  "linux_tool_container": {
+    "image": "golang:1.26.10-bookworm",
+    "git": "2.39.5",
+    "network": "none",
+    "docker_socket_mounted": false
+  },
+  "python_process_local_image_tag": "agentplug-test:workflow-fixes-20261024-example-python",
+  "python_process_tag_mapping_scope": "only docker image inspect; real image id and original public fixture retained",
+  "identity_sql": {
+    "complete": true,
+    "stages": [
+      {
+        "label": "source",
+        "exit_code": 0,
+        "seconds": 74.6,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-source.log",
+        "log_sha256": "7a29bbab427f117deb761be7c368f2212a849380716fadb0f18567118a2f4161",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 9,
+        "required_test_events": 8,
+        "skipped_tests": []
+      },
+      {
+        "label": "knowledge",
+        "exit_code": 0,
+        "seconds": 62.32,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-knowledge.log",
+        "log_sha256": "a539b1ecbd8c47a578f1ff8297ff29a27d11abdb8c98e0ff93de734f151822ea",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 163,
+        "required_test_events": 6,
+        "skipped_tests": []
+      },
+      {
+        "label": "index",
+        "exit_code": 0,
+        "seconds": 30.13,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-index.log",
+        "log_sha256": "d2d34e96602af1128bd555b9268619dfa30b2c1afbc0d41413a2f59c59cb7889",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 45,
+        "required_test_events": 7,
+        "skipped_tests": []
+      },
+      {
+        "label": "identity-full",
+        "exit_code": 0,
+        "seconds": 172.65,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-identity-full.log",
+        "log_sha256": "30b27b92a7946c55330c5fecf8374861886d889fdecc38545fb6a03f003b67b6",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 95,
+        "required_test_events": 48,
+        "skipped_tests": [],
+        "critical_coverage_passed": true
+      },
+      {
+        "label": "administrator",
+        "exit_code": 0,
+        "seconds": 11.97,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-administrator.log",
+        "log_sha256": "a3ff6c3582ca389d08e9f58e59ecef3fa46dfaabfaa814741842ea160f2e0d0b",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 14,
+        "required_test_events": 8,
+        "skipped_tests": []
+      },
+      {
+        "label": "scale",
+        "exit_code": 0,
+        "seconds": 13.19,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-scale.log",
+        "log_sha256": "84cede1a5a0a827a03a62dfecb5650d6ff0c81ff89975b2c767b89a7f32cc313",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 1,
+        "required_test_events": 1,
+        "skipped_tests": []
+      },
+      {
+        "label": "capability",
+        "exit_code": 0,
+        "seconds": 16.6,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-capability.log",
+        "log_sha256": "1e62bf848c866aeb5b5927fe299a592962bcd084c3363f67097481256b145a1f",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 12,
+        "required_test_events": 8,
+        "skipped_tests": []
+      },
+      {
+        "label": "capability-recovery",
+        "exit_code": 0,
+        "seconds": 13.48,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-capability-recovery.log",
+        "log_sha256": "65e5722f490b4c04a4b96da8250d865bc20517f9dd8448cb40a394cc381b5d8a",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 9,
+        "required_test_events": 7,
+        "skipped_tests": []
+      },
+      {
+        "label": "capability-billing",
+        "exit_code": 0,
+        "seconds": 11.33,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-capability-billing.log",
+        "log_sha256": "4924541c6550a6ff21d2e344679c91828e05381717d6a4f3ef450c1495415268",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 5,
+        "required_test_events": 3,
+        "skipped_tests": []
+      },
+      {
+        "label": "execution",
+        "exit_code": 0,
+        "seconds": 11.11,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-execution.log",
+        "log_sha256": "3d40d13affd886d97350fd87a71f67a1e0365a8bf81538a4567897f0ad23d5a6",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 9,
+        "required_test_events": 7,
+        "skipped_tests": []
+      },
+      {
+        "label": "execution-recovery",
+        "exit_code": 0,
+        "seconds": 9.66,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-execution-recovery.log",
+        "log_sha256": "a5b1ea28c1741e185e905c6e7d2127ffc91f366038ee5032dcb1ce90db943df0",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 7,
+        "required_test_events": 7,
+        "skipped_tests": []
+      },
+      {
+        "label": "erasure-audit",
+        "exit_code": 0,
+        "seconds": 7.8,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-erasure-audit.log",
+        "log_sha256": "4603401fdcd7b80822fbd289d9892e05fa6b9e8cd05d4e9abe65259608d3c124",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 4,
+        "required_test_events": 4,
+        "skipped_tests": []
+      },
+      {
+        "label": "platform-ports",
+        "exit_code": 0,
+        "seconds": 9.55,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-platform-ports.log",
+        "log_sha256": "4cbb49b37db75e61964f3c86a06c3a152699437077e718f9c1ba1b69c2fe88af",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 7,
+        "required_test_events": 5,
+        "skipped_tests": []
+      },
+      {
+        "label": "answer-cache-process",
+        "exit_code": 0,
+        "seconds": 378.16,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-answer-cache-process.log",
+        "log_sha256": "e15f2ff487c60f9dcdbf43e1b6a7081500a60383ff89550887076a0bc173064a",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 4,
+        "required_test_events": 4,
+        "skipped_tests": []
+      },
+      {
+        "label": "build-python",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 21.23,
+        "log": ".tmp/workflow-fixes-20261024/finish-build-python.log",
+        "log_sha256": "bab5190a5f45fc989baa99bb4d45b0f1f6c9bcfb8409d9ea68200d31cdd2afe8"
+      },
+      {
+        "label": "python-process",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 204.12,
+        "log": ".tmp/workflow-fixes-20261024/finish-python-process.log",
+        "log_sha256": "a79e0dd003bfc0d80c9568e2e4818bcd8d208ac1a49a8d956f21a3b1c2737fee",
+        "receipt_complete": true,
+        "passed_test_events": 4,
+        "required_test_events": 4,
+        "skipped_tests": []
+      },
+      {
+        "label": "maintenance",
+        "exit_code": 0,
+        "seconds": 149.92,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-maintenance.log",
+        "log_sha256": "beb1cd53eae6f76438f89e4be3bbd34c9552bdd19ce53e33628e9c708dc9e127",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 1,
+        "required_test_events": 1,
+        "skipped_tests": []
+      },
+      {
+        "label": "kafka",
+        "exit_code": 0,
+        "seconds": 212.02,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-kafka.log",
+        "log_sha256": "2f6f9770a9a4c579e8bb4cccd88dfc722e418bc68d1706805a0bb89bcd99d04d",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 1,
+        "required_test_events": 1,
+        "skipped_tests": []
+      },
+      {
+        "label": "usage",
+        "exit_code": 0,
+        "seconds": 6.25,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-usage.log",
+        "log_sha256": "de4f096448902ef522a7f58ce0f4e4de1908b637395a9d984c89bd751b134bc7",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 8,
+        "required_test_events": 7,
+        "skipped_tests": []
+      },
+      {
+        "label": "rag-evaluation",
+        "exit_code": 0,
+        "seconds": 16.48,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-rag-evaluation.log",
+        "log_sha256": "bcca6082dff356f709bd853a66ce03048541903373f9b934902ee70040ef9098",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 6,
+        "required_test_events": 6,
+        "skipped_tests": []
+      },
+      {
+        "label": "rag-metrics",
+        "exit_code": 0,
+        "seconds": 6.99,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-rag-metrics.log",
+        "log_sha256": "c0a8419961c8bcc2ed0f91cd9eb95db0e4172f444feaaba0992e5b169938ed33",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 5,
+        "required_test_events": 5,
+        "skipped_tests": []
+      },
+      {
+        "label": "conversation",
+        "exit_code": 0,
+        "seconds": 4.94,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-identity-v1-conversation.log",
+        "log_sha256": "61c6986dcc3118e6c30be11f630220052e2f30dcd1c7fe16458c68aef3d49819",
+        "receipt_complete": true,
+        "failure": null,
+        "passed_test_events": 11,
+        "required_test_events": 6,
+        "skipped_tests": []
+      }
+    ]
+  },
+  "conditional_public_contracts": {
+    "schema": "agentplug-linux-workflow-replay/v1",
+    "job": "conditional",
+    "batch_id": "workflow-fixes-20261024-conditional-v1",
+    "commands": [
+      {
+        "label": "dedicated",
+        "exit_code": 0,
+        "seconds": 179.98,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-conditional-v1-dedicated.log",
+        "log_sha256": "c1681812faaa573575b983834af333a0e0b5c4cb324a6845c9fff1a61c56d1bf",
+        "receipt_complete": true,
+        "failure": null
+      },
+      {
+        "label": "cache-contracts",
+        "exit_code": 0,
+        "seconds": 157.13,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-conditional-v1-cache-contracts.log",
+        "log_sha256": "60728cb5f33a9bb4e7b52944b5d3a32a3589d16adceba2fc655211fd8e1126be",
+        "receipt_complete": true,
+        "failure": null
+      },
+      {
+        "label": "interop",
+        "exit_code": 0,
+        "seconds": 114.98,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-conditional-v1-interop.log",
+        "log_sha256": "7b0f5e43124684336f33fe3215d7c2be86ef1f758bd2a0b2198498050e20b960",
+        "receipt_complete": true,
+        "failure": null
+      },
+      {
+        "label": "evaluation-restart",
+        "exit_code": 0,
+        "seconds": 211.39,
+        "passed": true,
+        "log": ".tmp/workflow-fixes-20261024/workflow-fixes-20261024-conditional-v1-evaluation-restart.log",
+        "log_sha256": "5c9e05296f7f95fdcd2796d4dbb3ed5e75fe3b350a487845129f5f9412f51867",
+        "receipt_complete": true,
+        "failure": null
+      }
+    ],
+    "real_model_requests": 0,
+    "existing_project_database_used": false,
+    "reference_project_accessed": false,
+    "environment": {
+      "os": "Ubuntu 20.04.6 LTS",
+      "python": "Python 3.12.15",
+      "go": "go version go1.26.10 linux/amd64"
+    },
+    "complete": true
+  },
+  "static_and_sdk_gates": [
+    {
+      "label": "scan_secrets.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 1.02,
+      "log": ".tmp/workflow-fixes-20261024/quality-scan_secrets.py.log",
+      "log_sha256": "6b0bc342e769e989b43e39671b595e1c08bd8b0cbc6019e296e26ddfe3f33c7f"
+    },
+    {
+      "label": "test_scan_secrets.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 0.27,
+      "log": ".tmp/workflow-fixes-20261024/quality-test_scan_secrets.py.log",
+      "log_sha256": "ebd7850d88cee2a4a37cacd13b1fcd49ec03f632fa0eb34ca89592877f8ceffa"
+    },
+    {
+      "label": "check_gofmt.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 0.62,
+      "log": ".tmp/workflow-fixes-20261024/quality-check_gofmt.py.log",
+      "log_sha256": "f0ab3d242318dc644fcb62c7a174c5eaaced8727c91da8835671b3dd82070950"
+    },
+    {
+      "label": "verify_modular_process.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 0.07,
+      "log": ".tmp/workflow-fixes-20261024/quality-verify_modular_process.py.log",
+      "log_sha256": "3c72f3ee68717214545f4a7ccf9831d7769d5cfcf3fb9cc8ebc5d6e42bf30e5d"
+    },
+    {
+      "label": "verify_modular_boundaries.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 25.3,
+      "log": ".tmp/workflow-fixes-20261024/quality-verify_modular_boundaries.py.log",
+      "log_sha256": "22464ae122313fcded248ef7840dd870faf67f94987f53bf59dea24805ddcd9a"
+    },
+    {
+      "label": "check_contract_breaking.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 0.03,
+      "log": ".tmp/workflow-fixes-20261024/quality-check_contract_breaking.py.log",
+      "log_sha256": "28d9102df84c8adaae24cb717806850d57bc60e5fc838cd0f198017e91e88ccc"
+    },
+    {
+      "label": "lint_execution_contract.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 0.03,
+      "log": ".tmp/workflow-fixes-20261024/quality-lint_execution_contract.py.log",
+      "log_sha256": "b0ecc6c6b2c7d9374eb32fac1a8626a1dd820d3e2a4adaa6ff39430a410a4928"
+    },
+    {
+      "label": "check_removed_architecture.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 0.17,
+      "log": ".tmp/workflow-fixes-20261024/quality-check_removed_architecture.py.log",
+      "log_sha256": "ef02e80d5fc308239d86f118f7aeb637e5b876500ada7dd2e50b7b457c3a03c7"
+    },
+    {
+      "label": "check_publication.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 0.17,
+      "log": ".tmp/workflow-fixes-20261024/quality-check_publication.py.log",
+      "log_sha256": "03783e797c3d65a052b4c355b0b4355fc8b82aa222c996dd8941bc67dbcb1ca8"
+    },
+    {
+      "label": "check_markdown_links.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 0.42,
+      "log": ".tmp/workflow-fixes-20261024/quality-check_markdown_links.py.log",
+      "log_sha256": "4ac91e316459513a3bba5d3175e0cd775b24adfd58812f5e8682699e2522afb6"
+    },
+    {
+      "label": "check_agent_productization_contracts.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 0.03,
+      "log": ".tmp/workflow-fixes-20261024/quality-check_agent_productization_contracts.py.log",
+      "log_sha256": "87101f9e0c3518623010abfa51761b951aaba803a7ecee3e4f6c099ed6aa6d1d"
+    },
+    {
+      "label": "check_agent_code_ownership.py",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 0.03,
+      "log": ".tmp/workflow-fixes-20261024/quality-check_agent_code_ownership.py.log",
+      "log_sha256": "98f6a422178f8a5d8bce4d7c41ee12e27109e003226f96a2de45369acad41cfe"
+    },
+    {
+      "label": "sdk-sync",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 0.07,
+      "log": ".tmp/workflow-fixes-20261024/quality-sdk-sync.log",
+      "log_sha256": "e0a6570f69200ff83a853f19586da91659e015de5d3c80d76067290a7c92e337"
+    }
+  ],
+  "release_validation": {
+    "schema": "agentplug-release-validation-recheck/v1",
+    "exit_code": 0,
+    "complete": true,
+    "docker_socket_mounted": false,
+    "network": "none",
+    "log": ".tmp/workflow-fixes-20261024/release-validation-final.log",
+    "log_sha256": "c82bf0193f45679209a3fdb63a70033e9ef1acc27eb5684c6ac1de087f334211",
+    "passed": 310,
+    "skipped": 0
+  },
+  "e2e_performance_contracts": {
+    "label": "e2e-contracts",
+    "exit_code": 0,
+    "passed": true,
+    "seconds": 5.43,
+    "log": ".tmp/workflow-fixes-20261024/finish-e2e-contracts.log",
+    "log_sha256": "d867e9be6357ed13dafe4b1a349a49bb086390a537c81e0abbbc867ac2daa07a",
+    "passed_count": 83,
+    "skipped": 0
+  },
+  "downstream_compose_e2e": {
+    "schema": "agentplug-current-source-workflow-gates/v1",
+    "mode": "e2e",
+    "source_snapshot_private_configuration_included": false,
+    "real_model_requests": 0,
+    "commands": [
+      {
+        "label": "compose-config",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.12,
+        "log": ".tmp/workflow-fixes-20261024/e2e-compose-config.log",
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "compose-e2e",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 92.99,
+        "log": ".tmp/workflow-fixes-20261024/e2e-compose-e2e.log",
+        "log_sha256": "f6e8ad3d4d7346dff57089a85ead3858a4602f77e001b9b99fc4408744d2b956"
+      }
+    ],
+    "complete": true
+  },
+  "native_preservation": {
+    "schema": "agentplug-native-preservation/v1",
+    "containers": [
+      {
+        "name": "/agentplug-platform-app-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-example-python-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-example-go-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-example-java-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-frontend-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-code-runtime-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-metric-runner-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-postgres-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      },
+      {
+        "name": "/agentplug-kafka-1",
+        "id_unchanged": true,
+        "image_unchanged": true,
+        "started_at_unchanged": true,
+        "mounts_unchanged": true,
+        "config_unchanged": true,
+        "running": true
+      }
+    ],
+    "historical_holds_sha256": "36939e6e2c36dff5ef4b01baaf794f388f9de81dedbfbc9d1519e1505ce9a6da",
+    "historical_holds_unchanged": true,
+    "health": [
+      {
+        "service": "frontend",
+        "status": 200,
+        "passed": true
+      },
+      {
+        "service": "platform",
+        "status": 200,
+        "passed": true
+      },
+      {
+        "service": "example-go",
+        "passed": true
+      },
+      {
+        "service": "example-java",
+        "passed": true
+      },
+      {
+        "service": "example-python",
+        "passed": true
+      }
+    ],
+    "existing_database_used_for_tests": false,
+    "reference_project_accessed": false,
+    "real_model_requests": 0,
+    "complete": true
+  },
+  "owned_temporary_cleanup": {
+    "schema": "agentplug-workflow-owned-cleanup/v1",
+    "removed_paths": [
+      "owned-linux-runtime",
+      ".tmp/workflow-fixes-20261024/runtime",
+      ".tmp/workflow-fixes-20261024/before",
+      "sdk/python/agent_platform_sdk.egg-info",
+      ".tmp/workflow-fixes-20261024/go-linux.tar",
+      ".tmp/workflow-fixes-20261024/python-linux.tar.gz",
+      ".tmp/workflow-fixes-20261024/kubectl"
+    ],
+    "removed_image_tags": [
+      "agentplug-test:workflow-fixes-20261024-example-python"
+    ],
+    "logical_bytes_removed": 2679769979,
+    "shared_cache_pruned": false,
+    "errors": [],
+    "complete": true
+  },
+  "model_authorization": {
+    "new_real_model_requests": 0,
+    "prior_remaining_authorization_unchanged": true
+  },
+  "initial_local_environment_failures": [
+    {
+      "report": "quality-report.json",
+      "reason": "WSL Git 2.25.1 reports explicitly negated ignore pattern; 309 passed, 1 failed",
+      "resolved_by": "real Git 2.39.5 in disconnected tool container; no public ignore rules changed"
+    },
+    {
+      "report": "finish-release-validation.log",
+      "reason": "tool container lacked Docker client for four Compose config checks; 306 passed, 4 failed",
+      "resolved_by": "copied client and Compose plugin only; no socket mounted; 310 passed"
+    },
+    {
+      "report": "workflow-fixes-20261024-identity-v1.json",
+      "reason": "local Windows pytest cache xattr denied while sending Docker context; initial Python process not run",
+      "resolved_by": "built owned tag from fresh Linux source snapshot and passed original Python process fixture"
+    }
+  ],
+  "local_receipt_directory": ".tmp/workflow-fixes-20261024",
+  "scope": "affected jobs and downstream commands replayed locally; unchanged hosted successful jobs reused as baseline evidence",
+  "complete": true
+}
